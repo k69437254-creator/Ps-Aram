@@ -1,0 +1,58 @@
+name: PS Link Android builds
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PS Link
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
+
+      - name: Fetch pinned Chiaki-NG source and prepare project
+        run: bash scripts/bootstrap.sh
+
+      - name: Static source validation
+        run: bash scripts/check-source.sh
+
+      - name: Run shared core tests
+        run: bash ./gradlew --no-daemon --stacktrace :core:shared:testDebugUnitTest
+
+      - name: Build phone and TV APKs
+        run: bash ./gradlew --no-daemon --stacktrace :mobile:assembleDebug :tv:app:assembleDebug
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Link-Android-APKs
+          if-no-files-found: error
+          path: |
+            mobile/build/outputs/apk/debug/*.apk
+            tv/app/build/outputs/apk/debug/*.apk

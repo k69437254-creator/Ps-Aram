@@ -1,0 +1,8 @@
+Chiaki-NG repository: https://github.com/chiaki-ng/chiaki-ng
+Pinned commit: 43728af2e639fecb8a7af1cd68c29820a40de973
+Commit date reported by GitHub: 2026-11-03
+License reported by GitHub: AGPL-3.0
+
+The exact source and all its Git submodules are retrieved by scripts/bootstrap.sh.
+The third_party/chiaki-ng checkout is intentionally ignored by the PS Link Git repository
+so GitHub Actions can recreate it from this immutable commit instead of storing a nested Git repository.

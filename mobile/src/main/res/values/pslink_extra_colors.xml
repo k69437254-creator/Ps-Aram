@@ -1,0 +1,9 @@
+<resources>
+    <color name="pslink_background">#070B14</color>
+    <color name="pslink_surface">#101827</color>
+    <color name="pslink_surface_raised">#152238</color>
+    <color name="pslink_blue">#1677FF</color>
+    <color name="pslink_text">#F4F7FC</color>
+    <color name="pslink_muted">#9AA9BD</color>
+    <color name="pslink_card_stroke">#263A59</color>
+</resources>

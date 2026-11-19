@@ -1,0 +1,18 @@
+# The pinned upstream source is fetched by scripts/bootstrap.sh and is not committed here.
+/third_party/chiaki-ng/
+
+# Android / Gradle outputs
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Python validation caches
+__pycache__/
+*.py[cod]

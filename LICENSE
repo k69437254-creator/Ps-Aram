@@ -1,0 +1,11 @@
+PS Link combines original integration/UI code with the AGPL-3.0-licensed Chiaki-NG Android
+client and native engine. The combined distributed application must comply with the
+applicable AGPL-3.0 terms and all included third-party licenses.
+
+The full GNU Affero General Public License v3.0 text is copied from the pinned upstream
+Chiaki-NG checkout into LICENSES/AGPL-3.0.txt by scripts/prepare_upstream.py.
+Upstream source: https://github.com/chiaki-ng/chiaki-ng
+Pinned commit: 43728af2e639fecb8a7af1cd68c29820a40de973
+
+Do not distribute binaries without the corresponding source and notices required by the
+applicable licenses. This file is a project notice, not legal advice.

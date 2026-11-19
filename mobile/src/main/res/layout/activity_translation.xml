@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pslink_background"
+    android:fillViewport="true"
+    android:layoutDirection="rtl">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/translationToolbar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@android:color/transparent"
+            app:navigationIcon="@drawable/ic_back"
+            app:title="مترجم الألعاب"
+            app:titleTextColor="@color/pslink_text" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="اقرأ النص، ترجم محليًا، ثم أرسله إلى شاشة التلفاز."
+            android:textColor="@color/pslink_muted"
+            android:textSize="13sp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="@color/pslink_surface"
+            app:cardCornerRadius="18dp"
+            app:strokeColor="@color/pslink_card_stroke"
+            app:strokeWidth="1dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="١  •  النص ومصدر القراءة"
+                    android:textColor="@color/pslink_text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <Spinner
+                    android:id="@+id/sourceLanguageSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="10dp"
+                    android:backgroundTint="@color/pslink_blue" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ocrImageButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="10dp"
+                    android:text="قراءة نص من لقطة شاشة"
+                    android:textAllCaps="false"
+                    app:backgroundTint="@color/pslink_surface_raised"
+                    app:cornerRadius="12dp"
+                    app:icon="@drawable/ic_image_text"
+                    app:iconTint="@color/pslink_blue" />
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:hint="النص الأصلي أو نص OCR"
+                    app:boxBackgroundColor="#0B1220"
+                    app:boxBackgroundMode="filled"
+                    app:boxCornerRadiusBottomEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusTopStart="12dp">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/sourceTextInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="top|start"
+                        android:minHeight="110dp"
+                        android:inputType="textMultiLine|textCapSentences"
+                        android:textColor="@color/pslink_text"
+                        android:textColorHint="@color/pslink_muted" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/downloadModelButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="12dp"
+                    android:text="تنزيل حزمة اللغة عبر Wi‑Fi"
+                    android:textAllCaps="false"
+                    app:backgroundTint="@color/pslink_surface_raised"
+                    app:cornerRadius="12dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/translateButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="8dp"
+                    android:text="ترجمة إلى العربية"
+                    android:textAllCaps="false"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/pslink_blue"
+                    app:cornerRadius="12dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="@color/pslink_surface"
+            app:cardCornerRadius="18dp"
+            app:strokeColor="@color/pslink_card_stroke"
+            app:strokeWidth="1dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="٢  •  الترجمة"
+                    android:textColor="@color/pslink_text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/translatedTextView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="#0B1220"
+                    android:minHeight="100dp"
+                    android:padding="14dp"
+                    android:text="ستظهر الترجمة هنا"
+                    android:textColor="@color/pslink_text"
+                    android:textSize="17sp" />
+                <TextView
+                    android:id="@+id/translationStatusText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="تعمل الترجمة بعد تنزيل نموذج اللغة على الجهاز."
+                    android:textColor="@color/pslink_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="20dp"
+            app:cardBackgroundColor="@color/pslink_surface"
+            app:cardCornerRadius="18dp"
+            app:strokeColor="@color/pslink_card_stroke"
+            app:strokeWidth="1dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="٣  •  شاشة PS Link TV"
+                    android:textColor="@color/pslink_text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:hint="عنوان IP للتلفاز (مثل 192.168.1.20)"
+                    app:boxBackgroundColor="#0B1220"
+                    app:boxBackgroundMode="filled">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/tvHostInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textUri"
+                        android:textColor="@color/pslink_text" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="رمز الاقتران الظاهر على التلفاز"
+                    app:boxBackgroundColor="#0B1220"
+                    app:boxBackgroundMode="filled">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/tvPairCodeInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:maxLength="6"
+                        android:textColor="@color/pslink_text" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/connectTvButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="10dp"
+                    android:text="ربط التلفاز"
+                    android:textAllCaps="false"
+                    app:backgroundTint="@color/pslink_surface_raised"
+                    app:cornerRadius="12dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/sendToTvButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="8dp"
+                    android:text="إرسال الترجمة إلى التلفاز"
+                    android:textAllCaps="false"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/pslink_blue"
+                    app:cornerRadius="12dp" />
+                <TextView
+                    android:id="@+id/tvConnectionStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="غير متصل"
+                    android:textColor="@color/pslink_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</ScrollView>
