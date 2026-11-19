@@ -21,6 +21,7 @@ FILES=(
   "$ROOT/mobile/build.gradle.kts"
   "$ROOT/mobile/src/main/AndroidManifest.xml"
   "$ROOT/mobile/src/main/java/com/pslink/mobile/TranslationActivity.kt"
+  "$ROOT/mobile/src/main/java/com/pslink/mobile/PsnAccountIdClient.kt"
   "$ROOT/mobile/src/main/res/layout/pslink_main_layout.xml"
   "$ROOT/mobile/src/main/res/values-ar/strings.xml"
   "$ROOT/scripts/prepare_upstream.py"
@@ -123,3 +124,21 @@ print("- persisted registration credentials and native stream session")
 print("- gamepad input path and corrected ML Kit import")
 print("NOTE: this is a source-level check, not a live PS5 connection test.")
 PY
+
+
+# PSN sign-in is wired into the Android registration screen after prepare_upstream.py.
+python3 - "$ROOT" <<'PYPSN'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+up = root / "third_party/chiaki-ng/android/app/src/main"
+activity = (up / "java/com/metallic/chiaki/regist/RegistActivity.kt").read_text(encoding="utf-8")
+layout = (up / "res/layout/activity_regist.xml").read_text(encoding="utf-8")
+for marker, reason in (("PsnAccountIdClient.accountIdFromRedirect", "PSN Account-ID lookup is not connected"), ("openPsnLogin()", "Sony browser sign-in action is missing"), ("psnExtractAccountButton", "Account-ID extraction button is missing")):
+    if marker not in activity and marker not in layout:
+        raise SystemExit(f"PS5 WIRING ERROR: {reason}")
+for marker in ("psnLoginButton", "psnRedirectUrlEditText", "psnExtractAccountButton"):
+    if f"@+id/{marker}" not in layout:
+        raise SystemExit(f"PS5 WIRING ERROR: Registration UI is missing {marker}")
+print("PSN browser sign-in and Account-ID extraction wiring checks passed.")
+PYPSN

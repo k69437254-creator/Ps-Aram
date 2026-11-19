@@ -12,6 +12,7 @@ required = [
     "mobile/build.gradle.kts",
     "mobile/src/main/AndroidManifest.xml",
     "mobile/src/main/java/com/pslink/mobile/TranslationActivity.kt",
+    "mobile/src/main/java/com/pslink/mobile/PsnAccountIdClient.kt",
     "mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt",
     "mobile/src/main/res/layout/activity_translation.xml",
     "mobile/src/main/res/layout/pslink_main_layout.xml",
@@ -93,10 +94,29 @@ if '.take(4000)' not in protocol:
     raise SystemExit("Subtitle packet inbound length guard is missing")
 
 ar = (ROOT / "mobile/src/main/res/values-ar/strings.xml").read_text(encoding="utf-8")
-for resource in ("regist_pin_instructions_ps5_navigation", "hint_regist_psn_account_id", "regist_info_success"):
+for resource in ("regist_pin_instructions_ps5_navigation", "hint_regist_psn_account_id", "regist_info_success", "psn_oauth_login", "psn_oauth_help", "psn_oauth_redirect_hint", "psn_oauth_extract", "psn_oauth_success", "psn_oauth_redirect_required", "psn_oauth_invalid_redirect", "psn_oauth_authorization_denied", "psn_oauth_http_error", "psn_oauth_missing_access_token", "psn_oauth_missing_user_id", "psn_oauth_invalid_response", "psn_oauth_network_error", "psn_oauth_browser_unavailable"):
     if f'name="{resource}"' not in ar:
         raise SystemExit(f"Arabic PS5 registration resource is missing: {resource}")
 
 print(f"Validated {len(required)} required files and {len(xml_files)} XML files.")
 print("Application IDs: com.pslink.app / com.pslink.tv")
 print("Pinned upstream Chiaki-NG commit is present.")
+
+
+# lifecycleScope is used by the PSN registration workflow and must be explicit.
+mobile_gradle = (ROOT / "mobile/build.gradle.kts").read_text(encoding="utf-8")
+if "implementation(libs.lifecycle.runtime.ktx)" not in mobile_gradle:
+    raise SystemExit("PSN registration requires the direct lifecycle-runtime-ktx dependency")
+
+# PSN OAuth must remain browser-based; never collect or persist the PSN password/token.
+psn_oauth = (ROOT / "mobile/src/main/java/com/pslink/mobile/PsnAccountIdClient.kt").read_text(encoding="utf-8")
+for snippet in ("AUTHORIZATION_ENDPOINT", "TOKEN_ENDPOINT", "remoteplay.dl.playstation.net/remoteplay/redirect", "ByteOrder.LITTLE_ENDIAN", "Base64.NO_WRAP", "instanceFollowRedirects = false"):
+    if snippet not in psn_oauth:
+        raise SystemExit(f"PSN OAuth client is missing required secure-flow component: {snippet}")
+for forbidden in ("android.webkit.WebView", "SharedPreferences", "putString(\"access_token\""):
+    if forbidden in psn_oauth:
+        raise SystemExit(f"PSN OAuth client must not embed a login WebView or persist tokens: {forbidden}")
+prep = (ROOT / "scripts/prepare_upstream.py").read_text(encoding="utf-8")
+if "PsnAccountIdClient.accountIdFromRedirect" not in prep or "psnLoginButton" not in prep:
+    raise SystemExit("PSN OAuth native registration UI patch is missing from prepare_upstream.py")
+print("PSN browser OAuth and Account-ID extraction checks passed.")

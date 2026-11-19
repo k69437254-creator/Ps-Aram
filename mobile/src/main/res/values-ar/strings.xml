@@ -43,7 +43,7 @@
     <string name="stream_on_screen_controls">أزرار التحكم على الشاشة</string>
     <string name="stream_touchpad_only">لوحة اللمس فقط</string>
     <string name="regist_option_ps5">PlayStation 5</string>
-    <string name="regist_psn_account_id_help">أدخل معرّف حساب PSN الثنائي بطول 8 بايت بصيغة Base64؛ اسم المستخدم ليس بديلًا عنه.</string>
+    <string name="regist_psn_account_id_help">استخرج معرّف حسابك بتسجيل الدخول إلى PSN أدناه؛ اسم المستخدم ليس بديلًا عنه.</string>
     <string name="regist_psn_account_id_help_url">https://github.com/chiaki-ng/chiaki-ng/blob/main/docs/setup/configuration.md#registering-your-playstation</string>
     <string name="hint_regist_psn_account_id">معرّف حساب PSN (Base64، 8 بايت)</string>
     <string name="regist_psn_account_id_invalid">أدخل معرّف حساب صالحًا بطول 8 بايت بصيغة Base64.</string>
@@ -57,4 +57,20 @@
     <string name="regist_option_ps4_ge_8">PlayStation 4 (8.0 أو أحدث)</string>
     <string name="regist_option_ps4_ge_7">PlayStation 4 (7.0 إلى أقل من 8.0)</string>
     <string name="regist_option_ps4_lt_7">PlayStation 4 (أقدم من 7.0)</string>
+
+    <string name="psn_oauth_login">تسجيل الدخول إلى PlayStation Network</string>
+    <string name="psn_oauth_help">سجّل الدخول بالحساب الذي تريد استخدامه. في صفحة التحويل من Sony انسخ عنوان الصفحة كاملًا من المتصفح والصقه أدناه.</string>
+    <string name="psn_oauth_redirect_hint">رابط التحويل من Sony</string>
+    <string name="psn_oauth_extract">استخراج معرّف حساب PSN</string>
+    <string name="psn_oauth_success">تم استخراج معرّف حساب PSN. أكمل بإدخال رمز ربط PS5 ذي الثمانية أرقام.</string>
+    <string name="psn_oauth_redirect_required">الصق رابط التحويل الكامل من Sony أولًا.</string>
+    <string name="psn_oauth_invalid_redirect">الرابط ليس صفحة تحويل Sony الصحيحة أو لا يحتوي رمز التفويض.</string>
+    <string name="psn_oauth_authorization_denied">لم توافق Sony على تسجيل الدخول. أعد تسجيل الدخول وانسخ رابط التحويل الجديد.</string>
+    <string name="psn_oauth_http_error">رفضت Sony الطلب (HTTP %1$d). أعد تسجيل الدخول ثم حاول مجددًا.</string>
+    <string name="psn_oauth_missing_access_token">لم تُرجع Sony رمز وصول. أعد تسجيل الدخول.</string>
+    <string name="psn_oauth_missing_user_id">لم تُرجع Sony معرّف مستخدم PSN صالحًا.</string>
+    <string name="psn_oauth_invalid_response">أعادت Sony استجابة غير متوقعة. حاول لاحقًا.</string>
+    <string name="psn_oauth_network_error">تعذر الاتصال بخوادم Sony. تحقق من الإنترنت ثم حاول مجددًا.</string>
+    <string name="psn_oauth_browser_unavailable">لا يوجد متصفح متاح لفتح تسجيل الدخول إلى PlayStation.</string>
+
 </resources>
