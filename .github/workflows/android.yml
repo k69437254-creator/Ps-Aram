@@ -38,6 +38,12 @@ jobs:
             "ndk;28.2.13676358" \
             "cmake;3.22.1"
 
+      - name: Install native protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes protobuf-compiler
+          protoc --version
+
       - name: Fetch pinned Chiaki-NG source and prepare project
         run: bash scripts/bootstrap.sh
 
