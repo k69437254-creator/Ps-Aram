@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Validate the source bundle's structure and XML before Android SDK compilation."""
+"""Validate PS Link source structure and known compile-time integration contracts."""
 from pathlib import Path
-import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -16,6 +15,7 @@ required = [
     "mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt",
     "mobile/src/main/res/layout/activity_translation.xml",
     "mobile/src/main/res/layout/pslink_main_layout.xml",
+    "mobile/src/main/res/values-ar/strings.xml",
     "core/shared/build.gradle.kts",
     "core/shared/src/main/java/com/pslink/core/PsLinkProtocol.kt",
     "core/shared/src/main/java/com/pslink/core/StableTextGate.kt",
@@ -27,6 +27,8 @@ required = [
     "tv/app/src/main/res/layout/activity_tv_receiver.xml",
     "scripts/bootstrap.sh",
     "scripts/prepare_upstream.py",
+    "scripts/check-source.sh",
+    "scripts/check-ps5-wiring.sh",
     ".github/workflows/android.yml",
     "README.md",
 ]
@@ -38,6 +40,9 @@ if missing:
 xml_files = list(ROOT.rglob("*.xml"))
 parse_errors = []
 for path in xml_files:
+    # The pinned upstream checkout may contain build or vendor XML; parse all source XML.
+    if ".gradle" in path.parts or "build" in path.parts:
+        continue
     try:
         ET.parse(path)
     except ET.ParseError as exc:
@@ -59,10 +64,12 @@ if 'com.pslink.mobile.TranslationActivity' not in mobile_manifest:
     raise SystemExit("Mobile manifest is missing TranslationActivity")
 if 'android:name=".TvReceiverActivity"' not in tv_manifest:
     raise SystemExit("TV manifest is missing TvReceiverActivity")
+if 'android:allowBackup="false"' not in mobile_manifest:
+    raise SystemExit("Mobile manifest must disable Auto Backup for Remote Play registration material")
 
 bootstrap = (ROOT / "scripts/bootstrap.sh").read_text(encoding="utf-8")
 if "43728af2e639fecb8a7af1cd68c29820a40de973" not in bootstrap:
-    raise SystemExit("Chiaki-NG commit pin is missing")
+    raise SystemExit("Chiaki-NG commit pin is missing or changed")
 
 mobile_gradle = (ROOT / "mobile/build.gradle.kts").read_text(encoding="utf-8")
 if 'applicationId = "com.pslink.app"' not in mobile_gradle:
@@ -71,6 +78,12 @@ tv_gradle = (ROOT / "tv/app/build.gradle.kts").read_text(encoding="utf-8")
 if 'applicationId = "com.pslink.tv"' not in tv_gradle:
     raise SystemExit("Unexpected TV application ID")
 
+translation = (ROOT / "mobile/src/main/java/com/pslink/mobile/TranslationActivity.kt").read_text(encoding="utf-8")
+if "import com.google.mlkit.common.model.DownloadConditions" not in translation:
+    raise SystemExit("TranslationActivity must import DownloadConditions from com.google.mlkit.common.model")
+if "import com.google.mlkit.nl.translate.DownloadConditions" in translation:
+    raise SystemExit("Obsolete ML Kit DownloadConditions import remains")
+
 main_layout = (ROOT / "mobile/src/main/res/layout/pslink_main_layout.xml").read_text(encoding="utf-8")
 for binding_id in ("translationDashboardButton", "floatingActionButton", "floatingActionButtonDial", "hostsRecyclerView"):
     if f"@+id/{binding_id}" not in main_layout:
@@ -78,6 +91,11 @@ for binding_id in ("translationDashboardButton", "floatingActionButton", "floati
 protocol = (ROOT / "core/shared/src/main/java/com/pslink/core/PsLinkProtocol.kt").read_text(encoding="utf-8")
 if '.take(4000)' not in protocol:
     raise SystemExit("Subtitle packet inbound length guard is missing")
+
+ar = (ROOT / "mobile/src/main/res/values-ar/strings.xml").read_text(encoding="utf-8")
+for resource in ("regist_pin_instructions_ps5_navigation", "hint_regist_psn_account_id", "regist_info_success"):
+    if f'name="{resource}"' not in ar:
+        raise SystemExit(f"Arabic PS5 registration resource is missing: {resource}")
 
 print(f"Validated {len(required)} required files and {len(xml_files)} XML files.")
 print("Application IDs: com.pslink.app / com.pslink.tv")

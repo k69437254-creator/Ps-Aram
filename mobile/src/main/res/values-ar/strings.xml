@@ -42,4 +42,19 @@
     <string name="session_logs_empty_info">لا توجد سجلات جلسات.</string>
     <string name="stream_on_screen_controls">أزرار التحكم على الشاشة</string>
     <string name="stream_touchpad_only">لوحة اللمس فقط</string>
+    <string name="regist_option_ps5">PlayStation 5</string>
+    <string name="regist_psn_account_id_help">أدخل معرّف حساب PSN الثنائي بطول 8 بايت بصيغة Base64؛ اسم المستخدم ليس بديلًا عنه.</string>
+    <string name="regist_psn_account_id_help_url">https://github.com/chiaki-ng/chiaki-ng/blob/main/docs/setup/configuration.md#registering-your-playstation</string>
+    <string name="hint_regist_psn_account_id">معرّف حساب PSN (Base64، 8 بايت)</string>
+    <string name="regist_psn_account_id_invalid">أدخل معرّف حساب صالحًا بطول 8 بايت بصيغة Base64.</string>
+    <string name="regist_pin_instructions_ps5_before">على جهاز PS5 افتح:</string>
+    <string name="regist_pin_instructions_ps5_navigation">الإعدادات ← النظام ← اللعب عن بُعد ← ربط الجهاز</string>
+    <string name="regist_pin_instructions_after">لإظهار رمز ربط مؤقت مكوّن من 8 أرقام.</string>
+    <string name="hint_regist_pin">رمز ربط PS5 (8 أرقام)</string>
+    <string name="regist_pin_invalid">أدخل رمزًا صالحًا مكوّنًا من %d أرقام.</string>
+    <string name="regist_info_success">تم تسجيل جهاز PlayStation بنجاح.</string>
+    <string name="regist_info_failed">تعذر التسجيل. تحقق من عنوان الجهاز ومعرّف PSN والرمز، ثم أعد المحاولة.</string>
+    <string name="regist_option_ps4_ge_8">PlayStation 4 (8.0 أو أحدث)</string>
+    <string name="regist_option_ps4_ge_7">PlayStation 4 (7.0 إلى أقل من 8.0)</string>
+    <string name="regist_option_ps4_lt_7">PlayStation 4 (أقدم من 7.0)</string>
 </resources>
