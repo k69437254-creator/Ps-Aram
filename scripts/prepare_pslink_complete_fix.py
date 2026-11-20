@@ -23,6 +23,7 @@ from typing import Callable
 EXPECTED_BRANCH = "feature/psn-oauth-integration"
 INSTALL_MARKER = "PSLINK_COMPLETE_FIX_AUTORUN_V1"
 RUNTIME_MARKER = "PSLINK_COMPLETE_RUNTIME_FIX_V1"
+# PSLINK_BACKUPS_OUTSIDE_ANDROID_RES_V1
 
 
 def locate_root() -> Path:
@@ -50,11 +51,40 @@ def run_git(root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def write_transaction(changes: dict[Path, str]) -> list[Path]:
-    """Write a prepared set of files atomically, preserving timestamped backups."""
+def relocate_legacy_resource_backups(root: Path) -> list[Path]:
+    """Move old PS Link backups/temp files out of Android res trees, preserving bytes."""
+    resource_roots = (
+        root / "mobile/src/main/res",
+        root / "tv/app/src/main/res",
+        root / "third_party/chiaki-ng/android/app/src/main/res",
+    )
+    candidates: set[Path] = set()
+    for resource_root in resource_roots:
+        if not resource_root.is_dir():
+            continue
+        for pattern in ("*.before-pslink-*.bak", "*.pslink-tmp-*"):
+            candidates.update(path for path in resource_root.rglob(pattern) if path.is_file())
+
+    moved: list[Path] = []
+    for source_path in sorted(candidates):
+        relative = source_path.relative_to(root)
+        destination_dir = root / ".pslink-backups" / relative.parent
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        destination = destination_dir / source_path.name
+        if destination.exists():
+            # Never overwrite an earlier backup; retain both copies under distinct names.
+            destination = destination_dir / f"{source_path.name}.migrated-{time.time_ns()}"
+        source_path.replace(destination)
+        moved.append(destination)
+    return moved
+
+
+def write_transaction(root: Path, changes: dict[Path, str]) -> list[Path]:
+    """Write a prepared set atomically; keep backups outside Android resource directories."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
     backups: list[Path] = []
     staged: list[tuple[Path, Path, int]] = []
+    root_resolved = root.resolve()
     try:
         for path, content in changes.items():
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,7 +93,13 @@ def write_transaction(changes: dict[Path, str]) -> list[Path]:
                 old_mode = path.stat().st_mode & 0o777
                 if old == content.encode("utf-8"):
                     continue
-                backup = path.with_name(path.name + f".before-pslink-complete-fix-{stamp}.bak")
+                try:
+                    relative = path.resolve().relative_to(root_resolved)
+                except ValueError:
+                    raise SystemExit(f"Refusing to back up a file outside the project root: {path}")
+                backup_dir = root / ".pslink-backups" / relative.parent
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                backup = backup_dir / (path.name + f".before-pslink-complete-fix-{stamp}.bak")
                 if backup.exists():
                     raise SystemExit(f"Backup path already exists; refusing to overwrite: {backup}")
                 backup.write_bytes(old)
@@ -91,7 +127,6 @@ def write_transaction(changes: dict[Path, str]) -> list[Path]:
             except Exception:
                 pass
         raise
-
 
 def read_text(path: Path) -> str:
     if not path.is_file():
@@ -862,9 +897,12 @@ def patch_runtime_upstream(root: Path) -> dict[Path, str]:
 
 def apply_runtime(root: Path) -> list[Path]:
     changes = patch_runtime_upstream(root)
-    backups = write_transaction(changes)
+    moved_legacy = relocate_legacy_resource_backups(root)
+    backups = write_transaction(root, changes)
+    if moved_legacy:
+        print(f"Moved {len(moved_legacy)} legacy backup/temp file(s) out of Android resource folders.")
     print("Applied runtime overlay: touch inputs merged, controller touch state copied safely, and compact stream menu installed.")
-    return backups
+    return moved_legacy + backups
 
 
 def install_project(root: Path) -> list[Path]:
@@ -895,7 +933,7 @@ def install_project(root: Path) -> list[Path]:
     else:
         mobile_changes[installed_path] = own_bytes.decode("utf-8")
 
-    backups = write_transaction(mobile_changes)
+    backups = write_transaction(root, mobile_changes)
     print(f"Installed persistent overlay: {installed_path}")
     return backups
 

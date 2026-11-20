@@ -16,3 +16,6 @@ local.properties
 # Python validation caches
 __pycache__/
 *.py[cod]
+
+# PS Link edit backups are kept outside Android resource directories.
+/.pslink-backups/
