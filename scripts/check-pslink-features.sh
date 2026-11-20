@@ -73,4 +73,36 @@ need scripts/prepare_pslink_live_tv_streaming.py 'PSLINK_LIVE_TV_STREAMING_V1'
 need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'captionGeneration'
 need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'VIDEO_QUEUE_CAPACITY = 96'
 need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'AudioTrack.Builder'
+need mobile/src/main/res/layout/pslink_main_layout.xml 'app:layout_behavior="com.metallic.chiaki.main.FloatingActionButtonBackgroundBehavior"'
+need mobile/src/main/res/layout/pslink_main_layout.xml 'app:layout_behavior="com.metallic.chiaki.main.FloatingActionButtonSpeedDialBehavior"'
 echo "PS Link feature static checks passed. Gradle compilation and live PS5/TV hardware tests are still required."
+
+# PSLINK_COMPLETE_RUNTIME_FIX_V1 — regressions that previously escaped the static checks.
+CHI_STREAM="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/stream/StreamActivity.kt"
+CHI_CONTROLS="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/touchcontrols/TouchControlsFragment.kt"
+CHI_STATE="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/lib/Chiaki.kt"
+CHI_DECODER="$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/video-decoder.c"
+[[ -f "$CHI_STREAM" && -f "$CHI_CONTROLS" && -f "$CHI_STATE" && -f "$CHI_DECODER" ]] || {
+  echo "PS Link complete-fix source files are missing after bootstrap." >&2
+  exit 1
+}
+grep -Fq 'controlsSources' "$CHI_STREAM"
+grep -Fq 'mergeControllerStates(controlsSources.toList())' "$CHI_STREAM"
+grep -Fq 'fun mergeControllerStates(sources: List<Flow<ControllerState>>)' "$CHI_CONTROLS"
+grep -Fq 'touches = touches.map { it.copy() }.toTypedArray()' "$CHI_STATE"
+grep -Fq 'psLinkMenuButton' "$CHI_STREAM"
+grep -Fq 'PSLINK_CLEAN_STREAM_OVERLAY_V1' "$CHI_STREAM"
+grep -Fq 'psLinkStartGameRecording()' "$CHI_STREAM"
+grep -Fq 'startVideoRecording(openedDescriptor.fd)' "$CHI_STREAM"
+grep -Fq 'stopVideoRecording()' "$CHI_STREAM"
+grep -Fq 'PSLINK_NATIVE_STREAM_RECORDER_V1' "$CHI_DECODER"
+grep -Fq 'PSLINK_NATIVE_AUDIO_RECORDER_JNI_V1' "$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/chiaki-jni.c"
+if grep -Eq 'MediaProjectionManager|ScreenRecordingService' "$CHI_STREAM"; then
+  echo "Active stream screen still references the phone-display recorder; expected native Chiaki game-stream recording." >&2
+  exit 1
+fi
+grep -Fq 'تعديل الشفافية' "$ROOT/mobile/src/main/java/com/metallic/chiaki/touchcontrols/ControlLayoutEditor.kt"
+grep -Fq 'consecutiveCaptureFailures' "$ROOT/mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
+grep -Fq 'val sourceTracks = (0 until extractor.trackCount)' "$ROOT/mobile/src/main/java/com/pslink/mobile/capture/VideoEditorActivity.kt"
+grep -Fq 'class ControllerStateMergeTest' "$ROOT/mobile/src/test/java/com/metallic/chiaki/touchcontrols/ControllerStateMergeTest.kt"
+echo "PS Link controller, translation, game-stream recording, audio-preserving trim and clean-menu checks passed."

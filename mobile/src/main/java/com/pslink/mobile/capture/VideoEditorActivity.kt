@@ -107,45 +107,78 @@ class VideoEditorActivity : AppCompatActivity() {
         val extractor = MediaExtractor()
         val temp = File(cacheDir, "pslink_trim_${System.currentTimeMillis()}.mp4")
         var muxer: MediaMuxer? = null
+        var muxerStarted = false
         try {
             extractor.setDataSource(this, videoUri, null)
-            val sourceTrack = (0 until extractor.trackCount).firstOrNull {
-                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
-            } ?: throw IllegalStateException("لا يحتوي التسجيل على مسار فيديو")
-            val format = extractor.getTrackFormat(sourceTrack)
-            muxer = MediaMuxer(temp.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val outputTrack = muxer.addTrack(format)
-            muxer.start()
-            extractor.selectTrack(sourceTrack)
+            val sourceTracks = (0 until extractor.trackCount).filter { track ->
+                val mime = extractor.getTrackFormat(track).getString(MediaFormat.KEY_MIME).orEmpty()
+                mime.startsWith("video/") || mime.startsWith("audio/")
+            }
+            val videoTracks = sourceTracks.filter { track ->
+                extractor.getTrackFormat(track).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            }
+            if (videoTracks.isEmpty()) throw IllegalStateException("لا يحتوي التسجيل على مسار فيديو")
+            if (sourceTracks.isEmpty()) throw IllegalStateException("لا توجد مسارات فيديو أو صوت قابلة للقص")
+
+            val activeMuxer = MediaMuxer(temp.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer = activeMuxer
+            val outputTracks = HashMap<Int, Int>()
+            sourceTracks.forEach { inputTrack ->
+                outputTracks[inputTrack] = activeMuxer.addTrack(extractor.getTrackFormat(inputTrack))
+                extractor.selectTrack(inputTrack)
+            }
+            activeMuxer.start()
+            muxerStarted = true
             extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-            val requestedSize = if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) else 4 shl 20
+
+            val requestedSize = sourceTracks.maxOfOrNull { track ->
+                val format = extractor.getTrackFormat(track)
+                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE))
+                    format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(1)
+                else 4 shl 20
+            } ?: (4 shl 20)
             val maxSize = requestedSize.coerceIn(1 shl 20, 32 shl 20)
             val buffer = ByteBuffer.allocateDirect(maxSize)
             val info = android.media.MediaCodec.BufferInfo()
-            var firstPts = -1L
-            var samples = 0
+            var firstVideoPts = -1L
+            var videoSamples = 0
             while (true) {
                 buffer.clear()
+                val inputTrack = extractor.sampleTrackIndex
+                if (inputTrack < 0) break
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
                 val pts = extractor.sampleTime
                 if (pts > endUs) break
-                if (firstPts < 0) firstPts = pts
-                info.set(0, size, (pts - firstPts).coerceAtLeast(0), extractor.sampleFlags)
+                val isVideoTrack = inputTrack in videoTracks
+                if (isVideoTrack && firstVideoPts < 0) firstVideoPts = pts
+                // Audio samples before the first copied video key frame must not
+                // shift the MP4 timeline or create negative/duplicate timestamps.
+                if (firstVideoPts < 0 || (!isVideoTrack && pts < firstVideoPts)) {
+                    if (!extractor.advance()) break
+                    continue
+                }
+                val outputTrack = outputTracks[inputTrack]
+                    ?: throw IllegalStateException("ظهر مسار غير محدد أثناء قص الفيديو")
+                info.set(0, size, (pts - firstVideoPts).coerceAtLeast(0), extractor.sampleFlags)
                 buffer.position(0)
                 buffer.limit(size)
-                muxer.writeSampleData(outputTrack, buffer, info)
-                samples++
+                activeMuxer.writeSampleData(outputTrack, buffer, info)
+                if (isVideoTrack) videoSamples++
                 if (!extractor.advance()) break
             }
-            if (samples == 0) throw IllegalStateException("لم توجد إطارات داخل النطاق المحدد")
-            muxer.stop()
-            muxer.release()
+            if (videoSamples == 0) throw IllegalStateException("لم توجد إطارات فيديو داخل النطاق المحدد")
+            activeMuxer.stop()
+            muxerStarted = false
+            activeMuxer.release()
             muxer = null
             return publishEditedFile(temp)
         } finally {
-            runCatching { muxer?.stop() }
-            runCatching { muxer?.release() }
+            val remainingMuxer = muxer
+            if (remainingMuxer != null) {
+                if (muxerStarted) runCatching { remainingMuxer.stop() }
+                runCatching { remainingMuxer.release() }
+            }
             extractor.release()
             temp.delete()
         }

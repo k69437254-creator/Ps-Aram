@@ -86,6 +86,9 @@ class ControlLayoutEditor(private val context: Context, private val root: View) 
                 lp.topMargin = prefs.getInt("y_$id", lp.topMargin).coerceAtLeast(0)
                 view.layoutParams = lp
             }
+            if (prefs.contains("alpha_$id")) {
+                view.alpha = prefs.getInt("alpha_$id", 100).coerceIn(20, 100) / 100f
+            }
         }
     }
 
@@ -142,7 +145,7 @@ class ControlLayoutEditor(private val context: Context, private val root: View) 
     }
 
     private fun showOptions(view: View) {
-        val entries = mutableListOf("تكبير العنصر", "تصغير العنصر", "إعادة موضعه وحجمه الأصلي")
+        val entries = mutableListOf("تكبير العنصر", "تصغير العنصر", "إعادة موضعه وحجمه الأصلي", "تعديل الشفافية")
         if (MAPPABLE.containsKey(view.id)) entries.add("تعيين وظيفة هذا الزر")
         if (view.id == R.id.dpadView) entries.add("تخصيص اتجاهات D-pad")
         AlertDialog.Builder(context)
@@ -151,6 +154,7 @@ class ControlLayoutEditor(private val context: Context, private val root: View) 
                 when (entries[which]) {
                     "تكبير العنصر" -> resize(view, 1.12f)
                     "تصغير العنصر" -> resize(view, 0.88f)
+                    "تعديل الشفافية" -> changeOpacity(view)
                     "إعادة موضعه وحجمه الأصلي" -> reset(view)
                     "تعيين وظيفة هذا الزر" -> mapButton(view)
                     "تخصيص اتجاهات D-pad" -> mapDpadDirection()
@@ -158,6 +162,48 @@ class ControlLayoutEditor(private val context: Context, private val root: View) 
             }
             .setNegativeButton("إغلاق", null)
             .show()
+    }
+
+    private fun changeOpacity(view: View) {
+        val previous = (view.alpha * 100f).roundToInt().coerceIn(20, 100)
+        val slider = android.widget.SeekBar(context).apply {
+            max = 100
+            progress = previous
+        }
+        slider.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: android.widget.SeekBar?, value: Int, fromUser: Boolean) {
+                view.alpha = value.coerceIn(20, 100) / 100f
+            }
+            override fun onStartTrackingTouch(bar: android.widget.SeekBar?) = Unit
+            override fun onStopTrackingTouch(bar: android.widget.SeekBar?) = Unit
+        })
+        val dialog = AlertDialog.Builder(context)
+            .setTitle("شفافية عنصر التحكم")
+            .setMessage("حرّك المؤشر لاختيار شفافية بين 20٪ و100٪")
+            .setView(slider)
+            .setPositiveButton("حفظ", null)
+            .setNegativeButton("إلغاء", null)
+            .setNeutralButton("استعادة الأصل", null)
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val selected = slider.progress.coerceIn(20, 100)
+                view.alpha = selected / 100f
+                prefs.edit().putInt("alpha_${view.id}", selected).apply()
+                dialog.dismiss()
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                view.alpha = previous / 100f
+                dialog.dismiss()
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                view.alpha = 1f
+                prefs.edit().remove("alpha_${view.id}").apply()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 
     private fun resize(view: View, scale: Float) {
@@ -202,7 +248,8 @@ class ControlLayoutEditor(private val context: Context, private val root: View) 
     private fun reset(view: View) {
         val original = defaults[view.id] ?: return
         view.layoutParams = ConstraintLayout.LayoutParams(original)
-        prefs.edit().remove("x_${view.id}").remove("y_${view.id}").remove("w_${view.id}").remove("h_${view.id}").apply()
+        view.alpha = 1f
+        prefs.edit().remove("x_${view.id}").remove("y_${view.id}").remove("w_${view.id}").remove("h_${view.id}").remove("alpha_${view.id}").apply()
     }
 
     private fun mapButton(view: View) {

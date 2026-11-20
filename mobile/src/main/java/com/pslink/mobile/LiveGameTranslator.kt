@@ -76,12 +76,20 @@ class LiveGameTranslator(
     private var lastSource = ""
     private var lastTranslation = ""
     private var emptyFrameCount = 0
+    private var consecutiveCaptureFailures = 0
 
     val isEnabled: Boolean get() = enabled
 
     fun start(languageCode: String = language.code) {
         val selected = languages.firstOrNull { it.code == languageCode } ?: languages.first()
-        if (enabled && selected.code != language.code) pause()
+        if (selected.code != language.code) {
+            pause()
+            lastSource = ""
+            lastTranslation = ""
+            emptyFrameCount = 0
+            consecutiveCaptureFailures = 0
+            onCaption(emptyList())
+        }
         language = selected
         enabled = true
         beginLoop()
@@ -98,7 +106,6 @@ class LiveGameTranslator(
     }
 
     fun stop() {
-        tvClient?.sendCaptions(emptyList(), System.nanoTime())
         enabled = false
         pause()
         recognizer?.close()
@@ -108,6 +115,7 @@ class LiveGameTranslator(
         lastSource = ""
         lastTranslation = ""
         emptyFrameCount = 0
+        consecutiveCaptureFailures = 0
         onCaption(emptyList())
     }
 
@@ -138,7 +146,13 @@ class LiveGameTranslator(
                     val sampleStartedAt = SystemClock.elapsedRealtime()
                     val samplePtsNs = System.nanoTime()
                     val bitmap = captureFrame()
-                    if (bitmap != null) {
+                    if (bitmap == null) {
+                        consecutiveCaptureFailures++
+                        if (consecutiveCaptureFailures == 5) {
+                            onStatus("تعذر التقاط إطارات اللعبة من سطح البث. تأكد من أن بث PS5 ظاهر ثم أعد تشغيل الترجمة.")
+                        }
+                    } else {
+                        consecutiveCaptureFailures = 0
                         try {
                             val result = newRecognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitResult()
                             // Game subtitles normally occupy the lower portion of the streamed frame.
@@ -224,7 +238,7 @@ class LiveGameTranslator(
     }
 
     private suspend fun captureFrame(): Bitmap? = withContext(Dispatchers.Main.immediate) {
-        if (!surface.isAttachedToWindow || surface.width <= 0 || surface.height <= 0) return@withContext null
+        if (!surface.isAttachedToWindow || surface.width <= 0 || surface.height <= 0 || !surface.holder.surface.isValid) return@withContext null
         val scale = minOf(1f, MAX_CAPTURE_WIDTH.toFloat() / surface.width.toFloat())
         val width = (surface.width * scale).toInt().coerceAtLeast(1)
         val height = (surface.height * scale).toInt().coerceAtLeast(1)
@@ -241,9 +255,9 @@ class LiveGameTranslator(
                         continuation.resume(null)
                     }
                 }, mainHandler)
-            } catch (error: Exception) {
+            } catch (_: Exception) {
                 bitmap.recycle()
-                if (continuation.isActive) continuation.resumeWithException(error)
+                if (continuation.isActive) continuation.resume(null)
             }
         }
     }

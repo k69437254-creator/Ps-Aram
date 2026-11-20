@@ -66,6 +66,9 @@ jobs:
       - name: Run shared core tests
         run: bash ./gradlew --no-daemon --stacktrace :core:shared:testDebugUnitTest
 
+      - name: Run PS Link controller regression tests
+        run: bash ./gradlew --no-daemon --stacktrace :mobile:testDebugUnitTest
+
       - name: Build PS Link Mobile APK
         id: build_mobile
         run: bash ./gradlew --no-daemon --stacktrace :mobile:assembleDebug

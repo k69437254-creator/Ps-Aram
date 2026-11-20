@@ -420,3 +420,14 @@ _pslink_live_tv_script = _pslink_live_tv_pathlib.Path(__file__).resolve().parent
 if not _pslink_live_tv_script.is_file():
     raise SystemExit(f"Missing PS Link live TV streaming overlay: {_pslink_live_tv_script}")
 _pslink_live_tv_runpy.run_path(str(_pslink_live_tv_script), run_name="__main__")
+
+# PSLINK_COMPLETE_FIX_AUTORUN_V1
+# Reapply the PS Link complete fix after Chiaki-NG has been reset to its pinned commit
+# and after the recorder/live-TV overlays have finished patching StreamActivity.
+import pathlib as _pslink_complete_pathlib
+import subprocess as _pslink_complete_subprocess
+import sys as _pslink_complete_sys
+_pslink_complete_script = _pslink_complete_pathlib.Path(__file__).resolve().parent / "prepare_pslink_complete_fix.py"
+if not _pslink_complete_script.is_file():
+    raise SystemExit(f"Missing PS Link complete-fix overlay: {_pslink_complete_script}")
+_pslink_complete_subprocess.run([_pslink_complete_sys.executable, str(_pslink_complete_script)], check=True)
