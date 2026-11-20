@@ -52,7 +52,7 @@ class TvReceiverActivity : AppCompatActivity() {
                 receiver.latestPacket.collect { packet ->
                     if (packet != null) {
                         binding.subtitleText.text = packet.translatedText
-                        binding.sourceText.text = packet.sourceText
+                        binding.sourceText.visibility = android.view.View.GONE
                     }
                 }
             }

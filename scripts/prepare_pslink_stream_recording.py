@@ -1051,6 +1051,11 @@ def main() -> None:
     patch_jni()
     patch_chiaki_kt()
     patch_stream_activity()
+    audio_overlay = ROOT / "scripts" / "prepare_pslink_audio_recording.py"
+    if not audio_overlay.is_file():
+        raise SystemExit(f"Missing PS Link audio recorder overlay: {audio_overlay}")
+    import runpy as _pslink_audio_runpy
+    _pslink_audio_runpy.run_path(str(audio_overlay), run_name="__main__")
     print("PS Link native game-stream recorder overlay applied.")
     print("Capture source: Chiaki encoded PS5 access units; output: video-only MP4.")
     print("Phone display capture/MediaProjection is not used by this recorder.")

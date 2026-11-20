@@ -112,7 +112,10 @@ stream_methods = r'''
 
 		val livePrefs = getSharedPreferences("pslink_live", MODE_PRIVATE)
 		psLinkTranslator = LiveGameTranslator(this, binding.surfaceView, psLinkTvClient,
-			{ _, translated -> runOnUiThread { binding.psLinkCaptionText.text = translated } },
+			{ captions -> runOnUiThread {
+                binding.psLinkCaptionOverlay.setCaptions(binding.surfaceView, captions)
+                binding.psLinkCaptionText.text = if(captions.isEmpty()) "" else "الترجمة العربية فوق النص الأصلي"
+            } },
 			{ status -> runOnUiThread {
 				binding.psLinkCaptionText.text = status
 				if(!psLinkTranslator?.isEnabled.orFalse()) {
@@ -129,7 +132,7 @@ stream_methods = r'''
 				binding.psLinkLiveOcrButton.text = "ترجمة حية"
 				binding.psLinkCaptionText.text = "الترجمة الحية متوقفة"
 			} else {
-				startPsLinkLiveTranslation(livePrefs.getString("language", com.google.mlkit.nl.translate.TranslateLanguage.JAPANESE).orEmpty())
+				startPsLinkLiveTranslation(livePrefs.getString("language", com.google.mlkit.nl.translate.TranslateLanguage.ENGLISH).orEmpty())
 			}
 		}
 		binding.psLinkLiveOcrButton.setOnLongClickListener {
@@ -238,21 +241,26 @@ stream_tools_xml = '''
             android:textSize="10sp"
             app:cornerRadius="10dp" />
     </LinearLayout>
+    <com.pslink.mobile.LiveCaptionOverlayView
+        android:id="@+id/psLinkCaptionOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false"
+        android:importantForAccessibility="no" />
     <TextView
         android:id="@+id/psLinkCaptionText"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginStart="22dp"
-        android:layout_marginEnd="22dp"
-        android:layout_marginBottom="112dp"
-        android:background="#CC050811"
+        android:layout_marginBottom="18dp"
+        android:background="#CC08111F"
         android:gravity="center"
-        android:padding="12dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
         android:text=""
-        android:textColor="#FFFFFF"
-        android:textSize="22sp"
-        android:textStyle="bold" />
+        android:textColor="#DCE8F8"
+        android:textSize="11sp" />
 '''
 text = layout.read_text(encoding="utf-8")
 if "@+id/psLinkToolsBar" not in text:

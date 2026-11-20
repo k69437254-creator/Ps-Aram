@@ -7,6 +7,7 @@ need() {
   grep -Fq -- "$marker" "$ROOT/$file" || { echo "Feature marker missing in $file: $marker" >&2; exit 1; }
 }
 need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'PixelCopy.request(surface, bitmap'
+need mobile/src/main/java/com/pslink/mobile/LiveCaptionOverlayView.kt 'TextDirectionHeuristics.RTL'
 need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'newTranslator.translate(text).awaitResult()'
 need mobile/src/main/java/com/pslink/mobile/PsLinkScreenshot.kt 'MediaStore.Images.Media.RELATIVE_PATH'
 need mobile/src/main/java/com/pslink/mobile/capture/ScreenRecordingService.kt 'MediaProjectionManager'
@@ -18,6 +19,8 @@ need mobile/src/main/java/com/metallic/chiaki/touchcontrols/ControlLayoutEditor.
 need mobile/src/main/java/com/metallic/chiaki/touchcontrols/ControlLayoutEditor.kt 'R.id.crossButtonView'
 need mobile/src/main/java/com/metallic/chiaki/touchcontrols/ControlLayoutEditor.kt 'R.id.pyramidButtonView'
 need scripts/prepare_pslink_upstream.py 'setupPsLinkFeatures()'
+need scripts/prepare_pslink_audio_recording.py 'PSLINK_NATIVE_AUDIO_RECORDER_JNI_V1'
+need scripts/prepare_pslink_audio_recording.py 'pslink_annexb_to_length_prefixed'
 need scripts/prepare_pslink_upstream.py 'setControlCustomizationMode'
 need scripts/prepare_pslink_upstream.py 'psLinkToolsBar.isGone = true'
 need core/shared/src/main/java/com/pslink/core/PsLinkProtocol.kt 'const val KIND_ACK = "ack"'

@@ -40,7 +40,7 @@ class LiveGameTranslator(
     private val activity: Activity,
     private val surface: SurfaceView,
     private val tvClient: TvSubtitleClient?,
-    private val onCaption: (String, String) -> Unit,
+    private val onCaption: (List<CaptionLine>) -> Unit,
     private val onStatus: (String) -> Unit
 ) {
     data class Language(val label: String, val code: String, val script: Script)
@@ -48,8 +48,8 @@ class LiveGameTranslator(
 
     companion object {
         val languages = listOf(
-            Language("اليابانية", TranslateLanguage.JAPANESE, Script.JAPANESE),
             Language("الإنجليزية", TranslateLanguage.ENGLISH, Script.LATIN),
+            Language("اليابانية", TranslateLanguage.JAPANESE, Script.JAPANESE),
             Language("الصينية", TranslateLanguage.CHINESE, Script.CHINESE),
             Language("الكورية", TranslateLanguage.KOREAN, Script.KOREAN)
         )
@@ -57,6 +57,15 @@ class LiveGameTranslator(
         private const val MAX_OCR_CHARS = 2_500
         private const val MAX_CAPTURE_WIDTH = 960
     }
+
+    data class CaptionLine(
+        val source: String,
+        val translated: String,
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float
+    )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -67,6 +76,7 @@ class LiveGameTranslator(
     private var translator: Translator? = null
     private var lastSource = ""
     private var lastTranslation = ""
+    private var emptyFrameCount = 0
 
     val isEnabled: Boolean get() = enabled
 
@@ -96,6 +106,8 @@ class LiveGameTranslator(
         translator = null
         lastSource = ""
         lastTranslation = ""
+        emptyFrameCount = 0
+        onCaption(emptyList())
     }
 
     fun close() {
@@ -127,14 +139,61 @@ class LiveGameTranslator(
                     if (bitmap != null) {
                         try {
                             val result = newRecognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitResult()
-                            val text = result.text.trim().replace(Regex("[\\t ]+"), " ").take(MAX_OCR_CHARS)
-                            if (text.length >= 2 && text != lastSource) {
-                                lastSource = text
-                                val translated = newTranslator.translate(text).awaitResult().trim()
-                                if (translated.isNotBlank()) {
-                                    lastTranslation = translated
-                                    onCaption(text, translated)
-                                    tvClient?.send(SubtitlePacket("PS5 Remote Play", text, translated))
+                            // Game subtitles normally occupy the lower portion of the streamed frame.
+                            // Keep OCR geometry so the Arabic replacement can cover the original line.
+                            val detected = result.textBlocks
+                                .flatMap { block -> block.lines }
+                                .mapNotNull { line ->
+                                    val rect = line.boundingBox ?: return@mapNotNull null
+                                    val sourceText = line.text.trim().replace(Regex("[\\t ]+"), " ")
+                                    if (sourceText.length < 2 ||
+                                        rect.centerY() < bitmap.height * 0.60f ||
+                                        rect.width() < bitmap.width * 0.10f ||
+                                        rect.height() < 8
+                                    ) return@mapNotNull null
+                                    CaptionLine(
+                                        source = sourceText,
+                                        translated = "",
+                                        left = (rect.left.toFloat() / bitmap.width).coerceIn(0f, 1f),
+                                        top = (rect.top.toFloat() / bitmap.height).coerceIn(0f, 1f),
+                                        right = (rect.right.toFloat() / bitmap.width).coerceIn(0f, 1f),
+                                        bottom = (rect.bottom.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                                    )
+                                }
+                                .sortedWith(compareBy<CaptionLine> { it.top }.thenBy { it.left })
+                                .take(3)
+                            val signature = detected.joinToString("|") {
+                                "${it.source}@${(it.left * 100).toInt()},${(it.top * 100).toInt()}"
+                            }
+                            if (detected.isEmpty()) {
+                                emptyFrameCount++
+                                if (emptyFrameCount >= 2 && lastSource.isNotEmpty()) {
+                                    lastSource = ""
+                                    lastTranslation = ""
+                                    onCaption(emptyList())
+                                }
+                            } else {
+                                emptyFrameCount = 0
+                                if (signature != lastSource) {
+                                    val translatedLines = detected.map { line ->
+                                        newTranslator.translate(line.source).awaitResult().trim()
+                                    }
+                                    val captions = detected.zip(translatedLines)
+                                        .mapNotNull { (line, translated) ->
+                                            if (translated.isBlank()) null else line.copy(translated = translated)
+                                        }
+                                    lastSource = signature
+                                    lastTranslation = captions.joinToString("\n") { it.translated }
+                                    onCaption(captions)
+                                    if (captions.isNotEmpty()) {
+                                        tvClient?.send(
+                                            SubtitlePacket(
+                                                game = "PS5 Remote Play",
+                                                sourceText = "",
+                                                translatedText = lastTranslation
+                                            )
+                                        )
+                                    }
                                 }
                             }
                         } finally {

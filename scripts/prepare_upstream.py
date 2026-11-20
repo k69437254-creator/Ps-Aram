@@ -270,7 +270,7 @@ english_text = english_strings.read_text(encoding="utf-8")
 if 'name="psn_oauth_login"' not in english_text:
     resources = '''
     <string name="psn_oauth_login">Sign in to PlayStation Network</string>
-    <string name="psn_oauth_help">Sign in with the PSN account you want to use. On Sony's redirect page, copy the full browser address and paste it below.</string>
+    <string name="psn_oauth_help" formatted="false">Complete PSN sign in, then paste the redirect address from your browser below.</string>
     <string name="psn_oauth_redirect_hint">Sony Remote Play redirect URL</string>
     <string name="psn_oauth_extract">Get PSN Account ID</string>
     <string name="psn_oauth_success">PSN Account ID extracted. Continue with the PS5 Link Device code.</string>
