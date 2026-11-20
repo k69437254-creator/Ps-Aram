@@ -203,6 +203,15 @@
                         android:textColor="@color/pslink_text" />
                 </com.google.android.material.textfield.TextInputLayout>
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tvDiscoveryButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="10dp"
+                    android:text="اكتشاف التلفاز تلقائيًا"
+                    android:textAllCaps="false"
+                    app:backgroundTint="@color/pslink_surface_raised"
+                    app:cornerRadius="12dp" />
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/connectTvButton"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"

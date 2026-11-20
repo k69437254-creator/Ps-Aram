@@ -6,6 +6,10 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -36,6 +40,13 @@
             android:name="com.pslink.mobile.TranslationActivity"
             android:exported="false"
             android:screenOrientation="unspecified" />
+        <activity
+            android:name="com.pslink.mobile.capture.VideoEditorActivity"
+            android:exported="false" />
+        <service
+            android:name="com.pslink.mobile.capture.ScreenRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <activity
             android:name="com.metallic.chiaki.main.MainActivity"

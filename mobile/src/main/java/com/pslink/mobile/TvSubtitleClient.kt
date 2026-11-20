@@ -23,6 +23,7 @@ class TvSubtitleClient(
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var ready = false
+    private val pendingMessageIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     fun connect(hostInput: String, pairingCode: String) {
         disconnect()
@@ -52,6 +53,11 @@ class TvSubtitleClient(
                 if (kind == PsLinkProtocol.KIND_READY) {
                     ready = true
                     onStatus("التلفاز متصل وجاهز لاستقبال الترجمة", true)
+                } else if (kind == PsLinkProtocol.KIND_ACK) {
+                    val ackId = runCatching { JSONObject(text).optString("id") }.getOrDefault("")
+                    if (ackId.isNotBlank() && pendingMessageIds.remove(ackId)) {
+                        onStatus("استلم التلفاز الترجمة بنجاح", ready)
+                    }
                 } else if (kind == "error") {
                     ready = false
                     onStatus("رفض التلفاز الاقتران: ${runCatching { JSONObject(text).optString("message") }.getOrDefault("خطأ غير معروف")}", false)
@@ -60,11 +66,13 @@ class TvSubtitleClient(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 ready = false
+                pendingMessageIds.clear()
                 onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 ready = false
+                pendingMessageIds.clear()
                 onStatus("انقطع اتصال التلفاز", false)
             }
         })
@@ -75,13 +83,19 @@ class TvSubtitleClient(
             onStatus("اربط التلفاز أولًا", false)
             return false
         }
+        if (pendingMessageIds.size >= 64) pendingMessageIds.clear()
+        pendingMessageIds.add(packet.messageId)
         val sent = socket?.send(packet.toJson()) == true
-        if (!sent) onStatus("تعذر إرسال الترجمة", false)
+        if (!sent) {
+            pendingMessageIds.remove(packet.messageId)
+            onStatus("تعذر إرسال الترجمة", false)
+        }
         return sent
     }
 
     fun disconnect() {
         ready = false
+        pendingMessageIds.clear()
         socket?.close(1000, "User disconnected")
         socket = null
     }

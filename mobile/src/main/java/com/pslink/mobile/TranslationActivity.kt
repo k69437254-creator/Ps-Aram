@@ -2,6 +2,10 @@
 package com.pslink.mobile
 
 import android.net.Uri
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Toast
@@ -41,6 +45,11 @@ class TranslationActivity : AppCompatActivity() {
     private var translator: Translator? = null
     private var translatorSourceCode: String? = null
     private var tvClient: TvSubtitleClient? = null
+    private var nsdManager: NsdManager? = null
+    private var tvDiscoveryListener: NsdManager.DiscoveryListener? = null
+    @Volatile private var tvAutoConnectStarted = false
+    private val tvReconnectHandler = Handler(Looper.getMainLooper())
+    private var tvReconnectPending = false
     private var lastTranslation: String = ""
     private var lastSource: String = ""
 
@@ -75,6 +84,7 @@ class TranslationActivity : AppCompatActivity() {
         binding.downloadModelButton.setOnClickListener { downloadTranslationModel() }
         binding.translateButton.setOnClickListener { translateText() }
         binding.connectTvButton.setOnClickListener { connectTv() }
+        binding.tvDiscoveryButton.setOnClickListener { discoverTv() }
         binding.sendToTvButton.setOnClickListener { sendToTv() }
 
         tvClient = TvSubtitleClient { status, connected ->
@@ -83,9 +93,20 @@ class TranslationActivity : AppCompatActivity() {
                 binding.tvConnectionStatus.setTextColor(
                     getColor(if (connected) com.metallic.chiaki.R.color.pslink_blue else com.metallic.chiaki.R.color.pslink_muted)
                 )
+                if (connected) {
+                    tvReconnectPending = false
+                    tvReconnectHandler.removeCallbacksAndMessages(null)
+                } else if (!tvReconnectPending && (status.startsWith("فشل الاتصال") || status == "انقطع اتصال التلفاز")) {
+                    tvReconnectPending = true
+                    tvReconnectHandler.postDelayed({
+                        tvReconnectPending = false
+                        if (!isFinishing && !isDestroyed) discoverTv()
+                    }, 3_000L)
+                }
             }
         }
         rebuildTranslator()
+        discoverTv()
         binding.sourceLanguageSpinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 rebuildTranslator()
@@ -188,9 +209,70 @@ class TranslationActivity : AppCompatActivity() {
         OcrScript.KOREAN -> TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
     }
 
+    private fun discoverTv() {
+        stopTvDiscovery()
+        tvAutoConnectStarted = false
+        val manager = getSystemService(NSD_SERVICE) as NsdManager
+        nsdManager = manager
+        binding.tvConnectionStatus.text = "جارٍ البحث عن تلفاز PS Link على الشبكة المحلية…"
+        val listener = object : NsdManager.DiscoveryListener {
+            override fun onDiscoveryStarted(serviceType: String) = Unit
+            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                binding.tvConnectionStatus.text = "تعذر بدء اكتشاف التلفاز ($errorCode). أدخل عنوان IP يدويًا."
+                stopTvDiscovery()
+            }
+            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) { stopTvDiscovery() }
+            override fun onDiscoveryStopped(serviceType: String) = Unit
+            override fun onServiceLost(serviceInfo: NsdServiceInfo) { tvAutoConnectStarted = false }
+            override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+                if (!serviceInfo.serviceType.contains("_pslink._tcp") || tvAutoConnectStarted) return
+                tvAutoConnectStarted = true
+                manager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                        tvAutoConnectStarted = false
+                        runOnUiThread { binding.tvConnectionStatus.text = "عُثر على التلفاز لكن تعذر معرفة عنوانه ($errorCode)." }
+                    }
+                    override fun onServiceResolved(resolved: NsdServiceInfo) {
+                        val host = resolved.host?.hostAddress
+                        runOnUiThread {
+                            if (host.isNullOrBlank()) {
+                                tvAutoConnectStarted = false
+                                binding.tvConnectionStatus.text = "عُثر على التلفاز دون عنوان شبكة صالح."
+                                return@runOnUiThread
+                            }
+                            binding.tvHostInput.setText(host)
+                            val savedCode = getSharedPreferences("pslink_tv", MODE_PRIVATE).getString("code", "").orEmpty()
+                            if (savedCode.matches(Regex("\\d{6}"))) {
+                                binding.tvConnectionStatus.text = "عُثر على ${resolved.serviceName}؛ جارٍ إعادة الاتصال…"
+                                connectTv(host, savedCode)
+                            } else {
+                                binding.tvConnectionStatus.text = "عُثر على ${resolved.serviceName}. أدخل رمز الاقتران الظاهر على التلفاز ثم اضغط ربط التلفاز."
+                            }
+                        }
+                    }
+                })
+            }
+        }
+        tvDiscoveryListener = listener
+        runCatching { manager.discoverServices("_pslink._tcp.", NsdManager.PROTOCOL_DNS_SD, listener) }
+            .onFailure { binding.tvConnectionStatus.text = "تعذر اكتشاف التلفاز؛ أدخل عنوان IP يدويًا." }
+    }
+
+    private fun stopTvDiscovery() {
+        val listener = tvDiscoveryListener ?: return
+        runCatching { nsdManager?.stopServiceDiscovery(listener) }
+        tvDiscoveryListener = null
+    }
+
     private fun connectTv() {
         val host = binding.tvHostInput.text?.toString()?.trim().orEmpty()
         val code = binding.tvPairCodeInput.text?.toString()?.trim().orEmpty()
+        connectTv(host, code)
+    }
+
+    private fun connectTv(host: String, code: String) {
+        binding.tvHostInput.setText(host)
+        binding.tvPairCodeInput.setText(code)
         getSharedPreferences("pslink_tv", MODE_PRIVATE).edit()
             .putString("host", host)
             .putString("code", code)
@@ -212,6 +294,8 @@ class TranslationActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        tvReconnectHandler.removeCallbacksAndMessages(null)
+        stopTvDiscovery()
         translator?.close()
         tvClient?.close()
         super.onDestroy()

@@ -2,7 +2,7 @@ name: PS Link Android builds
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'feature/psn-oauth-integration' ]
   pull_request:
   workflow_dispatch:
 
@@ -44,6 +44,19 @@ jobs:
           sudo apt-get install --yes protobuf-compiler
           protoc --version
 
+      - name: Prepare stable debug signing key when configured
+        env:
+          PSLINK_DEBUG_KEYSTORE_BASE64: ${{ secrets.PSLINK_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -n "$PSLINK_DEBUG_KEYSTORE_BASE64" ]]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$PSLINK_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+            echo "Stable debug signing key installed."
+          else
+            echo "WARNING: PSLINK_DEBUG_KEYSTORE_BASE64 is not configured; this APK will use this runner's temporary debug key and may not upgrade an APK signed by another runner."
+          fi
+
       - name: Fetch pinned Chiaki-NG source and prepare project
         run: bash scripts/bootstrap.sh
 
@@ -71,7 +84,7 @@ jobs:
           set -Eeuo pipefail
           APK="$(find mobile/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
           [[ -n "$APK" ]] || { echo "Mobile APK was not found" >&2; exit 1; }
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.pslink.app'"
+          bash scripts/verify-apk.sh "$APK" com.pslink.app
 
       - name: Verify PS Link TV APK package ID
         if: ${{ always() && steps.build_tv.outcome == 'success' }}
@@ -80,7 +93,7 @@ jobs:
           set -Eeuo pipefail
           APK="$(find tv/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
           [[ -n "$APK" ]] || { echo "TV APK was not found" >&2; exit 1; }
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.pslink.tv'"
+          bash scripts/verify-apk.sh "$APK" com.pslink.tv
 
       - name: Upload PS Link Mobile APK
         if: ${{ always() && steps.build_mobile.outcome == 'success' }}

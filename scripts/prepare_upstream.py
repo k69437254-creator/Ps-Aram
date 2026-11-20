@@ -309,3 +309,9 @@ if not wrapper_script.is_file():
 (ROOT / "gradlew").chmod(0o755)
 
 print("Prepared Chiaki-NG mobile source, PS Link branding and Gradle wrapper.")
+
+# Apply the additional PS Link live translation, media capture and controls overlay.
+import runpy as _pslink_runpy
+_pslink_feature_overlay = ROOT / "scripts" / "prepare_pslink_upstream.py"
+if _pslink_feature_overlay.is_file():
+    _pslink_runpy.run_path(str(_pslink_feature_overlay), run_name="__main__")
