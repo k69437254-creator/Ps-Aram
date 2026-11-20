@@ -54,7 +54,6 @@ class LiveGameTranslator(
         )
         private const val SAMPLE_INTERVAL_MS = 650L
         private const val MAX_OCR_CHARS = 160
-        private const val MAX_OCR_CHARS = 2_500
         private const val MAX_CAPTURE_WIDTH = 960
     }
 
