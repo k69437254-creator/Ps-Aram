@@ -30,7 +30,7 @@ class LiveCaptionOverlayView @JvmOverloads constructor(
     private val density = resources.displayMetrics.density
     private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(7, 14, 27)
-        alpha = 246
+        alpha = 255
         style = Paint.Style.FILL
     }
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -80,9 +80,21 @@ class LiveCaptionOverlayView @JvmOverloads constructor(
             val sourceCenterX = (sourceLeft + sourceRight) / 2f
             val sourceCenterY = (sourceTop + sourceBottom) / 2f
 
-            // Expand around the source line so longer Arabic text fits and the English glyphs are hidden.
-            val boxWidth = min(surfaceWidth * 0.90f, max(sourceRight - sourceLeft + 34f * density, surfaceWidth * 0.54f))
-            val boxHeight = min(surfaceHeight * 0.18f, max(sourceBottom - sourceTop + 24f * density, 54f * density))
+            // Cover only the source glyphs, expanding for the measured Arabic line.
+            val horizontalPadding = 16f * density
+            val verticalPadding = 10f * density
+            textPaint.textSize = 21f * density
+            val maximumBoxWidth = surfaceWidth * 0.94f
+            val sourceWidth = max(1f, sourceRight - sourceLeft)
+            val translatedWidth = textPaint.measureText(line.translated)
+            val boxWidth = min(
+                maximumBoxWidth,
+                max(sourceWidth + horizontalPadding * 2f, translatedWidth + horizontalPadding * 2f)
+            )
+            val boxHeight = min(
+                surfaceHeight * 0.20f,
+                max(sourceBottom - sourceTop + verticalPadding * 2f, 56f * density)
+            )
             val box = RectF(
                 (sourceCenterX - boxWidth / 2f).coerceAtLeast(offsetX + 4f * density),
                 (sourceCenterY - boxHeight / 2f).coerceAtLeast(offsetY + 4f * density),
@@ -99,11 +111,9 @@ class LiveCaptionOverlayView @JvmOverloads constructor(
                 2f * density, 2f * density, accentPaint
             )
 
-            val horizontalPadding = 28f * density
-            val verticalPadding = 9f * density
             val contentWidth = (box.width() - horizontalPadding * 2f).toInt().coerceAtLeast(24)
             val availableHeight = box.height() - verticalPadding * 2f
-            textPaint.textSize = min(24f * density, max(16f * density, availableHeight * 0.47f))
+            textPaint.textSize = min(22f * density, max(15f * density, availableHeight * 0.36f))
             val layout = StaticLayout.Builder
                 .obtain(line.translated, 0, line.translated.length, textPaint, contentWidth)
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)

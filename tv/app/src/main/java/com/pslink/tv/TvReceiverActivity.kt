@@ -4,6 +4,7 @@ package com.pslink.tv
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
@@ -20,6 +21,7 @@ import java.util.Collections
 class TvReceiverActivity : AppCompatActivity() {
     private lateinit var binding: ActivityTvReceiverBinding
     private lateinit var receiver: TvSubtitleServer
+    private lateinit var mediaPlayer: TvMediaPlayer
     private var nsdManager: NsdManager? = null
     private var registration: NsdManager.RegistrationListener? = null
     private var multicastLock: android.net.wifi.WifiManager.MulticastLock? = null
@@ -30,6 +32,12 @@ class TvReceiverActivity : AppCompatActivity() {
         setContentView(binding.root)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        mediaPlayer = TvMediaPlayer(
+            binding.gameSurfaceView,
+            { status -> runOnUiThread { binding.serverStatusText.text = status } },
+            { lines -> runOnUiThread { binding.captionOverlay.setCaptions(lines) } }
+        )
+
         val preferences = getSharedPreferences("pslink_tv_receiver", MODE_PRIVATE)
         val code = preferences.getString("pair_code", null) ?:
             SecureRandom().nextInt(1_000_000).toString().padStart(6, '0').also {
@@ -38,21 +46,46 @@ class TvReceiverActivity : AppCompatActivity() {
         binding.pairCodeText.text = code.chunked(3).joinToString(" ")
         binding.ipAddressText.text = localIpv4Addresses()
 
-        receiver = TvSubtitleServer(code)
+        receiver = TvSubtitleServer(
+            code,
+            onMediaConfig = { config ->
+                mediaPlayer.configure(config)
+                runOnUiThread {
+                    binding.pairingPanel.visibility = View.GONE
+                    binding.gameSurfaceView.visibility = View.VISIBLE
+                    binding.captionOverlay.visibility = View.VISIBLE
+                    binding.serverStatusText.text = "استُقبل بث اللعبة؛ جارٍ عرض الصورة والترجمة"
+                }
+            },
+            onMediaPacket = mediaPlayer::submit,
+            onMediaStop = {
+                mediaPlayer.resetStream()
+                runOnUiThread {
+                    binding.captionOverlay.setCaptions(emptyList())
+                    binding.gameSurfaceView.visibility = View.GONE
+                    binding.pairingPanel.visibility = View.VISIBLE
+                    binding.serverStatusText.text = "انقطع اتصال الهاتف؛ استخدم الرمز نفسه لإعادة الاقتران"
+                }
+            }
+        )
         runCatching { receiver.start() }
             .onSuccess {
-                binding.serverStatusText.text = "خادم الترجمة يعمل على المنفذ ${PsLinkProtocol.PORT}"
+                binding.serverStatusText.text = "خادم PS Link جاهز على المنفذ ${PsLinkProtocol.PORT}"
                 runCatching { registerDiscovery() }
-                    .onFailure { binding.serverStatusText.text = "الخادم يعمل؛ تعذر الاكتشاف التلقائي. استخدم عنوان IP ورمز الاقتران." }
+                    .onFailure { binding.serverStatusText.text = "الخادم جاهز؛ استخدم عنوان IP ورمز الاقتران الظاهرين." }
             }
             .onFailure { error -> binding.serverStatusText.text = "تعذر تشغيل خادم الاستقبال: ${error.localizedMessage ?: "خطأ شبكة"}" }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                receiver.latestPacket.collect { packet ->
-                    if (packet != null) {
-                        binding.subtitleText.text = packet.translatedText
-                        binding.sourceText.visibility = android.view.View.GONE
+                launch {
+                    receiver.latestCaptions.collect { frame ->
+                        if (frame != null) mediaPlayer.scheduleCaptions(frame)
+                    }
+                }
+                launch {
+                    receiver.latestPacket.collect { packet ->
+                        if (packet != null) binding.subtitleText.text = packet.translatedText
                     }
                 }
             }
@@ -95,6 +128,7 @@ class TvReceiverActivity : AppCompatActivity() {
     override fun onDestroy() {
         unregisterDiscovery()
         if (::receiver.isInitialized) receiver.stop()
+        if (::mediaPlayer.isInitialized) mediaPlayer.close()
         super.onDestroy()
     }
 

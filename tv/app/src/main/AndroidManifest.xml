@@ -10,7 +10,7 @@
     <application
         android:allowBackup="false"
         android:banner="@drawable/tv_banner"
-        android:icon="@drawable/ic_pslink_launcher"
+        android:icon="@drawable/pslink_launcher_art"
         android:label="PS Link TV"
         android:supportsRtl="true"
         android:theme="@style/TvTheme"

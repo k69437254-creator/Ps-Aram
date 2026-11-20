@@ -20,7 +20,6 @@ import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
-import com.pslink.core.SubtitlePacket
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +52,8 @@ class LiveGameTranslator(
             Language("الصينية", TranslateLanguage.CHINESE, Script.CHINESE),
             Language("الكورية", TranslateLanguage.KOREAN, Script.KOREAN)
         )
-        private const val SAMPLE_INTERVAL_MS = 1_150L
+        private const val SAMPLE_INTERVAL_MS = 650L
+        private const val MAX_OCR_CHARS = 160
         private const val MAX_OCR_CHARS = 2_500
         private const val MAX_CAPTURE_WIDTH = 960
     }
@@ -89,6 +89,7 @@ class LiveGameTranslator(
     }
 
     fun pause() {
+        tvClient?.sendCaptions(emptyList(), System.nanoTime())
         loop?.cancel()
         loop = null
     }
@@ -98,6 +99,7 @@ class LiveGameTranslator(
     }
 
     fun stop() {
+        tvClient?.sendCaptions(emptyList(), System.nanoTime())
         enabled = false
         pause()
         recognizer?.close()
@@ -135,6 +137,7 @@ class LiveGameTranslator(
                 onStatus("الترجمة الحية تعمل: ${language.label} ← العربية")
                 while (isActive && enabled) {
                     val sampleStartedAt = SystemClock.elapsedRealtime()
+                    val samplePtsNs = System.nanoTime()
                     val bitmap = captureFrame()
                     if (bitmap != null) {
                         try {
@@ -146,9 +149,9 @@ class LiveGameTranslator(
                                 .mapNotNull { line ->
                                     val rect = line.boundingBox ?: return@mapNotNull null
                                     val sourceText = line.text.trim().replace(Regex("[\\t ]+"), " ")
-                                    if (sourceText.length < 2 ||
-                                        rect.centerY() < bitmap.height * 0.60f ||
-                                        rect.width() < bitmap.width * 0.10f ||
+                                    if (sourceText.length < 2 || sourceText.length > MAX_OCR_CHARS ||
+                                        rect.centerY() < bitmap.height * 0.48f ||
+                                        rect.width() < bitmap.width * 0.06f ||
                                         rect.height() < 8
                                     ) return@mapNotNull null
                                     CaptionLine(
@@ -163,7 +166,7 @@ class LiveGameTranslator(
                                 .sortedWith(compareBy<CaptionLine> { it.top }.thenBy { it.left })
                                 .take(3)
                             val signature = detected.joinToString("|") {
-                                "${it.source}@${(it.left * 100).toInt()},${(it.top * 100).toInt()}"
+                                "${it.source}@${(it.left * 1000).toInt()},${(it.top * 1000).toInt()},${(it.right * 1000).toInt()},${(it.bottom * 1000).toInt()}"
                             }
                             if (detected.isEmpty()) {
                                 emptyFrameCount++
@@ -171,6 +174,8 @@ class LiveGameTranslator(
                                     lastSource = ""
                                     lastTranslation = ""
                                     onCaption(emptyList())
+                                    tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                    tvClient?.sendCaptions(emptyList(), samplePtsNs)
                                 }
                             } else {
                                 emptyFrameCount = 0
@@ -185,15 +190,9 @@ class LiveGameTranslator(
                                     lastSource = signature
                                     lastTranslation = captions.joinToString("\n") { it.translated }
                                     onCaption(captions)
-                                    if (captions.isNotEmpty()) {
-                                        tvClient?.send(
-                                            SubtitlePacket(
-                                                game = "PS5 Remote Play",
-                                                sourceText = "",
-                                                translatedText = lastTranslation
-                                            )
-                                        )
-                                    }
+                                    // The TV receives the exact OCR geometry so Arabic covers the
+                                    // source dialogue in the streamed game image, not in a text panel.
+                                    tvClient?.sendCaptions(captions, samplePtsNs)
                                 }
                             }
                         } finally {
@@ -211,6 +210,8 @@ class LiveGameTranslator(
                 runCatching { translator?.close() }
                 recognizer = null
                 translator = null
+                tvClient?.sendCaptions(emptyList(), System.nanoTime())
+                onCaption(emptyList())
                 onStatus("توقفت الترجمة الحية: ${error.localizedMessage ?: "تعذر معالجة إطار الفيديو"}")
             }
         }

@@ -8,7 +8,7 @@ need() {
 }
 need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'PixelCopy.request(surface, bitmap'
 need mobile/src/main/java/com/pslink/mobile/LiveCaptionOverlayView.kt 'TextDirectionHeuristics.RTL'
-need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'newTranslator.translate(text).awaitResult()'
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'newTranslator.translate(line.source).awaitResult()'
 need mobile/src/main/java/com/pslink/mobile/PsLinkScreenshot.kt 'MediaStore.Images.Media.RELATIVE_PATH'
 need mobile/src/main/java/com/pslink/mobile/capture/ScreenRecordingService.kt 'MediaProjectionManager'
 need mobile/src/main/java/com/pslink/mobile/capture/ScreenRecordingService.kt 'MediaRecorder.VideoEncoder.H264'
@@ -26,13 +26,17 @@ need scripts/prepare_pslink_upstream.py 'psLinkToolsBar.isGone = true'
 need core/shared/src/main/java/com/pslink/core/PsLinkProtocol.kt 'const val KIND_ACK = "ack"'
 need tv/app/src/main/java/com/pslink/tv/TvReceiverActivity.kt 'registerDiscovery()'
 need tv/app/src/main/java/com/pslink/tv/TvReceiverActivity.kt 'pair_code'
+need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'MediaCodec.createDecoderByType'
+need tv/app/src/main/java/com/pslink/tv/TvCaptionOverlayView.kt 'TextDirectionHeuristics.RTL'
+need mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt 'sendVideoSample'
 need mobile/src/main/java/com/pslink/mobile/TranslationActivity.kt 'discoverServices("_pslink._tcp."'
-need mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt 'pendingMessageId'
+need mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt 'pendingMessageIds'
 need mobile/src/main/AndroidManifest.xml 'android:foregroundServiceType="mediaProjection"'
 need mobile/src/main/res/layout/activity_pslink_video_editor.xml '@+id/saveEditedVideoButton'
 need scripts/verify-apk.sh 'APK_VALIDATION_OK'
 
-bash -n "$ROOT/scripts/verify-apk.sh" "$ROOT/scripts/diagnose-apk-termux.sh"
+bash -n "$ROOT/scripts/verify-apk.sh"
+if [[ -f "$ROOT/scripts/diagnose-apk-termux.sh" ]]; then bash -n "$ROOT/scripts/diagnose-apk-termux.sh"; fi
 python3 - "$ROOT" <<'PY'
 from pathlib import Path
 import sys
@@ -41,6 +45,7 @@ root = Path(sys.argv[1])
 files = [
     "mobile/src/main/AndroidManifest.xml",
     "tv/app/src/main/AndroidManifest.xml",
+    "tv/app/src/main/res/layout/activity_tv_receiver.xml",
     "mobile/src/main/res/layout/activity_translation.xml",
     "mobile/src/main/res/layout/activity_pslink_video_editor.xml",
 ]
@@ -61,4 +66,11 @@ else
   echo "Chiaki overlay checks deferred; run scripts/bootstrap.sh first."
 fi
 
-echo "PS Link feature static checks passed. Gradle compilation and live hardware tests are still required."
+need tv/app/src/main/java/com/pslink/tv/TvSubtitleServer.kt 'Frame.Binary'
+need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'AudioTrack.Builder'
+need mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt 'MEDIA_AUDIO_PCM16'
+need scripts/prepare_pslink_live_tv_streaming.py 'PSLINK_LIVE_TV_STREAMING_V1'
+need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'captionGeneration'
+need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'VIDEO_QUEUE_CAPACITY = 96'
+need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'AudioTrack.Builder'
+echo "PS Link feature static checks passed. Gradle compilation and live PS5/TV hardware tests are still required."

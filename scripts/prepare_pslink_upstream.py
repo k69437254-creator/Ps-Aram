@@ -12,6 +12,15 @@ if not (UP / "java/com/metallic/chiaki/stream/StreamActivity.kt").is_file():
 
 def patch(path: Path, old: str, new: str, label: str) -> None:
     text = path.read_text(encoding="utf-8")
+    # PS_LINK_NATIVE_CHIAKI_RECORDER_GUARD
+    if path.name == "StreamActivity.kt" and label in (
+        "stream imports",
+        "stream capture state",
+        "recording receiver lifecycle",
+        "stream feature methods",
+    ) and "private var psLinkRecordingDescriptor" in text:
+        print(f"Skipped obsolete MediaProjection stream patch: {label}")
+        return
     if new in text:
         return
     count = text.count(old)
@@ -401,3 +410,13 @@ _pslink_stream_recording_subprocess.run(
     [_pslink_stream_recording_sys.executable, str(_pslink_stream_recording_script)],
     check=True,
 )
+
+# PSLINK_LIVE_TV_STREAMING_V1
+# This must run after the existing native stream/audio recorder overlays: the live
+# callback bridge shares the decoded PCM callback installed by that single pipeline.
+import pathlib as _pslink_live_tv_pathlib
+import runpy as _pslink_live_tv_runpy
+_pslink_live_tv_script = _pslink_live_tv_pathlib.Path(__file__).resolve().parent / "prepare_pslink_live_tv_streaming.py"
+if not _pslink_live_tv_script.is_file():
+    raise SystemExit(f"Missing PS Link live TV streaming overlay: {_pslink_live_tv_script}")
+_pslink_live_tv_runpy.run_path(str(_pslink_live_tv_script), run_name="__main__")

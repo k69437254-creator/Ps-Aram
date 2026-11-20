@@ -17,10 +17,10 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_pslink_launcher"
+        android:icon="@drawable/pslink_launcher_art"
         android:label="@string/app_name"
         android:isGame="true"
-        android:roundIcon="@drawable/ic_pslink_launcher"
+        android:roundIcon="@drawable/pslink_launcher_art"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true"
