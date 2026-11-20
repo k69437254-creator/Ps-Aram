@@ -644,6 +644,15 @@ def patch_runtime_upstream(root: Path) -> dict[Path, str]:
     state_path = up / "java/com/metallic/chiaki/lib/Chiaki.kt"
     layout_path = up / "res/layout/activity_stream.xml"
     stream = read_text(stream_path)
+    merge_controller_import = "import com.metallic.chiaki.touchcontrols.mergeControllerStates\n"
+    if merge_controller_import.strip() not in stream:
+        stream = replace_once(
+            stream,
+            "import com.metallic.chiaki.touchcontrols.TouchControlsFragment\n",
+            "import com.metallic.chiaki.touchcontrols.TouchControlsFragment\n"
+            + merge_controller_import,
+            "import mergeControllerStates from touchcontrols package",
+        )
     controls = read_text(controls_path)
     state = read_text(state_path)
     layout = read_text(layout_path)

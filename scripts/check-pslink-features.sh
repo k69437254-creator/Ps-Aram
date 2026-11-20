@@ -88,6 +88,7 @@ CHI_DECODER="$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/video-decoder.
 }
 grep -Fq 'controlsSources' "$CHI_STREAM"
 grep -Fq 'mergeControllerStates(controlsSources.toList())' "$CHI_STREAM"
+grep -Fq 'import com.metallic.chiaki.touchcontrols.mergeControllerStates' "$CHI_STREAM"
 grep -Fq 'fun mergeControllerStates(sources: List<Flow<ControllerState>>)' "$CHI_CONTROLS"
 grep -Fq 'touches = touches.map { it.copy() }.toTypedArray()' "$CHI_STATE"
 grep -Fq 'psLinkMenuButton' "$CHI_STREAM"
