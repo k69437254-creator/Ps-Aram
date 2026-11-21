@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="PSLinkTypography" />
     <!-- Uses Android's bundled Noto Sans fallback for Arabic; no external font asset. -->
     <style name="PSLinkTypography.Display">
         <item name="android:fontFamily">sans-serif-medium</item>
