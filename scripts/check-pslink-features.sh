@@ -107,3 +107,19 @@ grep -Fq 'consecutiveCaptureFailures' "$ROOT/mobile/src/main/java/com/pslink/mob
 grep -Fq 'val sourceTracks = (0 until extractor.trackCount)' "$ROOT/mobile/src/main/java/com/pslink/mobile/capture/VideoEditorActivity.kt"
 grep -Fq 'class ControllerStateMergeTest' "$ROOT/mobile/src/test/java/com/metallic/chiaki/touchcontrols/ControllerStateMergeTest.kt"
 echo "PS Link controller, translation, game-stream recording, audio-preserving trim and clean-menu checks passed."
+
+# PSLINK_PROFESSIONAL_UPGRADE_GUARDS_V1
+LIVE_TRANSLATOR="$ROOT/mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
+TRANSLATION_ACTIVITY="$ROOT/mobile/src/main/java/com/pslink/mobile/TranslationActivity.kt"
+SCREENSHOT="$ROOT/mobile/src/main/java/com/pslink/mobile/PsLinkScreenshot.kt"
+[[ "$(grep -Fc 'tvClient?.sendCaptions(emptyList(), samplePtsNs)' "$LIVE_TRANSLATOR")" -eq 1 ]] || {
+  echo "Duplicate/missing empty-caption clear packet in LiveGameTranslator.kt" >&2
+  exit 1
+}
+grep -Fq 'requestGeneration != translatorGeneration' "$TRANSLATION_ACTIVITY"
+grep -Fq 'requestGeneration != ocrGeneration' "$TRANSLATION_ACTIVITY"
+grep -Fq 'surface.isAttachedToWindow' "$SCREENSHOT"
+grep -Fq 'surface.holder.surface.isValid' "$SCREENSHOT"
+grep -Fq 'activity.isDestroyed' "$SCREENSHOT"
+grep -Fq 'overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)' "$TRANSLATION_ACTIVITY"
+echo "PS Link stale-callback, screenshot lifecycle, navigation transition and caption-clear regression guards passed."

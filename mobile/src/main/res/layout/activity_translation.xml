@@ -47,6 +47,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="١  •  النص ومصدر القراءة"
+                    android:textAppearance="@style/PSLinkTypography.Heading"
                     android:textColor="@color/pslink_text"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -83,6 +84,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="top|start"
+                        android:textDirection="firstStrong"
                         android:minHeight="110dp"
                         android:inputType="textMultiLine|textCapSentences"
                         android:textColor="@color/pslink_text"
@@ -127,6 +129,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="٢  •  الترجمة"
+                    android:textAppearance="@style/PSLinkTypography.Heading"
                     android:textColor="@color/pslink_text"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -138,6 +141,9 @@
                     android:background="#0B1220"
                     android:minHeight="100dp"
                     android:padding="14dp"
+                    android:gravity="start"
+                    android:textDirection="rtl"
+                    android:fontFamily="sans-serif-medium"
                     android:text="ستظهر الترجمة هنا"
                     android:textColor="@color/pslink_text"
                     android:textSize="17sp" />
@@ -147,6 +153,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="تعمل الترجمة بعد تنزيل نموذج اللغة على الجهاز."
+                    android:accessibilityLiveRegion="polite"
                     android:textColor="@color/pslink_muted"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -170,6 +177,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="٣  •  شاشة PS Link TV"
+                    android:textAppearance="@style/PSLinkTypography.Heading"
                     android:textColor="@color/pslink_text"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -185,6 +193,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="textUri"
+                        android:textDirection="ltr"
                         android:textColor="@color/pslink_text" />
                 </com.google.android.material.textfield.TextInputLayout>
                 <com.google.android.material.textfield.TextInputLayout
@@ -200,6 +209,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="number"
                         android:maxLength="6"
+                        android:textDirection="ltr"
                         android:textColor="@color/pslink_text" />
                 </com.google.android.material.textfield.TextInputLayout>
                 <com.google.android.material.button.MaterialButton
@@ -236,6 +246,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="غير متصل"
+                    android:accessibilityLiveRegion="polite"
                     android:textColor="@color/pslink_muted"
                     android:textSize="12sp" />
             </LinearLayout>

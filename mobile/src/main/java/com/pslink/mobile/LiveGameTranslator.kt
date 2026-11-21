@@ -188,7 +188,6 @@ class LiveGameTranslator(
                                     lastTranslation = ""
                                     onCaption(emptyList())
                                     tvClient?.sendCaptions(emptyList(), samplePtsNs)
-                                    tvClient?.sendCaptions(emptyList(), samplePtsNs)
                                 }
                             } else {
                                 emptyFrameCount = 0

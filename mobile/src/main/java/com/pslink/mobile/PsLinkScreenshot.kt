@@ -19,13 +19,18 @@ import java.util.Locale
 
 object PsLinkScreenshot {
     fun capture(activity: Activity, surface: SurfaceView, onResult: (Boolean, String) -> Unit) {
-        if (surface.width <= 0 || surface.height <= 0) {
+        if (!surface.isAttachedToWindow || surface.width <= 0 || surface.height <= 0 || !surface.holder.surface.isValid) {
             onResult(false, "سطح عرض اللعبة غير جاهز بعد")
             return
         }
         val scale = minOf(1f, 1920f / surface.width.toFloat())
         val bitmap = Bitmap.createBitmap((surface.width * scale).toInt().coerceAtLeast(1), (surface.height * scale).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-        PixelCopy.request(surface, bitmap, { result ->
+        try {
+            PixelCopy.request(surface, bitmap, { result ->
+            if (activity.isFinishing || activity.isDestroyed) {
+                bitmap.recycle()
+                return@request
+            }
             if (result != PixelCopy.SUCCESS) {
                 bitmap.recycle()
                 onResult(false, "تعذر التقاط إطار اللعبة (PixelCopy: $result)")
@@ -40,7 +45,11 @@ object PsLinkScreenshot {
             } finally {
                 bitmap.recycle()
             }
-        }, android.os.Handler(android.os.Looper.getMainLooper()))
+            }, android.os.Handler(android.os.Looper.getMainLooper()))
+        } catch (error: Exception) {
+            if (!bitmap.isRecycled) bitmap.recycle()
+            onResult(false, "تعذر بدء التقاط الصورة: ${error.localizedMessage ?: "سطح العرض غير جاهز"}")
+        }
     }
 
     private fun saveBitmap(activity: Activity, bitmap: Bitmap, name: String): Boolean {

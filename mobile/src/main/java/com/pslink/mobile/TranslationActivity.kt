@@ -52,6 +52,9 @@ class TranslationActivity : AppCompatActivity() {
     private var tvReconnectPending = false
     private var lastTranslation: String = ""
     private var lastSource: String = ""
+    // Ignore ML Kit callbacks belonging to an old language or destroyed screen.
+    private var translatorGeneration = 0
+    private var ocrGeneration = 0
 
     private val openScreenshot = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) runOcr(uri)
@@ -69,7 +72,10 @@ class TranslationActivity : AppCompatActivity() {
         binding = ActivityTranslationBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.translationToolbar.setNavigationOnClickListener { finish() }
+        binding.translationToolbar.setNavigationOnClickListener {
+            finish()
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+        }
         binding.sourceLanguageSpinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
@@ -122,6 +128,10 @@ class TranslationActivity : AppCompatActivity() {
     private fun rebuildTranslator() {
         val sourceCode = selectedLanguage().translationCode
         if (translatorSourceCode == sourceCode && translator != null) return
+        translatorGeneration++
+        ocrGeneration++
+        binding.downloadModelButton.isEnabled = true
+        binding.translateButton.isEnabled = true
         translator?.close()
         translatorSourceCode = sourceCode
         val options = TranslatorOptions.Builder()
@@ -134,16 +144,19 @@ class TranslationActivity : AppCompatActivity() {
 
     private fun downloadTranslationModel() {
         val activeTranslator = translator ?: return
+        val requestGeneration = translatorGeneration
         binding.downloadModelButton.isEnabled = false
         binding.translationStatusText.text = "جارٍ تنزيل حزمة اللغة عبر Wi‑Fi…"
         val conditions = DownloadConditions.Builder().requireWifi().build()
         activeTranslator.downloadModelIfNeeded(conditions)
             .addOnSuccessListener {
+                if (requestGeneration != translatorGeneration || isFinishing || isDestroyed) return@addOnSuccessListener
                 binding.translationStatusText.text = "اكتمل تنزيل الحزمة. يمكن استخدام الترجمة دون اتصال بالإنترنت."
                 binding.downloadModelButton.isEnabled = true
                 toast("حزمة اللغة جاهزة")
             }
             .addOnFailureListener { error ->
+                if (requestGeneration != translatorGeneration || isFinishing || isDestroyed) return@addOnFailureListener
                 binding.translationStatusText.text = "تعذر تنزيل الحزمة: ${error.localizedMessage ?: "تحقق من اتصال Wi‑Fi"}"
                 binding.downloadModelButton.isEnabled = true
             }
@@ -162,27 +175,36 @@ class TranslationActivity : AppCompatActivity() {
             binding.translateButton.isEnabled = true
             return
         }
+        val requestGeneration = translatorGeneration
         activeTranslator.translate(text)
             .addOnSuccessListener { translated ->
+                if (requestGeneration != translatorGeneration || isFinishing || isDestroyed) return@addOnSuccessListener
                 lastTranslation = translated
                 binding.translatedTextView.text = translated
                 binding.translationStatusText.text = "اكتملت الترجمة على الجهاز. لا يُرسل النص إلى خادم ترجمة سحابي."
                 binding.translateButton.isEnabled = true
             }
             .addOnFailureListener { error ->
+                if (requestGeneration != translatorGeneration || isFinishing || isDestroyed) return@addOnFailureListener
                 binding.translationStatusText.text = "لم تنجح الترجمة. نزّل حزمة اللغة أولًا، ثم أعد المحاولة. (${error.localizedMessage ?: "خطأ غير معروف"})"
                 binding.translateButton.isEnabled = true
             }
     }
 
     private fun runOcr(uri: Uri) {
+        val requestGeneration = ++ocrGeneration
+        val ocrScript = selectedLanguage().ocrScript
         binding.translationStatusText.text = "جارٍ قراءة النص من الصورة…"
         lifecycleScope.launch {
             try {
                 val image = withContext(Dispatchers.IO) { InputImage.fromFilePath(this@TranslationActivity, uri) }
-                val recognizer = createRecognizer(selectedLanguage().ocrScript)
+                val recognizer = createRecognizer(ocrScript)
                 recognizer.process(image)
                     .addOnSuccessListener { result ->
+                        if (requestGeneration != ocrGeneration || isFinishing || isDestroyed) {
+                            recognizer.close()
+                            return@addOnSuccessListener
+                        }
                         val detected = result.text.trim()
                         if (detected.isBlank()) {
                             binding.translationStatusText.text = "لم يُعثر على نص واضح في الصورة. جرّب لقطة أوضح."
@@ -193,10 +215,15 @@ class TranslationActivity : AppCompatActivity() {
                         recognizer.close()
                     }
                     .addOnFailureListener { error ->
+                        if (requestGeneration != ocrGeneration || isFinishing || isDestroyed) {
+                            recognizer.close()
+                            return@addOnFailureListener
+                        }
                         binding.translationStatusText.text = "تعذرت قراءة الصورة: ${error.localizedMessage ?: "خطأ OCR"}"
                         recognizer.close()
                     }
             } catch (error: Exception) {
+                if (requestGeneration != ocrGeneration || isFinishing || isDestroyed) return@launch
                 binding.translationStatusText.text = "تعذر فتح الصورة: ${error.localizedMessage ?: "ملف غير صالح"}"
             }
         }
@@ -294,6 +321,8 @@ class TranslationActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        translatorGeneration++
+        ocrGeneration++
         tvReconnectHandler.removeCallbacksAndMessages(null)
         stopTvDiscovery()
         translator?.close()
