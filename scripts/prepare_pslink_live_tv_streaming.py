@@ -779,7 +779,7 @@ def patch_phone_translation() -> None:
         if count != 1:
             raise SystemExit(f"Anchor mismatch (clear TV captions while game stream is paused): found {count}")
     already_clears_after_empty = re.search(
-        r'(?m)^[ \t]*lastSource = ""\n[ \t]*lastTranslation = ""\n[ \t]*onCaption\(emptyList\(\)\)\n[ \t]*tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)\)',
+        r'(?m)^[ \t]*lastSource = ""\n[ \t]*lastTranslation = ""\n[ \t]*onCaption\(emptyList\(\)\)\n[ \t]*tvClient\?\.sendCaptions\(emptyList\(\), (?:System\.nanoTime\(\)|samplePtsNs)\)',
         src,
     )
     if not already_clears_after_empty:
@@ -793,6 +793,9 @@ def patch_phone_translation() -> None:
         src, count = clear_pattern.subn(add_empty_clear, src, count=1)
         if count != 1:
             raise SystemExit(f"Anchor mismatch (clear TV captions after two empty OCR frames): found {count}")
+    clear_packet_count = src.count("tvClient?.sendCaptions(emptyList(), samplePtsNs)")
+    if clear_packet_count != 1:
+        raise SystemExit(f"Expected exactly one timestamped empty-caption packet, found {clear_packet_count}")
     old_signature = '''                            val signature = detected.joinToString("|") {
                                 "${it.source}@${(it.left * 100).toInt()},${(it.top * 100).toInt()}"
                             }'''
