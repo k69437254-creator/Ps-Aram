@@ -22,6 +22,8 @@ import android.util.DisplayMetrics
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.pslink.mobile.TvSubtitleClient
+import com.pslink.core.PairingCode
+import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -36,6 +38,7 @@ class TvScreenStreamService : Service() {
         const val ACTION_STOP = "com.pslink.mobile.stream.STOP"
         const val EXTRA_RESULT_CODE = "stream_projection_result_code"
         const val EXTRA_RESULT_DATA = "stream_projection_result_data"
+        const val EXTRA_PHONE_PAIR_CODE = "stream_phone_pairing_code"
 
         @Volatile var mediaSink: TvSubtitleClient? = null
         @Volatile var statusListener: ((String) -> Unit)? = null
@@ -51,6 +54,8 @@ class TvScreenStreamService : Service() {
     private var display: VirtualDisplay? = null
     private var encoder: MediaCodec? = null
     private var encoderThread: Thread? = null
+    private var phoneReceiverServer: PhoneReceiverServer? = null
+    private var hlsPublisher: HlsTransportStreamPublisher? = null
     private var stopping = false
     private var streamWidth = 0
     private var streamHeight = 0
@@ -92,8 +97,11 @@ class TvScreenStreamService : Service() {
         }
 
         val sink = mediaSink
-        if (sink == null) {
-            report("تعذر بدء البث: اتصال التلفاز غير متاح.")
+        val phonePairingCode = PairingCode.normalize(
+            intent.getStringExtra(EXTRA_PHONE_PAIR_CODE).orEmpty()
+        )
+        if (sink == null && phonePairingCode == null) {
+            report("لم يتم إعداد مستقبل تلفاز مقترن أو رمز استقبال الهاتف.")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf(startId)
             return
@@ -167,7 +175,19 @@ class TvScreenStreamService : Service() {
                 null
             ) ?: throw IllegalStateException("تعذر إنشاء شاشة البث الافتراضية")
 
-            sink.configureMediaStream(streamWidth, streamHeight, 0, 30)
+            if (phonePairingCode != null) {
+                val hlsDirectory = File(cacheDir, "pslink-hls")
+                val receiver = PhoneReceiverServer(phonePairingCode, hlsDirectory)
+                phoneReceiverServer = receiver
+                val publisher = HlsTransportStreamPublisher(hlsDirectory) {
+                    receiver.notifyStreamAvailable()
+                }
+                publisher.start()
+                hlsPublisher = publisher
+                receiver.start()
+            }
+
+            sink?.configureMediaStream(streamWidth, streamHeight, 0, 30)
             running.set(true)
             isStreaming = true
             stopping = false
@@ -184,7 +204,7 @@ class TvScreenStreamService : Service() {
         }
     }
 
-    private fun drainEncoder(codec: MediaCodec, sink: TvSubtitleClient) {
+    private fun drainEncoder(codec: MediaCodec, sink: TvSubtitleClient?) {
         val info = MediaCodec.BufferInfo()
         var codecConfig = ByteArray(0)
 
@@ -219,8 +239,21 @@ class TvScreenStreamService : Service() {
                                 encoded
                             }
 
-                            // Use a monotonic sender clock shared by all outgoing frames.
-                            sink.sendVideoSample(packet, System.nanoTime().coerceAtLeast(1L), keyFrame)
+                            // Keep the existing Android TV live path unchanged when paired.
+                            sink?.sendVideoSample(packet, System.nanoTime().coerceAtLeast(1L), keyFrame)
+
+                            // Publish the same real MediaCodec access unit as H.264/MPEG-TS HLS.
+                            try {
+                                hlsPublisher?.writeAccessUnit(
+                                    packet,
+                                    info.presentationTimeUs.coerceAtLeast(0L),
+                                    keyFrame
+                                )
+                            } catch (hlsError: Exception) {
+                                report("توقف نشر HLS: ${hlsError.localizedMessage ?: "خطأ في حزمة H.264"}")
+                                runCatching { hlsPublisher?.stop() }
+                                hlsPublisher = null
+                            }
                         }
                         codec.releaseOutputBuffer(index, false)
                     }
@@ -252,8 +285,12 @@ class TvScreenStreamService : Service() {
         running.set(false)
         isStreaming = false
 
-        encoderThread?.interrupt()
+        val oldThread = encoderThread
         encoderThread = null
+        oldThread?.interrupt()
+        if (oldThread !== Thread.currentThread()) {
+            runCatching { oldThread?.join(500L) }
+        }
 
         runCatching { display?.release() }
         display = null
@@ -269,6 +306,11 @@ class TvScreenStreamService : Service() {
         val oldProjection = projection
         projection = null
         if (stopProjection) runCatching { oldProjection?.stop() }
+
+        runCatching { hlsPublisher?.stop() }
+        hlsPublisher = null
+        runCatching { phoneReceiverServer?.stop() }
+        phoneReceiverServer = null
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

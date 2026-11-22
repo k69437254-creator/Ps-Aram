@@ -252,6 +252,18 @@
                     app:cornerRadius="12dp" />
 
                 <TextView
+                    android:id="@+id/phoneReceiverInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:padding="12dp"
+                    android:background="#0B1220"
+                    android:text="استقبال Tizen / webOS: سيظهر عنوان الهاتف ورمز الاقتران هنا."
+                    android:textDirection="firstStrong"
+                    android:textColor="@color/pslink_text"
+                    android:textSize="12sp" />
+
+                <TextView
                     android:id="@+id/screenStreamStatus"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

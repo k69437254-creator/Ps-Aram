@@ -50,6 +50,7 @@ class TranslationActivity : AppCompatActivity() {
     private var translator: Translator? = null
     private var translatorSourceCode: String? = null
     private var tvClient: TvSubtitleClient? = null
+    private lateinit var phoneReceiverPairingCode: String
     private var nsdManager: NsdManager? = null
     private var tvDiscoveryListener: NsdManager.DiscoveryListener? = null
     @Volatile private var tvAutoConnectStarted = false
@@ -70,11 +71,6 @@ class TranslationActivity : AppCompatActivity() {
             val data = result.data
             if (result.resultCode == RESULT_OK && data != null) {
                 val client = tvClient
-                if (client == null) {
-                    binding.screenStreamStatus.text = "اتصل بالتلفاز أولًا."
-                    return@registerForActivityResult
-                }
-
                 TvScreenStreamService.mediaSink = client
                 TvScreenStreamService.statusListener = { message ->
                     runOnUiThread {
@@ -88,6 +84,7 @@ class TranslationActivity : AppCompatActivity() {
                     action = TvScreenStreamService.ACTION_START
                     putExtra(TvScreenStreamService.EXTRA_RESULT_CODE, result.resultCode)
                     putExtra(TvScreenStreamService.EXTRA_RESULT_DATA, data)
+                    putExtra(TvScreenStreamService.EXTRA_PHONE_PAIR_CODE, phoneReceiverPairingCode)
                 }
 
                 try {
@@ -125,6 +122,15 @@ class TranslationActivity : AppCompatActivity() {
             android.R.layout.simple_spinner_item,
             sourceLanguages.map { it.label }
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        val phonePreferences = getSharedPreferences("pslink_phone_receiver", MODE_PRIVATE)
+        phoneReceiverPairingCode = PairingCode.normalize(
+            phonePreferences.getString("code", "").orEmpty()
+        ) ?: java.security.SecureRandom().nextInt(1_000_000).toString().padStart(6, '0')
+        phonePreferences.edit().putString("code", phoneReceiverPairingCode).apply()
+        val phoneAddress = PhoneReceiverServer.localIpv4Address() ?: "غير متاح؛ فعّل Wi-Fi"
+        binding.phoneReceiverInfo.text =
+            "استقبال Tizen / webOS من الهاتف\nالعنوان: $phoneAddress:${com.pslink.core.PsLinkProtocol.PORT}\nرمز الاقتران: $phoneReceiverPairingCode\nأدخل العنوان والرمز في تطبيق PS Link على التلفاز."
 
         val preferences = getSharedPreferences("pslink_tv", MODE_PRIVATE)
         binding.tvHostInput.setText(preferences.getString("host", ""))

@@ -2,7 +2,7 @@ name: PS Link Android builds
 
 on:
   push:
-    branches: [ main, master, 'feature/psn-oauth-integration', 'feature/multiplatform-tv-foundation' ]
+    branches: [ main, master, 'feature/psn-oauth-integration', 'feature/multiplatform-tv-foundation', 'feature/phone-hls-receiver-v2' ]
   pull_request:
   workflow_dispatch:
 
@@ -41,8 +41,9 @@ jobs:
       - name: Install native protobuf compiler
         run: |
           sudo apt-get update
-          sudo apt-get install --yes protobuf-compiler
+          sudo apt-get install --yes protobuf-compiler ffmpeg
           protoc --version
+          ffmpeg -version | head -n 1
 
       - name: Prepare stable debug signing key when configured
         env:
@@ -68,6 +69,9 @@ jobs:
 
       - name: Run PS Link controller regression tests
         run: bash ./gradlew --no-daemon --stacktrace :mobile:testDebugUnitTest
+
+      - name: Verify HLS MPEG-TS with ffprobe and ffmpeg decoder
+        run: bash scripts/verify-hls-ts.sh
 
       - name: Build PS Link Mobile APK
         id: build_mobile

@@ -53,3 +53,6 @@ Implementation sequence
 
 Do not advertise a platform as fully supported until its application builds
 and its complete media path passes device testing.
+## Phone HLS receiver (Tizen / webOS)
+
+The phone-side receiver endpoint uses the PS Link v2 WebSocket pairing route on port `8765`. After the first complete H.264 IDR-aligned MPEG-TS segment is published, it sends an authenticated `stream_url` message pointing to `/hls/index.m3u8`. TV receiver clients retry temporary network failures with capped exponential backoff and stop retrying after an authentication rejection or a manual disconnect. This path is separate from the existing Android TV binary-media receiver.

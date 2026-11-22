@@ -84,6 +84,10 @@ android {
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("pslink.hls.test.outputDir", layout.buildDirectory.dir("hls-integration-test").get().asFile.absolutePath)
+}
+
 dependencies {
     implementation(project(":core:shared"))
     implementation(libs.activity.ktx)
@@ -113,5 +117,8 @@ dependencies {
     // On-device translation. Language packs are downloaded once, then used offline.
     implementation(libs.mlkit.translate)
     implementation(libs.okhttp)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.websockets)
     testImplementation("junit:junit:4.13.2")
 }
