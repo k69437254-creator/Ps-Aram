@@ -25,6 +25,7 @@ import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.pslink.core.SubtitlePacket
+import com.pslink.core.PairingCode
 import com.metallic.chiaki.databinding.ActivityTranslationBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -102,6 +103,14 @@ class TranslationActivity : AppCompatActivity() {
                 if (connected) {
                     tvReconnectPending = false
                     tvReconnectHandler.removeCallbacksAndMessages(null)
+                    if (status.startsWith("تم اقتران التلفاز بنجاح")) {
+                        val host = binding.tvHostInput.text?.toString()?.trim().orEmpty()
+                        val code = PairingCode.normalize(binding.tvPairCodeInput.text?.toString().orEmpty())
+                        if (host.isNotBlank() && code != null) {
+                            getSharedPreferences("pslink_tv", MODE_PRIVATE).edit()
+                                .putString("host", host).putString("code", code).apply()
+                        }
+                    }
                 } else if (!tvReconnectPending && (status.startsWith("فشل الاتصال") || status == "انقطع اتصال التلفاز")) {
                     tvReconnectPending = true
                     tvReconnectHandler.postDelayed({
@@ -269,9 +278,9 @@ class TranslationActivity : AppCompatActivity() {
                             }
                             binding.tvHostInput.setText(host)
                             val savedCode = getSharedPreferences("pslink_tv", MODE_PRIVATE).getString("code", "").orEmpty()
-                            if (savedCode.matches(Regex("\\d{6}"))) {
+                            if (PairingCode.normalize(savedCode) != null) {
                                 binding.tvConnectionStatus.text = "عُثر على ${resolved.serviceName}؛ جارٍ إعادة الاتصال…"
-                                connectTv(host, savedCode)
+                                connectTv(host, PairingCode.normalize(savedCode)!!)
                             } else {
                                 binding.tvConnectionStatus.text = "عُثر على ${resolved.serviceName}. أدخل رمز الاقتران الظاهر على التلفاز ثم اضغط ربط التلفاز."
                             }
@@ -300,10 +309,6 @@ class TranslationActivity : AppCompatActivity() {
     private fun connectTv(host: String, code: String) {
         binding.tvHostInput.setText(host)
         binding.tvPairCodeInput.setText(code)
-        getSharedPreferences("pslink_tv", MODE_PRIVATE).edit()
-            .putString("host", host)
-            .putString("code", code)
-            .apply()
         tvClient?.connect(host, code)
     }
 

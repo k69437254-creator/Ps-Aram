@@ -2,6 +2,7 @@
 package com.pslink.mobile
 
 import com.pslink.core.PsLinkProtocol
+import com.pslink.core.PairingCode
 import com.pslink.core.SubtitlePacket
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -64,16 +65,17 @@ class TvSubtitleClient(
     }, "PSLink-TV-Media-Sender").apply { isDaemon = true; start() }
 
     fun connect(hostInput: String, pairingCode: String) {
-        disconnect()
         val host = hostInput.trim().removePrefix("ws://").removePrefix("http://").trimEnd('/')
+        val normalizedCode = PairingCode.normalize(pairingCode)
         if (host.isBlank() || host.contains('/') || host.contains(' ')) {
             onStatus("أدخل عنوان IP صحيحًا للتلفاز", false)
             return
         }
-        if (!pairingCode.matches(Regex("\\d{6}"))) {
+        if (normalizedCode == null) {
             onStatus("رمز الاقتران يجب أن يتكون من 6 أرقام", false)
             return
         }
+        disconnect()
 
         val request = Request.Builder()
             .url("ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}")
@@ -82,7 +84,7 @@ class TvSubtitleClient(
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (socket !== webSocket) { webSocket.close(1000, "Superseded connection"); return }
-                val sent = webSocket.send(PsLinkProtocol.auth(pairingCode))
+                val sent = webSocket.send(PsLinkProtocol.auth(normalizedCode))
                 if (!sent) onStatus("تعذر إرسال رمز الاقتران", false)
                 else onStatus("تم الاتصال؛ جارٍ التحقق من الرمز…", false)
             }
@@ -98,7 +100,7 @@ class TvSubtitleClient(
                         mediaQueue.clear()
                         val config = mediaConfigJson
                         mediaReady = config != null && webSocket.send(config)
-                        onStatus(if (mediaReady) "التلفاز متصل وجاهز لبث اللعبة والصوت" else "اتصل التلفاز؛ لم تصل إعدادات الفيديو بعد", mediaReady)
+                        onStatus("تم اقتران التلفاز بنجاح؛ الترجمة جاهزة", true)
                     }
                     PsLinkProtocol.KIND_ACK -> {
                         val ackId = json.optString("id", "")
@@ -185,7 +187,7 @@ class TvSubtitleClient(
     }
 
     fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long) {
-        if (!ready || !mediaReady || ptsNs <= 0L) return
+        if (!ready || ptsNs <= 0L) return
         val array = JSONArray()
         lines.take(3).forEach { line ->
             array.put(JSONObject()

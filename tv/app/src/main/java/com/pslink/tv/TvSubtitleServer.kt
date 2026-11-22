@@ -2,6 +2,7 @@
 package com.pslink.tv
 
 import com.pslink.core.PsLinkProtocol
+import com.pslink.core.PairingCode
 import com.pslink.core.SubtitlePacket
 import io.ktor.server.application.install
 import io.ktor.server.engine.ApplicationEngine
@@ -51,7 +52,7 @@ class TvSubtitleServer(
                     val accepted = auth != null &&
                         auth.optInt("v", -1) == PsLinkProtocol.VERSION &&
                         auth.optString("kind") == PsLinkProtocol.KIND_AUTH &&
-                        auth.optString("code") == pairingCode
+                        PairingCode.normalize(auth.optString("code")) == PairingCode.normalize(pairingCode)
                     if (!accepted) {
                         send(Frame.Text(JSONObject().put("kind", "error").put("message", "رمز الاقتران غير صحيح").toString()))
                         close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid pairing code"))
