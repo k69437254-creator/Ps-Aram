@@ -19,4 +19,5 @@
   <access origin="*" subdomains="true"/>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
   <tizen:privilege name="http://tizen.org/privilege/network.public"/>
+  <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
 </widget>

@@ -19,3 +19,9 @@ Not implemented:
 
 Media packets are detected but not rendered. This is subtitle receiver
 support only, not complete game streaming support.
+
+## Native HLS media adapter
+
+This receiver includes a native HLS playback adapter and accepts a protocol v2 `stream_url` message from the paired phone.
+
+Tizen uses Samsung AVPlay. webOS uses HTML5 video playback. The phone-side HLS publisher and real-device playback validation remain separate required integration steps.

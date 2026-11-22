@@ -10,6 +10,7 @@
   var subtitleNode = document.getElementById("subtitle");
   var captionsNode = document.getElementById("captions");
   var mediaNotice = document.getElementById("media-notice");
+  var mediaPlayer = new window.PSLinkMediaPlayer();
 
   function status(message, state) {
     statusNode.textContent = message;
@@ -48,6 +49,7 @@
 
   function disconnect() {
     if (receiver) receiver.disconnect();
+    if (mediaPlayer) mediaPlayer.stop();
     receiver = null;
     setConnected(false);
     status("تم فصل الاتصال", "info");
@@ -79,6 +81,15 @@
         },
         onMediaPacket: function () {
           mediaNotice.hidden = false;
+        },
+        onStreamUrl: function (stream) {
+          try {
+            mediaPlayer.start(stream.url);
+            mediaNotice.hidden = true;
+            status("تم استلام عنوان البث؛ جارٍ تشغيل الفيديو والصوت.", "info");
+          } catch (error) {
+            status(error.message || "تعذر تشغيل بث الوسائط", "error");
+          }
         }
       });
 
@@ -96,6 +107,10 @@
     if (event.key === "Escape" || event.keyCode === 27) {
       disconnect();
     }
+  });
+
+  window.addEventListener("pslink-media-error", function (event) {
+    status(String(event.detail || "حدث خطأ في مشغل الوسائط"), "error");
   });
 
   setConnected(false);

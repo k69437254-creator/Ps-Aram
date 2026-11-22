@@ -185,6 +185,16 @@
           id: message.id
         }));
 
+      } else if (message.kind === "stream_url") {
+        var streamUrl = String(message.url || "");
+        if (/^https?:\/\/[^\s]+$/i.test(streamUrl)) {
+          self._emit("onStreamUrl", { url: streamUrl });
+        } else {
+          self._emit("onError", {
+            message: "عنوان بث الوسائط الذي أرسله الهاتف غير صالح"
+          });
+        }
+
       } else if (message.kind === "captions") {
         self._emit("onCaptions", message);
       }

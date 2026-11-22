@@ -129,3 +129,34 @@ footer {
   .pair-card,.subtitle-card { padding: 20px; }
   .translation { font-size: 25px; }
 }
+
+
+/* Native HLS playback surface. Existing subtitle UI remains above it. */
+#video-stage,
+#game-video {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  object-fit: contain;
+  background: #000;
+  z-index: 0;
+}
+#video-stage object {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.shell {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+.shell button,
+.shell input,
+.shell form,
+.shell .pair-card,
+.shell .subtitle-card {
+  pointer-events: auto;
+}

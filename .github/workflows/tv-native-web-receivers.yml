@@ -37,7 +37,9 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check receivers/tizen/app.js
+          node --check receivers/tizen/media-player.js
           node --check receivers/webos/app.js
+          node --check receivers/webos/media-player.js
           node --check receivers/platform-tests/platform-app.test.js
 
       - name: Run shared protocol tests

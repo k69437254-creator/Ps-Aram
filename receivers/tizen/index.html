@@ -7,9 +7,14 @@
 <title>PS Link TV</title>
 <link rel="stylesheet" href="app.css">
 <script src="pslink-client.js"></script>
+<script src="$WEBAPIS/webapis/webapis.js"></script>
+<script src="media-player.js"></script>
 <script defer src="app.js"></script>
 </head>
-<body>
+<body data-platform="tizen">
+<div id="video-stage" aria-label="PS Link game video">
+  <object id="av-player" type="application/avplayer"></object>
+</div>
 <main class="shell">
 <header class="header">
   <div class="brand-mark">PS</div>

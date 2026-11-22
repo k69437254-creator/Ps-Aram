@@ -7,9 +7,11 @@
 <title>PS Link TV</title>
 <link rel="stylesheet" href="app.css">
 <script src="pslink-client.js"></script>
+<script src="media-player.js"></script>
 <script defer src="app.js"></script>
 </head>
-<body>
+<body data-platform="webos">
+<video id="game-video" playsinline autoplay></video>
 <main class="shell">
 <header class="header">
   <div class="brand-mark">PS</div>

@@ -13,6 +13,7 @@ var root = path.resolve(__dirname, "../..");
     "app.css",
     "app.js",
     "pslink-client.js",
+    "media-player.js",
     "README.md"
   ].forEach(function (file) {
     if (!fs.existsSync(path.join(dir, file))) {
@@ -23,6 +24,7 @@ var root = path.resolve(__dirname, "../..");
   var html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
   var app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
   var client = fs.readFileSync(path.join(dir, "pslink-client.js"), "utf8");
+  var player = fs.readFileSync(path.join(dir, "media-player.js"), "utf8");
   var shared = fs.readFileSync(
     path.join(root, "receivers", "web", "pslink-client.js"), "utf8"
   );
@@ -48,6 +50,8 @@ var root = path.resolve(__dirname, "../..");
     "onSubtitle",
     "onCaptions",
     "onMediaPacket",
+    "onStreamUrl",
+    "mediaPlayer.start(stream.url)",
     "receiver.connect(host, code)",
     "disconnect"
   ].forEach(function (token) {
@@ -55,6 +59,12 @@ var root = path.resolve(__dirname, "../..");
       throw new Error(name + " missing adapter behavior " + token);
     }
   });
+
+  if (player.indexOf("PSLinkMediaPlayer") === -1 ||
+      (name === "tizen" && player.indexOf("prepareAsync") === -1) ||
+      (name === "webos" && player.indexOf("game-video") === -1)) {
+    throw new Error(name + " native media adapter is incomplete");
+  }
 
   if (client !== shared) {
     throw new Error(name + " transport client differs from shared client");
@@ -84,7 +94,8 @@ var webosManifest = JSON.parse(fs.readFileSync(
 ));
 
 if (tizenManifest.indexOf("tv-samsung") === -1 ||
-    tizenManifest.indexOf("index.html") === -1) {
+    tizenManifest.indexOf("index.html") === -1 ||
+    tizenManifest.indexOf("privilege/avplay") === -1) {
   throw new Error("Tizen TV manifest is incomplete");
 }
 
@@ -95,7 +106,7 @@ if (webosManifest.type !== "web" ||
 }
 
 console.log(
-  "PS Link Tizen/webOS receiver package smoke tests passed."
+  "PS Link Tizen/webOS native HLS adapter smoke tests passed."
 );
 console.log(
   "Note: these tests do not build TV packages or validate media decoding."
