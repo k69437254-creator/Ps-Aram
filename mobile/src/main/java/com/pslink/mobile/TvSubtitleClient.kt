@@ -18,6 +18,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /** LAN-only paired WebSocket: text control/captions plus bounded binary game media. */
 class TvSubtitleClient(
@@ -32,6 +33,7 @@ class TvSubtitleClient(
         private const val FLAG_KEY_FRAME = 1
         private const val MAX_MEDIA_PACKET = 2 * 1024 * 1024
         private const val MAX_SOCKET_QUEUE_BYTES = 512L * 1024L
+        private val MEDIA_CONFIG_SEQUENCE = AtomicLong(0L)
     }
 
     private val client = OkHttpClient.Builder()
@@ -43,6 +45,8 @@ class TvSubtitleClient(
     @Volatile private var socket: WebSocket? = null
     @Volatile private var ready = false
     @Volatile private var mediaConfigJson: String? = null
+@Volatile private var pendingMediaConfigId: String? = null
+    // PSLINK_MEDIA_CONFIG_ACK_V1
     @Volatile private var mediaReady = false
     @Volatile private var terminalStatus: String? = null
     private val handshakeHandler = Handler(Looper.getMainLooper())
@@ -175,8 +179,17 @@ class TvSubtitleClient(
                         awaitingKeyFrame = true
                         mediaQueue.clear()
                         val config = mediaConfigJson
-                        mediaReady = config != null && webSocket.send(config)
-                        onStatus("تم اقتران التلفاز بنجاح؛ الترجمة جاهزة", true)
+                        if (config != null && !webSocket.send(config)) {
+                            onStatus("تعذر إرسال إعدادات بث الوسائط إلى التلفاز", false)
+                        }
+                        onStatus("تم اقتران التلفاز؛ بانتظار تأكيد إعداد بث الوسائط", true)
+                    }
+                    "media_config_ack" -> {
+                        val ackId = json.optString("requestId", "")
+                        if (ackId.isNotBlank() && ackId == pendingMediaConfigId) {
+                            mediaReady = true
+                            onStatus("أكد التلفاز قبول إعدادات بث اللعبة؛ مسار الوسائط جاهز", true)
+                        }
                     }
                     PsLinkProtocol.KIND_ACK -> {
                         val ackId = json.optString("id", "")
@@ -250,17 +263,24 @@ class TvSubtitleClient(
             onStatus("إعدادات بث الفيديو غير صالحة", false)
             return
         }
+        val requestId = "${System.nanoTime()}-${MEDIA_CONFIG_SEQUENCE.incrementAndGet()}"
         val config = JSONObject()
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "media_config")
+            .put("requestId", requestId)
             .put("width", width)
             .put("height", height)
             .put("codec", codec)
             .put("fps", fps)
             .toString()
+
         mediaConfigJson = config
+        pendingMediaConfigId = requestId
         mediaReady = false
-        if (ready) mediaReady = socket?.send(config) == true
+
+        if (ready && socket?.send(config) != true) {
+            onStatus("تعذر إرسال إعدادات بث الوسائط؛ أعد المحاولة", false)
+        }
     }
 
     fun sendVideoSample(data: ByteArray, ptsNs: Long, keyFrame: Boolean) {

@@ -20,6 +20,8 @@ import kotlin.math.max
 data class TvMediaConfig(val width: Int, val height: Int, val codec: Int, val fps: Int)
 
 /** Receives Chiaki's compressed video access units and PCM audio; no HDMI capture is involved. */
+// PSLINK_LIVE_TV_PLAYOUT_V2
+// Decode ahead and schedule output against the shared monotonic timeline.
 class TvMediaPlayer(
     private val surfaceView: SurfaceView,
     private val onStatus: (String) -> Unit,
@@ -245,7 +247,7 @@ class TvMediaPlayer(
                 val codec = decoder ?: continue
                 if (awaitingKeyFrame && !frame.keyFrame) continue
                 if (frame.keyFrame) awaitingKeyFrame = false
-                if (!awaitPlayout(frame.ptsNs)) break
+                establishClock(frame.ptsNs)
                 val origin = senderOriginNs
                 val relativeUs = ((frame.ptsNs - origin).coerceAtLeast(0L)) / 1000L
                 val inputIndex = codec.dequeueInputBuffer(10_000)
@@ -266,7 +268,8 @@ class TvMediaPlayer(
                 while (true) {
                     val outputIndex = codec.dequeueOutputBuffer(info, 0)
                     if (outputIndex >= 0) {
-                        codec.releaseOutputBuffer(outputIndex, true)
+                        val renderAtNs = localRenderOriginNs + info.presentationTimeUs.coerceAtLeast(0L) * 1000L
+                        codec.releaseOutputBuffer(outputIndex, maxOf(renderAtNs, System.nanoTime()))
                     } else {
                         break
                     }

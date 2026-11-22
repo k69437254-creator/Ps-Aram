@@ -25,5 +25,19 @@
       width="1720"
       height="800"
       visible="true" />
+    <Label
+      id="subtitle"
+      translation="[140,900]"
+      width="1640"
+      height="120"
+      text=""
+      color="0xFFFFFFFF"
+      font="Large"
+      horizAlign="center"
+      vertAlign="center" />
+    <Timer
+      id="subtitleTimer"
+      duration="5"
+      repeat="false" />
   </children>
 </component>

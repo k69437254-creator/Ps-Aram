@@ -11,24 +11,34 @@ sub run()
         return
     end if
 
-    transfer = CreateObject("roUrlTransfer")
-    transfer.SetUrl("http://" + host + ":8765/receiver/roku/stream-url")
-    transfer.SetRequest("POST")
-    transfer.AddHeader("Content-Type", "application/json")
-
-    body = FormatJson({ code: code })
-    response = transfer.PostFromString(body)
-
-    if response = invalid then
-        m.top.error = "تعذر الاتصال بالهاتف؛ تحقق من الشبكة وعنوان IP"
+    if host = "" or Len(code) <> 6 then
+        m.top.error = "تحقق من عنوان IP ورمز الاقتران"
         return
     end if
 
-    parsed = ParseJson(response)
-    if parsed = invalid or parsed.url = invalid then
-        m.top.error = "رفض الهاتف الطلب أو لم يبدأ بث HLS بعد"
-        return
-    end if
+    while m.top.control = "RUN"
+        transfer = CreateObject("roUrlTransfer")
+        transfer.SetUrl("http://" + host + ":8765/receiver/roku/stream-url")
+        transfer.SetRequest("POST")
+        transfer.AddHeader("Content-Type", "application/json")
+        transfer.SetConnectionTimeout(3000)
 
-    m.top.url = parsed.url
+        body = FormatJson({ code: code })
+        response = transfer.PostFromString(body)
+
+        if response <> invalid and response <> ""
+            parsed = ParseJson(response)
+
+            if parsed <> invalid and parsed.url <> invalid
+                if parsed.url <> ""
+                    m.top.url = parsed.url
+                    return
+                end if
+            end if
+        end if
+
+        ' The phone may not have started HLS yet. Retry without requiring
+        ' the user to restart the Roku receiver.
+        sleep(3000)
+    end while
 end sub

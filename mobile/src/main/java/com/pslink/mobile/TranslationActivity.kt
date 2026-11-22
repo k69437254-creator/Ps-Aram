@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.pslink.mobile
 
+import com.pslink.mobile.capture.PhoneReceiverServer
+
 import android.net.Uri
 import android.content.Intent
 import android.os.Build
@@ -414,7 +416,19 @@ class TranslationActivity : AppCompatActivity() {
             sourceText = lastSource,
             translatedText = lastTranslation
         )
-        if (tvClient?.send(packet) == true) toast("أُرسلت الترجمة إلى التلفاز")
+        val sentToAndroidTv = tvClient?.send(packet) == true
+        val sentToScreenReceivers = PhoneReceiverServer.publishToReceivers(packet)
+
+        when {
+            sentToAndroidTv && sentToScreenReceivers ->
+                toast("أُرسلت إلى Android TV وأُضيفت لسجل استقبال الشاشات")
+            sentToAndroidTv ->
+                toast("أُرسلت الترجمة إلى Android TV")
+            sentToScreenReceivers ->
+                toast("أُضيفت الترجمة إلى سجل استقبال الشاشات")
+            else ->
+                toast("خادم استقبال الهاتف غير نشط؛ شغّل استقبال الشاشة أولًا")
+        }
     }
 
     override fun onDestroy() {

@@ -109,6 +109,12 @@ class TvSubtitleServer(
                                 is Frame.Text -> {
                                     val raw = frame.readText()
                                     handleTextFrame(raw)
+
+                                    // PSLINK_MEDIA_CONFIG_ACK_V1
+                                    mediaConfigAck(raw)?.let { acknowledgement ->
+                                        send(Frame.Text(acknowledgement))
+                                    }
+
                                     val packet = runCatching { SubtitlePacket.fromJson(raw) }.getOrNull()
                                     if (packet != null) {
                                         send(Frame.Text(JSONObject()
@@ -130,6 +136,38 @@ class TvSubtitleServer(
                 }
             }
         }.start(wait = false)
+    }
+
+    // PSLINK_MEDIA_CONFIG_ACK_V1
+    // Confirms only that the receiver accepted the configuration callback.
+    // It does not claim that a hardware decoder has rendered a frame.
+    private fun mediaConfigAck(raw: String): String? {
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+
+        if (json.optInt("v", -1) != PsLinkProtocol.VERSION ||
+            json.optString("kind") != "media_config") {
+            return null
+        }
+
+        val width = json.optInt("width", 0)
+        val height = json.optInt("height", 0)
+        val codec = json.optInt("codec", -1)
+        val fps = json.optInt("fps", 60)
+        val requestId = json.optString("requestId", "").take(100)
+
+        if (requestId.isBlank() ||
+            width !in 320..7680 ||
+            height !in 240..4320 ||
+            codec !in 0..2 ||
+            fps !in 15..120) {
+            return null
+        }
+
+        return JSONObject()
+            .put("v", PsLinkProtocol.VERSION)
+            .put("kind", "media_config_ack")
+            .put("requestId", requestId)
+            .toString()
     }
 
     private fun handleTextFrame(raw: String) {

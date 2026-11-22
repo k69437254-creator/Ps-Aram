@@ -2,6 +2,7 @@
 package com.pslink.mobile.capture
 
 import com.pslink.core.PairingCode
+import com.pslink.core.SubtitlePacket
 import com.pslink.core.PsLinkProtocol
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -54,6 +55,9 @@ class PhoneReceiverServer(
     }
     private val sessions = ConcurrentHashMap.newKeySet<DefaultWebSocketServerSession>()
     private val streamAvailable = AtomicBoolean(false)
+    private val subtitleHistoryLock = Any()
+    private val subtitleHistory = mutableListOf<Pair<Long, String>>()
+    private var subtitleSequence = 0L
     private var engine: ApplicationEngine? = null
     private var serverScope: CoroutineScope? = null
 
@@ -99,6 +103,63 @@ class PhoneReceiverServer(
                                 HttpStatusCode.OK
                             )
                         }
+                    }
+
+                    post("/receiver/roku/subtitle") {
+                        val request = runCatching {
+                            JSONObject(call.receiveText())
+                        }.getOrNull()
+
+                        if (request == null) {
+                            call.respond(HttpStatusCode.BadRequest)
+                            return@post
+                        }
+
+                        val suppliedCode = PairingCode.normalize(
+                            request.optString("code")
+                        )
+
+                        if (suppliedCode == null || suppliedCode != normalizedCode) {
+                            call.respond(HttpStatusCode.Unauthorized)
+                            return@post
+                        }
+
+                        val after = request.optLong("after", 0L).coerceAtLeast(0L)
+
+                        val snapshot = synchronized(subtitleHistoryLock) {
+                            val oldest = subtitleHistory.firstOrNull()?.first
+                                ?: (subtitleSequence + 1L)
+
+                            val entries = subtitleHistory
+                                .filter { it.first > after }
+                                .take(50)
+
+                            Triple(oldest, entries, subtitleSequence)
+                        }
+
+                        val items = org.json.JSONArray()
+
+                        snapshot.second.forEach { entry ->
+                            items.put(
+                                JSONObject()
+                                    .put("sequence", entry.first)
+                                    .put("packet", JSONObject(entry.second))
+                            )
+                        }
+
+                        val nextCursor = snapshot.second.lastOrNull()?.first ?: after
+
+                        val response = JSONObject()
+                            .put("items", items)
+                            .put("nextCursor", nextCursor)
+                            .put("oldestSequence", snapshot.first)
+                            .put("latestSequence", snapshot.third)
+
+                        call.respondText(
+                            response.toString(),
+                            ContentType.Application.Json,
+                            HttpStatusCode.OK
+                        )
                     }
 
                     get("/hls/index.m3u8") {
@@ -172,6 +233,7 @@ class PhoneReceiverServer(
                     }
                 }
             }.start(wait = false)
+            activeServer = this
         } catch (error: Exception) {
             engine = null
             scope.cancel()
@@ -190,6 +252,42 @@ class PhoneReceiverServer(
                 .toString()))
             close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, code))
         }
+    }
+
+    /**
+     * Broadcast one translated subtitle packet to all authenticated TV receivers.
+     * Returns false when the receiver server is stopped; true means the packet
+     * was retained in history, not that a TV has displayed it.
+     */
+    private fun publishSubtitle(packet: SubtitlePacket): Boolean {
+        val scope = serverScope ?: return false
+        val payload = packet.toJson()
+
+        // Retain a bounded history for independent Roku polling cursors.
+        synchronized(subtitleHistoryLock) {
+            subtitleSequence += 1L
+            subtitleHistory.add(subtitleSequence to payload)
+
+            while (subtitleHistory.size > 100) {
+                subtitleHistory.removeAt(0)
+            }
+        }
+
+        // WebSocket receivers receive the same packet immediately.
+        val targets = sessions.toList()
+
+        if (targets.isNotEmpty()) {
+            scope.launch {
+                targets.forEach { session ->
+                    runCatching {
+                        session.send(Frame.Text(payload))
+                    }
+                }
+            }
+        }
+
+        // True means accepted into the receiver history, not confirmed displayed.
+        return true
     }
 
     /** Called after the first complete IDR-aligned HLS segment is published. */
@@ -219,15 +317,31 @@ class PhoneReceiverServer(
     }
 
     @Synchronized fun stop() {
+        if (activeServer === this) activeServer = null
         sessions.clear()
         runCatching { engine?.stop(gracePeriodMillis = 300L, timeoutMillis = 1_000L) }
         engine = null
         serverScope?.cancel()
         serverScope = null
         streamAvailable.set(false)
+        synchronized(subtitleHistoryLock) {
+            subtitleHistory.clear()
+            subtitleSequence = 0L
+        }
     }
 
     companion object {
+        @Volatile
+        private var activeServer: PhoneReceiverServer? = null
+
+        /**
+         * Publish a subtitle to currently connected phone-side TV receivers.
+         * This does not replace TvSubtitleClient's Android TV delivery.
+         */
+        fun publishToReceivers(packet: SubtitlePacket): Boolean {
+            return activeServer?.publishSubtitle(packet) ?: false
+        }
+
         /** Prefer Wi-Fi IPv4; return null rather than advertising loopback. */
         fun localIpv4Address(): String? {
             return runCatching {

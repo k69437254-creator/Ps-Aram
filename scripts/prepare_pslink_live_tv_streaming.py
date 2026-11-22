@@ -475,7 +475,10 @@ static void pslink_live_dispatch_audio_sample(AndroidChiakiSession *session,
 TV_CLIENT = r'''// SPDX-License-Identifier: AGPL-3.0-only
 package com.pslink.mobile
 
+import android.os.Handler
+import android.os.Looper
 import com.pslink.core.PsLinkProtocol
+import com.pslink.core.PairingCode
 import com.pslink.core.SubtitlePacket
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -489,6 +492,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /** LAN-only paired WebSocket: text control/captions plus bounded binary game media. */
 class TvSubtitleClient(
@@ -503,6 +507,7 @@ class TvSubtitleClient(
         private const val FLAG_KEY_FRAME = 1
         private const val MAX_MEDIA_PACKET = 2 * 1024 * 1024
         private const val MAX_SOCKET_QUEUE_BYTES = 512L * 1024L
+        private val MEDIA_CONFIG_SEQUENCE = AtomicLong(0L)
     }
 
     private val client = OkHttpClient.Builder()
@@ -514,7 +519,14 @@ class TvSubtitleClient(
     @Volatile private var socket: WebSocket? = null
     @Volatile private var ready = false
     @Volatile private var mediaConfigJson: String? = null
+@Volatile private var pendingMediaConfigId: String? = null
+    // PSLINK_MEDIA_CONFIG_ACK_V1
     @Volatile private var mediaReady = false
+    @Volatile private var terminalStatus: String? = null
+    private val handshakeHandler = Handler(Looper.getMainLooper())
+    private val handshakeLock = Any()
+    @Volatile private var handshakeTimeoutSocket: WebSocket? = null
+    private var handshakeTimeoutRunnable: Runnable? = null
     @Volatile private var awaitingKeyFrame = true
     private val pendingMessageIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val mediaQueue = ArrayBlockingQueue<ByteArray>(32)
@@ -537,28 +549,89 @@ class TvSubtitleClient(
         }
     }, "PSLink-TV-Media-Sender").apply { isDaemon = true; start() }
 
+    private fun cancelHandshakeTimeoutLocked(expectedSocket: WebSocket? = null) {
+        if (expectedSocket != null && handshakeTimeoutSocket !== expectedSocket) return
+        val pending = handshakeTimeoutRunnable
+        handshakeTimeoutRunnable = null
+        handshakeTimeoutSocket = null
+        if (pending != null) handshakeHandler.removeCallbacks(pending)
+    }
+
+    private fun startHandshakeTimeout(webSocket: WebSocket) {
+        lateinit var timeout: Runnable
+        timeout = Runnable {
+            val expired = synchronized(handshakeLock) {
+                if (socket !== webSocket ||
+                    handshakeTimeoutSocket !== webSocket ||
+                    handshakeTimeoutRunnable !== timeout ||
+                    ready ||
+                    terminalStatus != null
+                ) {
+                    false
+                } else {
+                    handshakeTimeoutRunnable = null
+                    handshakeTimeoutSocket = null
+                    ready = false
+                    mediaReady = false
+                    mediaQueue.clear()
+                    pendingMessageIds.clear()
+                    socket = null
+                    true
+                }
+            }
+            if (expired) {
+                onStatus("انتهت مهلة التحقق من رمز الاقتران؛ أعد المحاولة", false)
+                webSocket.cancel()
+            }
+        }
+
+        synchronized(handshakeLock) {
+            if (socket === webSocket && !ready && terminalStatus == null) {
+                handshakeTimeoutRunnable?.let {
+                    handshakeHandler.removeCallbacks(it)
+                }
+                handshakeTimeoutSocket = webSocket
+                handshakeTimeoutRunnable = timeout
+                handshakeHandler.postDelayed(timeout, 10_000L)
+            }
+        }
+    }
+
     fun connect(hostInput: String, pairingCode: String) {
-        disconnect()
         val host = hostInput.trim().removePrefix("ws://").removePrefix("http://").trimEnd('/')
+        val normalizedCode = PairingCode.normalize(pairingCode)
         if (host.isBlank() || host.contains('/') || host.contains(' ')) {
             onStatus("أدخل عنوان IP صحيحًا للتلفاز", false)
             return
         }
-        if (!pairingCode.matches(Regex("\\d{6}"))) {
+        if (normalizedCode == null) {
             onStatus("رمز الاقتران يجب أن يتكون من 6 أرقام", false)
             return
         }
+        disconnect()
+        terminalStatus = null
 
-        val request = Request.Builder()
-            .url("ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}")
-            .build()
+        val request = runCatching {
+            Request.Builder()
+                .url("ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}")
+                .build()
+        }.getOrElse {
+            onStatus("عنوان التلفاز غير صالح؛ أدخل عنوان IP أو اسم مضيف صحيحًا", false)
+            return
+        }
 
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (socket !== webSocket) { webSocket.close(1000, "Superseded connection"); return }
-                val sent = webSocket.send(PsLinkProtocol.auth(pairingCode))
-                if (!sent) onStatus("تعذر إرسال رمز الاقتران", false)
-                else onStatus("تم الاتصال؛ جارٍ التحقق من الرمز…", false)
+                val sent = webSocket.send(PsLinkProtocol.auth(normalizedCode))
+                if (!sent) {
+                    terminalStatus = "تعذر إرسال رمز الاقتران"
+                    onStatus(terminalStatus!!, false)
+                    webSocket.cancel()
+                } else {
+                    onStatus("تم الاتصال؛ جارٍ التحقق من الرمز…", false)
+                    startHandshakeTimeout(webSocket)
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -566,13 +639,31 @@ class TvSubtitleClient(
                 val json = runCatching { JSONObject(text) }.getOrNull() ?: return
                 when (json.optString("kind")) {
                     PsLinkProtocol.KIND_READY -> {
-                        ready = true
+                        val accepted = synchronized(handshakeLock) {
+                            if (socket !== webSocket) {
+                                false
+                            } else {
+                                cancelHandshakeTimeoutLocked(webSocket)
+                                ready = true
+                                true
+                            }
+                        }
+                        if (!accepted) return
                         mediaReady = false
                         awaitingKeyFrame = true
                         mediaQueue.clear()
                         val config = mediaConfigJson
-                        mediaReady = config != null && webSocket.send(config)
-                        onStatus(if (mediaReady) "التلفاز متصل وجاهز لبث اللعبة والصوت" else "اتصل التلفاز؛ لم تصل إعدادات الفيديو بعد", mediaReady)
+                        if (config != null && !webSocket.send(config)) {
+                            onStatus("تعذر إرسال إعدادات بث الوسائط إلى التلفاز", false)
+                        }
+                        onStatus("تم اقتران التلفاز؛ بانتظار تأكيد إعداد بث الوسائط", true)
+                    }
+                    "media_config_ack" -> {
+                        val ackId = json.optString("requestId", "")
+                        if (ackId.isNotBlank() && ackId == pendingMediaConfigId) {
+                            mediaReady = true
+                            onStatus("أكد التلفاز قبول إعدادات بث اللعبة؛ مسار الوسائط جاهز", true)
+                        }
                     }
                     PsLinkProtocol.KIND_ACK -> {
                         val ackId = json.optString("id", "")
@@ -580,31 +671,63 @@ class TvSubtitleClient(
                             onStatus("استلم التلفاز الترجمة", ready)
                     }
                     "error" -> {
-                        ready = false
-                        mediaReady = false
-                        onStatus("رفض التلفاز الاقتران: ${json.optString("message", "خطأ غير معروف")}", false)
+                        val accepted = synchronized(handshakeLock) {
+                            if (socket !== webSocket) {
+                                false
+                            } else {
+                                cancelHandshakeTimeoutLocked(webSocket)
+                                ready = false
+                                mediaReady = false
+                                terminalStatus = "رفض التلفاز الاقتران [${json.optString("errorCode", "UNKNOWN_AUTH_ERROR")}]: ${json.optString("message", "خطأ غير معروف")}"
+                                true
+                            }
+                        }
+                        if (!accepted) return
+                        mediaQueue.clear()
+                        pendingMessageIds.clear()
+                        onStatus(terminalStatus!!, false)
                     }
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (socket !== webSocket) return
-                socket = null
-                ready = false
-                mediaReady = false
-                pendingMessageIds.clear()
-                mediaQueue.clear()
-                onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
+                val shouldReportFailure = synchronized(handshakeLock) {
+                    if (socket !== webSocket) {
+                        false
+                    } else {
+                        cancelHandshakeTimeoutLocked(webSocket)
+                        socket = null
+                        ready = false
+                        mediaReady = false
+                        pendingMessageIds.clear()
+                        mediaQueue.clear()
+                        val finalStatus = terminalStatus
+                        terminalStatus = null
+                        finalStatus == null
+                    }
+                }
+                if (shouldReportFailure) {
+                    onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
+                }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (socket !== webSocket) return
-                socket = null
-                ready = false
-                mediaReady = false
-                pendingMessageIds.clear()
-                mediaQueue.clear()
-                onStatus("انقطع اتصال التلفاز", false)
+                val shouldReportDisconnect = synchronized(handshakeLock) {
+                    if (socket !== webSocket) {
+                        false
+                    } else {
+                        cancelHandshakeTimeoutLocked(webSocket)
+                        socket = null
+                        ready = false
+                        mediaReady = false
+                        pendingMessageIds.clear()
+                        mediaQueue.clear()
+                        val finalStatus = terminalStatus
+                        terminalStatus = null
+                        finalStatus == null
+                    }
+                }
+                if (shouldReportDisconnect) onStatus("انقطع اتصال التلفاز", false)
             }
         })
     }
@@ -614,17 +737,24 @@ class TvSubtitleClient(
             onStatus("إعدادات بث الفيديو غير صالحة", false)
             return
         }
+        val requestId = "${System.nanoTime()}-${MEDIA_CONFIG_SEQUENCE.incrementAndGet()}"
         val config = JSONObject()
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "media_config")
+            .put("requestId", requestId)
             .put("width", width)
             .put("height", height)
             .put("codec", codec)
             .put("fps", fps)
             .toString()
+
         mediaConfigJson = config
+        pendingMediaConfigId = requestId
         mediaReady = false
-        if (ready) mediaReady = socket?.send(config) == true
+
+        if (ready && socket?.send(config) != true) {
+            onStatus("تعذر إرسال إعدادات بث الوسائط؛ أعد المحاولة", false)
+        }
     }
 
     fun sendVideoSample(data: ByteArray, ptsNs: Long, keyFrame: Boolean) {
@@ -659,7 +789,7 @@ class TvSubtitleClient(
     }
 
     fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long) {
-        if (!ready || !mediaReady || ptsNs <= 0L) return
+        if (!ready || ptsNs <= 0L) return
         val array = JSONArray()
         lines.take(3).forEach { line ->
             array.put(JSONObject()
@@ -707,13 +837,19 @@ class TvSubtitleClient(
     }
 
     fun disconnect() {
-        ready = false
-        mediaReady = false
-        pendingMessageIds.clear()
-        mediaQueue.clear()
-        awaitingKeyFrame = true
-        socket?.close(1000, "User disconnected")
-        socket = null
+        val previousSocket = synchronized(handshakeLock) {
+            cancelHandshakeTimeoutLocked()
+            ready = false
+            mediaReady = false
+            terminalStatus = null
+            pendingMessageIds.clear()
+            mediaQueue.clear()
+            awaitingKeyFrame = true
+            val previous = socket
+            socket = null
+            previous
+        }
+        previousSocket?.close(1000, "User disconnected")
     }
 
     fun close() {
@@ -723,6 +859,7 @@ class TvSubtitleClient(
         client.connectionPool.evictAll()
     }
 }
+
 '''
 
 
@@ -872,6 +1009,7 @@ TV_SERVER = r'''// SPDX-License-Identifier: AGPL-3.0-only
 package com.pslink.tv
 
 import com.pslink.core.PsLinkProtocol
+import com.pslink.core.PairingCode
 import com.pslink.core.SubtitlePacket
 import io.ktor.server.application.install
 import io.ktor.server.engine.ApplicationEngine
@@ -884,12 +1022,16 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
 
 data class TvCaptionLine(val text: String, val left: Float, val top: Float, val right: Float, val bottom: Float)
 data class TvCaptionFrame(val timestampNs: Long, val lines: List<TvCaptionLine>)
@@ -901,6 +1043,7 @@ class TvSubtitleServer(
     private val onMediaStop: () -> Unit
 ) {
     private var engine: ApplicationEngine? = null
+    private val activeSession = AtomicReference<Job?>(null)
     private val mutableLatestPacket = MutableStateFlow<SubtitlePacket?>(null)
     val latestPacket: StateFlow<SubtitlePacket?> = mutableLatestPacket.asStateFlow()
     private val mutableCaptions = MutableStateFlow<TvCaptionFrame?>(null)
@@ -912,23 +1055,58 @@ class TvSubtitleServer(
             install(WebSockets)
             routing {
                 webSocket(PsLinkProtocol.PATH) {
-                    val authFrame = withTimeoutOrNull(6_000L) { incoming.receive() }
+                    suspend fun rejectPairing(errorCode: String, message: String) {
+                        send(Frame.Text(JSONObject()
+                            .put("v", PsLinkProtocol.VERSION)
+                            .put("kind", "error")
+                            .put("errorCode", errorCode)
+                            .put("message", message)
+                            .toString()))
+                        close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, errorCode))
+                    }
+
+                    val authFrame = try {
+                        withTimeoutOrNull(6_000L) { incoming.receive() }
+                    } catch (_: ClosedReceiveChannelException) {
+                        return@webSocket
+                    }
+                    if (authFrame == null) {
+                        rejectPairing("AUTH_TIMEOUT", "انتهت مهلة إدخال رمز الاقتران؛ أعد المحاولة")
+                        return@webSocket
+                    }
                     if (authFrame !is Frame.Text) {
-                        close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Pairing required"))
+                        rejectPairing("INVALID_AUTH_FRAME", "طلب الاقتران غير صالح؛ أعد الاتصال من تطبيق الهاتف")
                         return@webSocket
                     }
+
                     val auth = runCatching { JSONObject(authFrame.readText()) }.getOrNull()
-                    val accepted = auth != null &&
-                        auth.optInt("v", -1) == PsLinkProtocol.VERSION &&
-                        auth.optString("kind") == PsLinkProtocol.KIND_AUTH &&
-                        auth.optString("code") == pairingCode
-                    if (!accepted) {
-                        send(Frame.Text(JSONObject().put("kind", "error").put("message", "رمز الاقتران غير صحيح").toString()))
-                        close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid pairing code"))
+                    if (auth == null) {
+                        rejectPairing("INVALID_AUTH_JSON", "تعذر قراءة بيانات الاقتران؛ حدّث التطبيق ثم أعد المحاولة")
                         return@webSocket
                     }
-                    send(Frame.Text(JSONObject().put("v", PsLinkProtocol.VERSION).put("kind", PsLinkProtocol.KIND_READY).toString()))
+                    if (auth.optInt("v", -1) != PsLinkProtocol.VERSION) {
+                        rejectPairing("PROTOCOL_MISMATCH", "إصدار بروتوكول الهاتف والتلفاز غير متوافق؛ حدّث التطبيقين")
+                        return@webSocket
+                    }
+                    if (auth.optString("kind") != PsLinkProtocol.KIND_AUTH) {
+                        rejectPairing("INVALID_AUTH_REQUEST", "نوع طلب الاقتران غير صالح؛ أعد الاتصال")
+                        return@webSocket
+                    }
+                    val suppliedCode = PairingCode.normalize(auth.optString("code"))
+                    val expectedCode = PairingCode.normalize(pairingCode)
+                    if (suppliedCode == null || expectedCode == null || suppliedCode != expectedCode) {
+                        rejectPairing("INVALID_PAIRING_CODE", "رمز الاقتران غير صحيح أو لا يخص هذا التلفاز")
+                        return@webSocket
+                    }
+                    val sessionJob = coroutineContext[Job]
+                        ?: throw IllegalStateException("Authenticated WebSocket session has no Job")
+                    val previousSession = activeSession.getAndSet(sessionJob)
+                    if (previousSession != null && previousSession !== sessionJob) {
+                        // The new authenticated session replaces the old one.
+                        previousSession.cancel()
+                    }
                     try {
+                        send(Frame.Text(JSONObject().put("v", PsLinkProtocol.VERSION).put("kind", PsLinkProtocol.KIND_READY).toString()))
                         for (frame in incoming) {
                             when (frame) {
                                 is Frame.Binary -> {
@@ -938,6 +1116,12 @@ class TvSubtitleServer(
                                 is Frame.Text -> {
                                     val raw = frame.readText()
                                     handleTextFrame(raw)
+
+                                    // PSLINK_MEDIA_CONFIG_ACK_V1
+                                    mediaConfigAck(raw)?.let { acknowledgement ->
+                                        send(Frame.Text(acknowledgement))
+                                    }
+
                                     val packet = runCatching { SubtitlePacket.fromJson(raw) }.getOrNull()
                                     if (packet != null) {
                                         send(Frame.Text(JSONObject()
@@ -951,12 +1135,46 @@ class TvSubtitleServer(
                             }
                         }
                     } finally {
-                        mutableCaptions.value = TvCaptionFrame(0L, emptyList())
-                        onMediaStop()
+                        if (activeSession.compareAndSet(sessionJob, null)) {
+                            mutableCaptions.value = TvCaptionFrame(0L, emptyList())
+                            onMediaStop()
+                        }
                     }
                 }
             }
         }.start(wait = false)
+    }
+
+    // PSLINK_MEDIA_CONFIG_ACK_V1
+    // Confirms only that the receiver accepted the configuration callback.
+    // It does not claim that a hardware decoder has rendered a frame.
+    private fun mediaConfigAck(raw: String): String? {
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+
+        if (json.optInt("v", -1) != PsLinkProtocol.VERSION ||
+            json.optString("kind") != "media_config") {
+            return null
+        }
+
+        val width = json.optInt("width", 0)
+        val height = json.optInt("height", 0)
+        val codec = json.optInt("codec", -1)
+        val fps = json.optInt("fps", 60)
+        val requestId = json.optString("requestId", "").take(100)
+
+        if (requestId.isBlank() ||
+            width !in 320..7680 ||
+            height !in 240..4320 ||
+            codec !in 0..2 ||
+            fps !in 15..120) {
+            return null
+        }
+
+        return JSONObject()
+            .put("v", PsLinkProtocol.VERSION)
+            .put("kind", "media_config_ack")
+            .put("requestId", requestId)
+            .toString()
     }
 
     private fun handleTextFrame(raw: String) {
@@ -1002,6 +1220,7 @@ class TvSubtitleServer(
         engine = null
     }
 }
+
 '''
 
 TV_PLAYER = r'''// SPDX-License-Identifier: AGPL-3.0-only
@@ -1026,6 +1245,8 @@ import kotlin.math.max
 data class TvMediaConfig(val width: Int, val height: Int, val codec: Int, val fps: Int)
 
 /** Receives Chiaki's compressed video access units and PCM audio; no HDMI capture is involved. */
+// PSLINK_LIVE_TV_PLAYOUT_V2
+// Decode ahead and schedule output against the shared monotonic timeline.
 class TvMediaPlayer(
     private val surfaceView: SurfaceView,
     private val onStatus: (String) -> Unit,
@@ -1251,7 +1472,7 @@ class TvMediaPlayer(
                 val codec = decoder ?: continue
                 if (awaitingKeyFrame && !frame.keyFrame) continue
                 if (frame.keyFrame) awaitingKeyFrame = false
-                if (!awaitPlayout(frame.ptsNs)) break
+                establishClock(frame.ptsNs)
                 val origin = senderOriginNs
                 val relativeUs = ((frame.ptsNs - origin).coerceAtLeast(0L)) / 1000L
                 val inputIndex = codec.dequeueInputBuffer(10_000)
@@ -1272,7 +1493,8 @@ class TvMediaPlayer(
                 while (true) {
                     val outputIndex = codec.dequeueOutputBuffer(info, 0)
                     if (outputIndex >= 0) {
-                        codec.releaseOutputBuffer(outputIndex, true)
+                        val renderAtNs = localRenderOriginNs + info.presentationTimeUs.coerceAtLeast(0L) * 1000L
+                        codec.releaseOutputBuffer(outputIndex, maxOf(renderAtNs, System.nanoTime()))
                     } else {
                         break
                     }
