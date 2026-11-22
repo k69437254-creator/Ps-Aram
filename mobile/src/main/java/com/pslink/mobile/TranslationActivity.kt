@@ -100,7 +100,7 @@ class TranslationActivity : AppCompatActivity() {
                 binding.tvConnectionStatus.setTextColor(
                     getColor(if (connected) com.metallic.chiaki.R.color.pslink_blue else com.metallic.chiaki.R.color.pslink_muted)
                 )
-                if (!connected && status.startsWith("رفض التلفاز الاقتران:")) {
+                if (!connected && status.startsWith("رفض التلفاز الاقتران [INVALID_PAIRING_CODE]:")) {
                     // The discovered receiver rejected the previously saved code.
                     // Remove that stale credential and wait for manual re-pairing.
                     getSharedPreferences("pslink_tv", MODE_PRIVATE)

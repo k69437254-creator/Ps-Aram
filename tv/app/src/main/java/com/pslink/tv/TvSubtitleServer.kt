@@ -15,6 +15,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,7 +54,11 @@ class TvSubtitleServer(
                         close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, errorCode))
                     }
 
-                    val authFrame = withTimeoutOrNull(6_000L) { incoming.receive() }
+                    val authFrame = try {
+                        withTimeoutOrNull(6_000L) { incoming.receive() }
+                    } catch (_: ClosedReceiveChannelException) {
+                        return@webSocket
+                    }
                     if (authFrame == null) {
                         rejectPairing("AUTH_TIMEOUT", "انتهت مهلة إدخال رمز الاقتران؛ أعد المحاولة")
                         return@webSocket

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.pslink.mobile
 
+import android.os.Handler
+import android.os.Looper
 import com.pslink.core.PsLinkProtocol
 import com.pslink.core.PairingCode
 import com.pslink.core.SubtitlePacket
@@ -43,6 +45,10 @@ class TvSubtitleClient(
     @Volatile private var mediaConfigJson: String? = null
     @Volatile private var mediaReady = false
     @Volatile private var terminalStatus: String? = null
+    private val handshakeHandler = Handler(Looper.getMainLooper())
+    private val handshakeLock = Any()
+    @Volatile private var handshakeTimeoutSocket: WebSocket? = null
+    private var handshakeTimeoutRunnable: Runnable? = null
     @Volatile private var awaitingKeyFrame = true
     private val pendingMessageIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val mediaQueue = ArrayBlockingQueue<ByteArray>(32)
@@ -64,6 +70,54 @@ class TvSubtitleClient(
             }
         }
     }, "PSLink-TV-Media-Sender").apply { isDaemon = true; start() }
+
+    private fun cancelHandshakeTimeoutLocked(expectedSocket: WebSocket? = null) {
+        if (expectedSocket != null && handshakeTimeoutSocket !== expectedSocket) return
+        val pending = handshakeTimeoutRunnable
+        handshakeTimeoutRunnable = null
+        handshakeTimeoutSocket = null
+        if (pending != null) handshakeHandler.removeCallbacks(pending)
+    }
+
+    private fun startHandshakeTimeout(webSocket: WebSocket) {
+        lateinit var timeout: Runnable
+        timeout = Runnable {
+            val expired = synchronized(handshakeLock) {
+                if (socket !== webSocket ||
+                    handshakeTimeoutSocket !== webSocket ||
+                    handshakeTimeoutRunnable !== timeout ||
+                    ready ||
+                    terminalStatus != null
+                ) {
+                    false
+                } else {
+                    handshakeTimeoutRunnable = null
+                    handshakeTimeoutSocket = null
+                    ready = false
+                    mediaReady = false
+                    mediaQueue.clear()
+                    pendingMessageIds.clear()
+                    socket = null
+                    true
+                }
+            }
+            if (expired) {
+                onStatus("انتهت مهلة التحقق من رمز الاقتران؛ أعد المحاولة", false)
+                webSocket.cancel()
+            }
+        }
+
+        synchronized(handshakeLock) {
+            if (socket === webSocket && !ready && terminalStatus == null) {
+                handshakeTimeoutRunnable?.let {
+                    handshakeHandler.removeCallbacks(it)
+                }
+                handshakeTimeoutSocket = webSocket
+                handshakeTimeoutRunnable = timeout
+                handshakeHandler.postDelayed(timeout, 10_000L)
+            }
+        }
+    }
 
     fun connect(hostInput: String, pairingCode: String) {
         val host = hostInput.trim().removePrefix("ws://").removePrefix("http://").trimEnd('/')
@@ -92,8 +146,14 @@ class TvSubtitleClient(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (socket !== webSocket) { webSocket.close(1000, "Superseded connection"); return }
                 val sent = webSocket.send(PsLinkProtocol.auth(normalizedCode))
-                if (!sent) onStatus("تعذر إرسال رمز الاقتران", false)
-                else onStatus("تم الاتصال؛ جارٍ التحقق من الرمز…", false)
+                if (!sent) {
+                    terminalStatus = "تعذر إرسال رمز الاقتران"
+                    onStatus(terminalStatus!!, false)
+                    webSocket.cancel()
+                } else {
+                    onStatus("تم الاتصال؛ جارٍ التحقق من الرمز…", false)
+                    startHandshakeTimeout(webSocket)
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -101,7 +161,16 @@ class TvSubtitleClient(
                 val json = runCatching { JSONObject(text) }.getOrNull() ?: return
                 when (json.optString("kind")) {
                     PsLinkProtocol.KIND_READY -> {
-                        ready = true
+                        val accepted = synchronized(handshakeLock) {
+                            if (socket !== webSocket) {
+                                false
+                            } else {
+                                cancelHandshakeTimeoutLocked(webSocket)
+                                ready = true
+                                true
+                            }
+                        }
+                        if (!accepted) return
                         mediaReady = false
                         awaitingKeyFrame = true
                         mediaQueue.clear()
@@ -115,42 +184,63 @@ class TvSubtitleClient(
                             onStatus("استلم التلفاز الترجمة", ready)
                     }
                     "error" -> {
-                        ready = false
-                        mediaReady = false
+                        val accepted = synchronized(handshakeLock) {
+                            if (socket !== webSocket) {
+                                false
+                            } else {
+                                cancelHandshakeTimeoutLocked(webSocket)
+                                ready = false
+                                mediaReady = false
+                                terminalStatus = "رفض التلفاز الاقتران [${json.optString("errorCode", "UNKNOWN_AUTH_ERROR")}]: ${json.optString("message", "خطأ غير معروف")}"
+                                true
+                            }
+                        }
+                        if (!accepted) return
                         mediaQueue.clear()
-                        terminalStatus = "رفض التلفاز الاقتران: ${json.optString("message", "خطأ غير معروف")}"
+                        pendingMessageIds.clear()
                         onStatus(terminalStatus!!, false)
                     }
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (socket !== webSocket) return
-                socket = null
-                ready = false
-                mediaReady = false
-                pendingMessageIds.clear()
-                mediaQueue.clear()
-                val finalStatus = terminalStatus
-                terminalStatus = null
-                // An authentication error was already reported from onMessage.
-                // Do not replace it with a generic socket failure.
-                if (finalStatus == null) {
+                val shouldReportFailure = synchronized(handshakeLock) {
+                    if (socket !== webSocket) {
+                        false
+                    } else {
+                        cancelHandshakeTimeoutLocked(webSocket)
+                        socket = null
+                        ready = false
+                        mediaReady = false
+                        pendingMessageIds.clear()
+                        mediaQueue.clear()
+                        val finalStatus = terminalStatus
+                        terminalStatus = null
+                        finalStatus == null
+                    }
+                }
+                if (shouldReportFailure) {
                     onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
                 }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (socket !== webSocket) return
-                socket = null
-                ready = false
-                mediaReady = false
-                pendingMessageIds.clear()
-                mediaQueue.clear()
-                val finalStatus = terminalStatus
-                terminalStatus = null
-                // Avoid a second misleading disconnect after pairing rejection.
-                if (finalStatus == null) onStatus("انقطع اتصال التلفاز", false)
+                val shouldReportDisconnect = synchronized(handshakeLock) {
+                    if (socket !== webSocket) {
+                        false
+                    } else {
+                        cancelHandshakeTimeoutLocked(webSocket)
+                        socket = null
+                        ready = false
+                        mediaReady = false
+                        pendingMessageIds.clear()
+                        mediaQueue.clear()
+                        val finalStatus = terminalStatus
+                        terminalStatus = null
+                        finalStatus == null
+                    }
+                }
+                if (shouldReportDisconnect) onStatus("انقطع اتصال التلفاز", false)
             }
         })
     }
@@ -253,14 +343,19 @@ class TvSubtitleClient(
     }
 
     fun disconnect() {
-        ready = false
-        mediaReady = false
-        terminalStatus = null
-        pendingMessageIds.clear()
-        mediaQueue.clear()
-        awaitingKeyFrame = true
-        socket?.close(1000, "User disconnected")
-        socket = null
+        val previousSocket = synchronized(handshakeLock) {
+            cancelHandshakeTimeoutLocked()
+            ready = false
+            mediaReady = false
+            terminalStatus = null
+            pendingMessageIds.clear()
+            mediaQueue.clear()
+            awaitingKeyFrame = true
+            val previous = socket
+            socket = null
+            previous
+        }
+        previousSocket?.close(1000, "User disconnected")
     }
 
     fun close() {
