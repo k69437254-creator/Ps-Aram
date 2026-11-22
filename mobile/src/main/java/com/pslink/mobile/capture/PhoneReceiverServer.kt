@@ -6,6 +6,10 @@ import com.pslink.core.PsLinkProtocol
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.call
+import io.ktor.server.request.receiveText
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.post
 import io.ktor.server.application.install
 import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
@@ -61,6 +65,42 @@ class PhoneReceiverServer(
             engine = embeddedServer(CIO, host = "0.0.0.0", port = PsLinkProtocol.PORT) {
                 install(WebSockets)
                 routing {
+                    post("/receiver/roku/stream-url") {
+                        val request = runCatching {
+                            JSONObject(call.receiveText())
+                        }.getOrNull()
+
+                        if (request == null) {
+                            call.respond(HttpStatusCode.BadRequest)
+                            return@post
+                        }
+
+                        val suppliedCode = PairingCode.normalize(
+                            request.optString("code")
+                        )
+
+                        if (suppliedCode == null || suppliedCode != normalizedCode) {
+                            call.respond(HttpStatusCode.Unauthorized)
+                            return@post
+                        }
+
+                        if (!streamAvailable.get()) {
+                            call.respond(HttpStatusCode.ServiceUnavailable)
+                            return@post
+                        }
+
+                        val payload = streamUrlMessage()
+                        if (payload == null) {
+                            call.respond(HttpStatusCode.ServiceUnavailable)
+                        } else {
+                            call.respondText(
+                                payload,
+                                ContentType.Application.Json,
+                                HttpStatusCode.OK
+                            )
+                        }
+                    }
+
                     get("/hls/index.m3u8") {
                         val playlist = File(hlsDirectory, "index.m3u8")
                         if (!playlist.isFile) {

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "project": "PS Link",
+  "targets": [
+    {
+      "id": "android-tv",
+      "name": "Android TV",
+      "technology": "Native Android APK",
+      "state": "existing",
+      "validation": "Build and physical-device media test required"
+    },
+    {
+      "id": "google-tv",
+      "name": "Google TV",
+      "technology": "Android TV APK",
+      "state": "compatibility-pending",
+      "validation": "Google TV device compatibility test required"
+    },
+    {
+      "id": "fire-tv",
+      "name": "Amazon Fire TV",
+      "technology": "Fire OS compatible Android APK",
+      "state": "compatibility-pending",
+      "validation": "Fire OS compatibility and device media test required"
+    },
+    {
+      "id": "tizen",
+      "name": "Samsung Tizen",
+      "technology": "Tizen Web application",
+      "state": "hls-video-path-present",
+      "validation": "Audio path and physical-device test pending"
+    },
+    {
+      "id": "webos",
+      "name": "LG webOS",
+      "technology": "webOS application",
+      "state": "hls-video-path-present",
+      "validation": "Audio path and physical-device test pending"
+    },
+    {
+      "id": "roku",
+      "name": "Roku",
+      "technology": "SceneGraph and BrightScript",
+      "state": "prototype-generated",
+      "validation": "Package, install and physical-device test pending; video-only"
+    },
+    {
+      "id": "xbox-edge",
+      "name": "Xbox Edge",
+      "technology": "Browser receiver",
+      "state": "prototype-generated",
+      "validation": "HTTPS/WSS hosting and physical-device test pending; not native"
+    }
+  ]
+}

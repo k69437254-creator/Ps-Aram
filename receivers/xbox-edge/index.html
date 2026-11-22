@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101820">
+  <title>PS Link - Xbox Edge</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main>
+    <h1>PS Link</h1>
+    <p id="status">أدخل عنوان IP الهاتف ورمز الاقتران</p>
+
+    <form id="pairing-form">
+      <label for="host">عنوان IP الهاتف</label>
+      <input id="host" required autocomplete="off" placeholder="192.168.1.10">
+
+      <label for="code">رمز الاقتران</label>
+      <input id="code" required inputmode="numeric" maxlength="12">
+
+      <button id="connect" type="submit">اتصال</button>
+      <button id="disconnect" type="button" disabled>قطع الاتصال</button>
+    </form>
+
+    <video id="video" controls autoplay playsinline></video>
+    <section id="subtitle">
+      <h2 id="game">PS Link</h2>
+      <p id="translation"></p>
+    </section>
+    <section id="captions"></section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="pslink-client.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

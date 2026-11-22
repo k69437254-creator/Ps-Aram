@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+  <interface>
+    <field id="phoneHost" type="string" />
+    <field id="pairingCode" type="string" />
+  </interface>
+  <script type="text/brightscript" uri="MainScene.brs" />
+  <children>
+    <Rectangle
+      id="background"
+      width="1920"
+      height="1080"
+      color="0x101820FF" />
+    <Label
+      id="status"
+      translation="[100,80]"
+      width="1700"
+      height="90"
+      text="PS Link - جاري الاتصال"
+      color="0xFFFFFFFF"
+      font="Large" />
+    <Video
+      id="player"
+      translation="[100,190]"
+      width="1720"
+      height="800"
+      visible="true" />
+  </children>
+</component>

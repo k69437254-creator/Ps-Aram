@@ -56,3 +56,27 @@ and its complete media path passes device testing.
 ## Phone HLS receiver (Tizen / webOS)
 
 The phone-side receiver endpoint uses the PS Link v2 WebSocket pairing route on port `8765`. After the first complete H.264 IDR-aligned MPEG-TS segment is published, it sends an authenticated `stream_url` message pointing to `/hls/index.m3u8`. TV receiver clients retry temporary network failures with capped exponential backoff and stop retrying after an authentication rejection or a manual disconnect. This path is separate from the existing Android TV binary-media receiver.
+
+## Platform completion pack
+
+The `platforms/targets.json` file records the current implementation state
+and validation requirements for each target.
+
+Generated targets:
+
+- `receivers/roku`: BrightScript / SceneGraph receiver prototype.
+  It requests an authenticated HLS URL from the phone.
+- `receivers/xbox-edge`: browser receiver prototype for Edge on Xbox.
+  This is not a native Xbox application.
+
+The phone exposes `POST /receiver/roku/stream-url` on the existing PS Link
+port. The endpoint checks the six-digit pairing code and returns the HLS URL
+only after the first playlist is ready.
+
+Media limitation: the current HLS publisher carries H.264 video. It does
+not establish complete audio support. Do not advertise full audio/video
+support for Roku, Tizen, webOS or Xbox until the audio path is implemented
+and tested on physical devices.
+
+Xbox Edge production hosting requires secure WebSocket/HTTP delivery through
+a trusted reverse proxy if the receiver page is served over HTTPS.
