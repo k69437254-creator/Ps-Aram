@@ -42,6 +42,7 @@ class TvSubtitleClient(
     @Volatile private var ready = false
     @Volatile private var mediaConfigJson: String? = null
     @Volatile private var mediaReady = false
+    @Volatile private var terminalStatus: String? = null
     @Volatile private var awaitingKeyFrame = true
     private val pendingMessageIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val mediaQueue = ArrayBlockingQueue<ByteArray>(32)
@@ -76,10 +77,16 @@ class TvSubtitleClient(
             return
         }
         disconnect()
+        terminalStatus = null
 
-        val request = Request.Builder()
-            .url("ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}")
-            .build()
+        val request = runCatching {
+            Request.Builder()
+                .url("ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}")
+                .build()
+        }.getOrElse {
+            onStatus("عنوان التلفاز غير صالح؛ أدخل عنوان IP أو اسم مضيف صحيحًا", false)
+            return
+        }
 
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -110,7 +117,9 @@ class TvSubtitleClient(
                     "error" -> {
                         ready = false
                         mediaReady = false
-                        onStatus("رفض التلفاز الاقتران: ${json.optString("message", "خطأ غير معروف")}", false)
+                        mediaQueue.clear()
+                        terminalStatus = "رفض التلفاز الاقتران: ${json.optString("message", "خطأ غير معروف")}"
+                        onStatus(terminalStatus!!, false)
                     }
                 }
             }
@@ -122,7 +131,11 @@ class TvSubtitleClient(
                 mediaReady = false
                 pendingMessageIds.clear()
                 mediaQueue.clear()
-                onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
+                onStatus(
+                    terminalStatus ?: "فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}",
+                    false
+                )
+                terminalStatus = null
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -132,7 +145,8 @@ class TvSubtitleClient(
                 mediaReady = false
                 pendingMessageIds.clear()
                 mediaQueue.clear()
-                onStatus("انقطع اتصال التلفاز", false)
+                onStatus(terminalStatus ?: "انقطع اتصال التلفاز", false)
+                terminalStatus = null
             }
         })
     }
@@ -237,6 +251,7 @@ class TvSubtitleClient(
     fun disconnect() {
         ready = false
         mediaReady = false
+        terminalStatus = null
         pendingMessageIds.clear()
         mediaQueue.clear()
         awaitingKeyFrame = true

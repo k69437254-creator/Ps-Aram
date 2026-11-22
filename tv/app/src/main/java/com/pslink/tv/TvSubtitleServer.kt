@@ -54,7 +54,11 @@ class TvSubtitleServer(
                         auth.optString("kind") == PsLinkProtocol.KIND_AUTH &&
                         PairingCode.normalize(auth.optString("code")) == PairingCode.normalize(pairingCode)
                     if (!accepted) {
-                        send(Frame.Text(JSONObject().put("kind", "error").put("message", "رمز الاقتران غير صحيح").toString()))
+                        send(Frame.Text(JSONObject()
+                            .put("v", PsLinkProtocol.VERSION)
+                            .put("kind", "error")
+                            .put("message", "رمز الاقتران غير صحيح أو لا يخص هذا التلفاز")
+                            .toString()))
                         close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid pairing code"))
                         return@webSocket
                     }

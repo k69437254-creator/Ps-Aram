@@ -100,6 +100,19 @@ class TranslationActivity : AppCompatActivity() {
                 binding.tvConnectionStatus.setTextColor(
                     getColor(if (connected) com.metallic.chiaki.R.color.pslink_blue else com.metallic.chiaki.R.color.pslink_muted)
                 )
+                if (!connected && status.startsWith("رفض التلفاز الاقتران:")) {
+                    // The discovered receiver rejected the previously saved code.
+                    // Remove that stale credential and wait for manual re-pairing.
+                    getSharedPreferences("pslink_tv", MODE_PRIVATE)
+                        .edit()
+                        .remove("code")
+                        .apply()
+
+                    tvReconnectPending = false
+                    tvReconnectHandler.removeCallbacksAndMessages(null)
+                    tvAutoConnectStarted = false
+                }
+
                 if (connected) {
                     tvReconnectPending = false
                     tvReconnectHandler.removeCallbacksAndMessages(null)
@@ -278,9 +291,12 @@ class TranslationActivity : AppCompatActivity() {
                             }
                             binding.tvHostInput.setText(host)
                             val savedCode = getSharedPreferences("pslink_tv", MODE_PRIVATE).getString("code", "").orEmpty()
-                            if (PairingCode.normalize(savedCode) != null) {
-                                binding.tvConnectionStatus.text = "عُثر على ${resolved.serviceName}؛ جارٍ إعادة الاتصال…"
-                                connectTv(host, PairingCode.normalize(savedCode)!!)
+                            val normalizedSavedCode = PairingCode.normalize(savedCode)
+                            if (normalizedSavedCode != null) {
+                                binding.tvPairCodeInput.setText(normalizedSavedCode)
+                                binding.tvConnectionStatus.text =
+                                    "عُثر على ${resolved.serviceName}؛ جارٍ إعادة الاتصال بالرمز المحفوظ…"
+                                connectTv(host, normalizedSavedCode)
                             } else {
                                 binding.tvConnectionStatus.text = "عُثر على ${resolved.serviceName}. أدخل رمز الاقتران الظاهر على التلفاز ثم اضغط ربط التلفاز."
                             }
