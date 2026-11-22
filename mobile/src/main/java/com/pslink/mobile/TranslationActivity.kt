@@ -2,6 +2,10 @@
 package com.pslink.mobile
 
 import android.net.Uri
+import android.content.Intent
+import android.os.Build
+import android.media.projection.MediaProjectionManager
+import com.pslink.mobile.capture.TvScreenStreamService
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Handler
@@ -61,6 +65,45 @@ class TranslationActivity : AppCompatActivity() {
         if (uri != null) runOcr(uri)
     }
 
+    private val requestScreenStream =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val data = result.data
+            if (result.resultCode == RESULT_OK && data != null) {
+                val client = tvClient
+                if (client == null) {
+                    binding.screenStreamStatus.text = "اتصل بالتلفاز أولًا."
+                    return@registerForActivityResult
+                }
+
+                TvScreenStreamService.mediaSink = client
+                TvScreenStreamService.statusListener = { message ->
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) {
+                            binding.screenStreamStatus.text = message
+                        }
+                    }
+                }
+
+                val intent = Intent(this, TvScreenStreamService::class.java).apply {
+                    action = TvScreenStreamService.ACTION_START
+                    putExtra(TvScreenStreamService.EXTRA_RESULT_CODE, result.resultCode)
+                    putExtra(TvScreenStreamService.EXTRA_RESULT_DATA, data)
+                }
+
+                try {
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent)
+                    else startService(intent)
+                    binding.screenStreamStatus.text =
+                        "تم منح إذن مشاركة الشاشة؛ جارٍ تجهيز بث H.264."
+                } catch (error: Exception) {
+                    binding.screenStreamStatus.text =
+                        "تعذر بدء البث: ${error.localizedMessage ?: "خطأ غير معروف"}"
+                }
+            } else {
+                binding.screenStreamStatus.text = "ألغيت موافقة مشاركة الشاشة."
+            }
+        }
+
     private val sourceLanguages = listOf(
         SourceLanguage("اليابانية", TranslateLanguage.JAPANESE, OcrScript.JAPANESE),
         SourceLanguage("الإنجليزية", TranslateLanguage.ENGLISH, OcrScript.LATIN),
@@ -93,6 +136,18 @@ class TranslationActivity : AppCompatActivity() {
         binding.connectTvButton.setOnClickListener { connectTv() }
         binding.tvDiscoveryButton.setOnClickListener { discoverTv() }
         binding.sendToTvButton.setOnClickListener { sendToTv() }
+        binding.streamScreenButton.setOnClickListener {
+            if (TvScreenStreamService.isStreaming) {
+                startService(
+                    Intent(this, TvScreenStreamService::class.java)
+                        .setAction(TvScreenStreamService.ACTION_STOP)
+                )
+                binding.screenStreamStatus.text = "جارٍ إيقاف بث الشاشة…"
+            } else {
+                val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                requestScreenStream.launch(manager.createScreenCaptureIntent())
+            }
+        }
 
         tvClient = TvSubtitleClient { status, connected ->
             runOnUiThread {
@@ -361,6 +416,9 @@ class TranslationActivity : AppCompatActivity() {
         ocrGeneration++
         tvReconnectHandler.removeCallbacksAndMessages(null)
         stopTvDiscovery()
+        stopService(Intent(this, TvScreenStreamService::class.java))
+        TvScreenStreamService.statusListener = null
+        TvScreenStreamService.mediaSink = null
         translator?.close()
         tvClient?.close()
         super.onDestroy()

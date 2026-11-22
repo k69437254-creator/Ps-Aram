@@ -240,6 +240,27 @@
                     android:textStyle="bold"
                     app:backgroundTint="@color/pslink_blue"
                     app:cornerRadius="12dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/streamScreenButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="12dp"
+                    android:text="بدء بث شاشة الهاتف إلى التلفاز"
+                    android:textAllCaps="false"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/pslink_blue"
+                    app:cornerRadius="12dp" />
+
+                <TextView
+                    android:id="@+id/screenStreamStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="اتصل بالتلفاز ثم ابدأ بث الشاشة."
+                    android:accessibilityLiveRegion="polite"
+                    android:textColor="@color/pslink_muted"
+                    android:textSize="12sp" />
+
                 <TextView
                     android:id="@+id/tvConnectionStatus"
                     android:layout_width="match_parent"

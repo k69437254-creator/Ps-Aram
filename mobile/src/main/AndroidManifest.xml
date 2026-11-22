@@ -45,6 +45,11 @@
             android:name="com.pslink.mobile.capture.VideoEditorActivity"
             android:exported="false" />
         <service
+            android:name="com.pslink.mobile.capture.TvScreenStreamService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <service
             android:name="com.pslink.mobile.capture.ScreenRecordingService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
