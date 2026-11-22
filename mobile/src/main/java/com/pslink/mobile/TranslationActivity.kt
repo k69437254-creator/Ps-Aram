@@ -131,7 +131,7 @@ class TranslationActivity : AppCompatActivity() {
                                 .putString("host", host).putString("code", code).apply()
                         }
                     }
-                } else if (!tvReconnectPending && (status.startsWith("فشل الاتصال") || status == "انقطع اتصال التلفاز")) {
+                } else if (!tvReconnectPending && (status.startsWith("فشل الاتصال") || status == "انقطع اتصال التلفاز" || status.startsWith("انتهت مهلة التحقق من رمز الاقتران"))) {
                     tvReconnectPending = true
                     tvReconnectHandler.postDelayed({
                         tvReconnectPending = false
@@ -266,6 +266,8 @@ class TranslationActivity : AppCompatActivity() {
     }
 
     private fun discoverTv() {
+        tvReconnectHandler.removeCallbacksAndMessages(null)
+        tvReconnectPending = false
         stopTvDiscovery()
         tvAutoConnectStarted = false
         val manager = getSystemService(NSD_SERVICE) as NsdManager
@@ -331,7 +333,9 @@ class TranslationActivity : AppCompatActivity() {
     }
 
     private fun connectTv(host: String, code: String) {
-        // Prevent NSD discovery from starting a competing automatic connection.
+        // Prevent stale reconnect timers and NSD discovery from replacing this connection.
+        tvReconnectHandler.removeCallbacksAndMessages(null)
+        tvReconnectPending = false
         stopTvDiscovery()
         tvAutoConnectStarted = true
         binding.tvHostInput.setText(host)

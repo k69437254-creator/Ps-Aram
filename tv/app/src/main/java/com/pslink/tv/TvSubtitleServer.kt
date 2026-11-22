@@ -15,6 +15,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
 
 data class TvCaptionLine(val text: String, val left: Float, val top: Float, val right: Float, val bottom: Float)
 data class TvCaptionFrame(val timestampNs: Long, val lines: List<TvCaptionLine>)
@@ -33,6 +36,7 @@ class TvSubtitleServer(
     private val onMediaStop: () -> Unit
 ) {
     private var engine: ApplicationEngine? = null
+    private val activeSession = AtomicReference<Job?>(null)
     private val mutableLatestPacket = MutableStateFlow<SubtitlePacket?>(null)
     val latestPacket: StateFlow<SubtitlePacket?> = mutableLatestPacket.asStateFlow()
     private val mutableCaptions = MutableStateFlow<TvCaptionFrame?>(null)
@@ -87,8 +91,15 @@ class TvSubtitleServer(
                         rejectPairing("INVALID_PAIRING_CODE", "رمز الاقتران غير صحيح أو لا يخص هذا التلفاز")
                         return@webSocket
                     }
-                    send(Frame.Text(JSONObject().put("v", PsLinkProtocol.VERSION).put("kind", PsLinkProtocol.KIND_READY).toString()))
+                    val sessionJob = coroutineContext[Job]
+                        ?: throw IllegalStateException("Authenticated WebSocket session has no Job")
+                    val previousSession = activeSession.getAndSet(sessionJob)
+                    if (previousSession != null && previousSession !== sessionJob) {
+                        // The new authenticated session replaces the old one.
+                        previousSession.cancel()
+                    }
                     try {
+                        send(Frame.Text(JSONObject().put("v", PsLinkProtocol.VERSION).put("kind", PsLinkProtocol.KIND_READY).toString()))
                         for (frame in incoming) {
                             when (frame) {
                                 is Frame.Binary -> {
@@ -111,8 +122,10 @@ class TvSubtitleServer(
                             }
                         }
                     } finally {
-                        mutableCaptions.value = TvCaptionFrame(0L, emptyList())
-                        onMediaStop()
+                        if (activeSession.compareAndSet(sessionJob, null)) {
+                            mutableCaptions.value = TvCaptionFrame(0L, emptyList())
+                            onMediaStop()
+                        }
                     }
                 }
             }
