@@ -1,0 +1,27 @@
+name: PS Link TV web receiver protocol
+
+on:
+push:
+branches: ['feature/multiplatform-tv-foundation']
+paths:
+- 'receivers/web/'
+- '.github/workflows/tv-web-receiver.yml'
+pull_request:
+paths:
+- 'receivers/web/'
+- '.github/workflows/tv-web-receiver.yml'
+workflow_dispatch:
+
+permissions:
+contents: read
+
+jobs:
+protocol-tests:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+- uses: actions/setup-node@v4
+with:
+node-version: '22'
+- name: Run browser receiver protocol tests
+run: node receivers/web/tests/protocol.test.js
