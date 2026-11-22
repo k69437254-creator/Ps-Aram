@@ -1,0 +1,47 @@
+name: PS Link Tizen and webOS receiver checks
+
+on:
+  push:
+    branches:
+      - feature/multiplatform-tv-foundation
+    paths:
+      - 'receivers/tizen/**'
+      - 'receivers/webos/**'
+      - 'receivers/platform-tests/**'
+      - 'receivers/web/pslink-client.js'
+      - '.github/workflows/tv-native-web-receivers.yml'
+
+  pull_request:
+    paths:
+      - 'receivers/tizen/**'
+      - 'receivers/webos/**'
+      - 'receivers/platform-tests/**'
+      - 'receivers/web/pslink-client.js'
+      - '.github/workflows/tv-native-web-receivers.yml'
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  receiver-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check receivers/tizen/app.js
+          node --check receivers/webos/app.js
+          node --check receivers/platform-tests/platform-app.test.js
+
+      - name: Run shared protocol tests
+        run: node receivers/web/tests/protocol.test.js
+
+      - name: Run Tizen and webOS package smoke tests
+        run: node receivers/platform-tests/platform-app.test.js

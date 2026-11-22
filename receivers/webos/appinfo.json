@@ -1,0 +1,10 @@
+{
+  "id": "com.pslink.tvreceiver",
+  "version": "1.0.0",
+  "vendor": "PS Link",
+  "type": "web",
+  "main": "index.html",
+  "title": "PS Link TV",
+  "resolution": "1920x1080",
+  "transparent": false
+}

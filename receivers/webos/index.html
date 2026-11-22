@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="color-scheme" content="dark">
+<title>PS Link TV</title>
+<link rel="stylesheet" href="app.css">
+<script src="pslink-client.js"></script>
+<script defer src="app.js"></script>
+</head>
+<body>
+<main class="shell">
+<header class="header">
+  <div class="brand-mark">PS</div>
+  <div>
+    <p class="eyebrow">PLAYSTATION LINK</p>
+    <h1>PS Link TV</h1>
+  </div>
+</header>
+
+<section class="pair-card">
+  <h2>ربط التلفاز</h2>
+  <p class="muted">تأكد من اتصال الهاتف والتلفاز بالشبكة نفسها، ثم أدخل بيانات الاتصال.</p>
+
+  <form id="pairing-form">
+    <label for="host">عنوان IP للهاتف</label>
+    <input id="host" name="host" type="text"
+      inputmode="decimal" autocomplete="off"
+      placeholder="192.168.1.20" required>
+
+    <label for="code">رمز الاقتران</label>
+    <input id="code" name="code" type="text"
+      inputmode="numeric" maxlength="20"
+      autocomplete="off" placeholder="000000" required>
+
+    <button id="connect" type="submit">اتصال</button>
+  </form>
+
+  <button id="disconnect" class="secondary" type="button" disabled>
+    قطع الاتصال
+  </button>
+
+  <p id="status" data-state="info" role="status" aria-live="polite">
+    بانتظار إدخال بيانات الاقتران
+  </p>
+</section>
+
+<section class="subtitle-card" aria-live="polite">
+  <p class="eyebrow">LIVE SUBTITLES</p>
+
+  <div id="subtitle" hidden>
+    <h2 id="game">PS Link</h2>
+    <p id="source" class="source"></p>
+    <p id="translation" class="translation"></p>
+  </div>
+
+  <p id="empty-subtitle" class="muted">
+    ستظهر الترجمة هنا عند وصولها من الهاتف.
+  </p>
+
+  <div id="captions" class="captions"></div>
+
+  <p id="media-notice" class="notice" hidden>
+    وصلت حزم وسائط. عرض الفيديو والصوت غير مفعّل في إصدار webOS الحالي.
+  </p>
+</section>
+
+<footer>PS Link — TV receiver preview</footer>
+</main>
+</body>
+</html>
