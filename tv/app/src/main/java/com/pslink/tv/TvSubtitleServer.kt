@@ -43,23 +43,43 @@ class TvSubtitleServer(
             install(WebSockets)
             routing {
                 webSocket(PsLinkProtocol.PATH) {
-                    val authFrame = withTimeoutOrNull(6_000L) { incoming.receive() }
-                    if (authFrame !is Frame.Text) {
-                        close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Pairing required"))
-                        return@webSocket
-                    }
-                    val auth = runCatching { JSONObject(authFrame.readText()) }.getOrNull()
-                    val accepted = auth != null &&
-                        auth.optInt("v", -1) == PsLinkProtocol.VERSION &&
-                        auth.optString("kind") == PsLinkProtocol.KIND_AUTH &&
-                        PairingCode.normalize(auth.optString("code")) == PairingCode.normalize(pairingCode)
-                    if (!accepted) {
+                    suspend fun rejectPairing(errorCode: String, message: String) {
                         send(Frame.Text(JSONObject()
                             .put("v", PsLinkProtocol.VERSION)
                             .put("kind", "error")
-                            .put("message", "رمز الاقتران غير صحيح أو لا يخص هذا التلفاز")
+                            .put("errorCode", errorCode)
+                            .put("message", message)
                             .toString()))
-                        close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid pairing code"))
+                        close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, errorCode))
+                    }
+
+                    val authFrame = withTimeoutOrNull(6_000L) { incoming.receive() }
+                    if (authFrame == null) {
+                        rejectPairing("AUTH_TIMEOUT", "انتهت مهلة إدخال رمز الاقتران؛ أعد المحاولة")
+                        return@webSocket
+                    }
+                    if (authFrame !is Frame.Text) {
+                        rejectPairing("INVALID_AUTH_FRAME", "طلب الاقتران غير صالح؛ أعد الاتصال من تطبيق الهاتف")
+                        return@webSocket
+                    }
+
+                    val auth = runCatching { JSONObject(authFrame.readText()) }.getOrNull()
+                    if (auth == null) {
+                        rejectPairing("INVALID_AUTH_JSON", "تعذر قراءة بيانات الاقتران؛ حدّث التطبيق ثم أعد المحاولة")
+                        return@webSocket
+                    }
+                    if (auth.optInt("v", -1) != PsLinkProtocol.VERSION) {
+                        rejectPairing("PROTOCOL_MISMATCH", "إصدار بروتوكول الهاتف والتلفاز غير متوافق؛ حدّث التطبيقين")
+                        return@webSocket
+                    }
+                    if (auth.optString("kind") != PsLinkProtocol.KIND_AUTH) {
+                        rejectPairing("INVALID_AUTH_REQUEST", "نوع طلب الاقتران غير صالح؛ أعد الاتصال")
+                        return@webSocket
+                    }
+                    val suppliedCode = PairingCode.normalize(auth.optString("code"))
+                    val expectedCode = PairingCode.normalize(pairingCode)
+                    if (suppliedCode == null || expectedCode == null || suppliedCode != expectedCode) {
+                        rejectPairing("INVALID_PAIRING_CODE", "رمز الاقتران غير صحيح أو لا يخص هذا التلفاز")
                         return@webSocket
                     }
                     send(Frame.Text(JSONObject().put("v", PsLinkProtocol.VERSION).put("kind", PsLinkProtocol.KIND_READY).toString()))

@@ -107,10 +107,17 @@ class TranslationActivity : AppCompatActivity() {
                         .edit()
                         .remove("code")
                         .apply()
+                    // Remove the rejected credential from the visible form as well.
+                    binding.tvPairCodeInput.text?.clear()
 
                     tvReconnectPending = false
                     tvReconnectHandler.removeCallbacksAndMessages(null)
                     tvAutoConnectStarted = false
+                    // Restart discovery so a fresh code can be entered without
+                    // leaving and reopening this screen.
+                    tvReconnectHandler.postDelayed({
+                        if (!isFinishing && !isDestroyed) discoverTv()
+                    }, 1_000L)
                 }
 
                 if (connected) {
@@ -284,6 +291,7 @@ class TranslationActivity : AppCompatActivity() {
                     override fun onServiceResolved(resolved: NsdServiceInfo) {
                         val host = resolved.host?.hostAddress
                         runOnUiThread {
+                            if (isFinishing || isDestroyed) return@runOnUiThread
                             if (host.isNullOrBlank()) {
                                 tvAutoConnectStarted = false
                                 binding.tvConnectionStatus.text = "عُثر على التلفاز دون عنوان شبكة صالح."
@@ -323,6 +331,9 @@ class TranslationActivity : AppCompatActivity() {
     }
 
     private fun connectTv(host: String, code: String) {
+        // Prevent NSD discovery from starting a competing automatic connection.
+        stopTvDiscovery()
+        tvAutoConnectStarted = true
         binding.tvHostInput.setText(host)
         binding.tvPairCodeInput.setText(code)
         tvClient?.connect(host, code)

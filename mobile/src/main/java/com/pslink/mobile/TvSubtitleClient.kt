@@ -131,11 +131,13 @@ class TvSubtitleClient(
                 mediaReady = false
                 pendingMessageIds.clear()
                 mediaQueue.clear()
-                onStatus(
-                    terminalStatus ?: "فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}",
-                    false
-                )
+                val finalStatus = terminalStatus
                 terminalStatus = null
+                // An authentication error was already reported from onMessage.
+                // Do not replace it with a generic socket failure.
+                if (finalStatus == null) {
+                    onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
+                }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -145,8 +147,10 @@ class TvSubtitleClient(
                 mediaReady = false
                 pendingMessageIds.clear()
                 mediaQueue.clear()
-                onStatus(terminalStatus ?: "انقطع اتصال التلفاز", false)
+                val finalStatus = terminalStatus
                 terminalStatus = null
+                // Avoid a second misleading disconnect after pairing rejection.
+                if (finalStatus == null) onStatus("انقطع اتصال التلفاز", false)
             }
         })
     }
