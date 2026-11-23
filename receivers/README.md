@@ -80,3 +80,39 @@ and tested on physical devices.
 
 Xbox Edge production hosting requires secure WebSocket/HTTP delivery through
 a trusted reverse proxy if the receiver page is served over HTTPS.
+
+<!-- PSLINK_PLATFORM_COMPLETION_DOCS_V1 -->
+## Platform status and receiver limitations
+
+The receiver implementations have different levels of completion.
+A source implementation or successful pairing handshake does not prove
+complete platform compatibility or physical-device validation.
+
+| Platform | Current implementation | Remaining validation |
+|---|---|---|
+| Android TV | Native Android receiver | Build and physical-device media tests |
+| Google TV | Android TV compatibility target | Physical-device compatibility |
+| Amazon Fire TV | Android APK compatibility target | Fire OS device validation |
+| Samsung Tizen | Web app with AVPlay HLS adapter | Packaging, signing and device tests |
+| LG webOS | Web app with HTML5 HLS adapter | Packaging, signing and device tests |
+| Roku | SceneGraph/BrightScript receiver | Packaging, installation and device tests |
+| Xbox Edge | Browser-based receiver | Trusted HTTPS/WSS hosting and Xbox Edge tests |
+
+### Phone transport
+
+The phone receiver exposes protocol v2 WebSocket at `/subtitle` on port
+`8765`. The current Roku implementation uses its HTTP polling path for
+subtitles rather than the browser WebSocket client.
+
+### Media limitations
+
+The current phone HLS publisher carries H.264 video. It does not establish
+complete captured game audio or verified audio/video synchronization.
+
+Tizen and webOS caption panels display text; they are not calibrated
+geometric overlays on the video. Roku's current HLS path is video-only.
+Xbox Edge is a browser receiver, not a native Xbox application.
+
+Physical-device validation must be recorded separately from automated
+source tests.
+<!-- /PSLINK_PLATFORM_COMPLETION_DOCS_V1 -->

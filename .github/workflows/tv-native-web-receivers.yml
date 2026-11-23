@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - feature/multiplatform-tv-foundation
+      - feature/platform-completion-pack
     paths:
       - 'receivers/tizen/**'
       - 'receivers/webos/**'
+      - 'receivers/xbox-edge/**'
       - 'receivers/platform-tests/**'
       - 'receivers/web/pslink-client.js'
       - '.github/workflows/tv-native-web-receivers.yml'
@@ -15,6 +17,7 @@ on:
     paths:
       - 'receivers/tizen/**'
       - 'receivers/webos/**'
+      - 'receivers/xbox-edge/**'
       - 'receivers/platform-tests/**'
       - 'receivers/web/pslink-client.js'
       - '.github/workflows/tv-native-web-receivers.yml'
@@ -41,9 +44,17 @@ jobs:
           node --check receivers/webos/app.js
           node --check receivers/webos/media-player.js
           node --check receivers/platform-tests/platform-app.test.js
+          node --check receivers/xbox-edge/pslink-client.js
+          node --check receivers/xbox-edge/tests/receiver.test.js
+
+      - name: Validate receiver JSON and XML resources
+        run: python3 scripts/validate_platform_resources.py
 
       - name: Run shared protocol tests
         run: node receivers/web/tests/protocol.test.js
 
       - name: Run Tizen and webOS package smoke tests
         run: node receivers/platform-tests/platform-app.test.js
+
+      - name: Run Xbox Edge receiver tests
+        run: node receivers/xbox-edge/tests/receiver.test.js

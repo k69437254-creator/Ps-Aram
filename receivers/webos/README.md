@@ -25,3 +25,29 @@ support only, not complete game streaming support.
 This receiver includes a native HLS playback adapter and accepts a protocol v2 `stream_url` message from the paired phone.
 
 Tizen uses Samsung AVPlay. webOS uses HTML5 video playback. The phone-side HLS publisher and real-device playback validation remain separate required integration steps.
+
+<!-- PSLINK_WEBOS_DOCS_V1 -->
+# PS Link LG webOS receiver
+
+## Implementation
+
+The webOS receiver uses HTML5 video for HLS playback and the PS Link
+protocol client for subtitle communication.
+
+The caption interface currently displays translated text in a text panel.
+It is not a calibrated geometric overlay synchronized to video coordinates.
+
+## Media limitations
+
+The current phone HLS stream provides H.264 video only. Complete captured
+game audio and verified audio/video synchronization are not established.
+
+## Packaging and device validation
+
+IPK packaging, signing, installation and physical LG TV testing remain
+separate validation tasks. Do not treat source-level checks as proof that
+a signed application works on a television.
+
+Validate pairing, reconnection, subtitle delivery, HLS playback and
+long-session stability on actual supported webOS hardware.
+<!-- /PSLINK_WEBOS_DOCS_V1 -->

@@ -13,8 +13,10 @@
     <p id="status">أدخل عنوان IP الهاتف ورمز الاقتران</p>
 
     <form id="pairing-form">
-      <label for="host">عنوان IP الهاتف</label>
-      <input id="host" required autocomplete="off" placeholder="192.168.1.10">
+      <label for="host">عنوان IP الهاتف أو نطاق وكيل WSS</label>
+      <input id="host" required autocomplete="off" placeholder="192.168.1.10 أو tv.example.com">
+      <!-- PSLINK_XBOX_WSS_HELP_V1 -->
+      <p>عند فتح الصفحة عبر HTTPS استخدم نطاق وكيل WSS بشهادة موثوقة.</p>
 
       <label for="code">رمز الاقتران</label>
       <input id="code" required inputmode="numeric" maxlength="12">

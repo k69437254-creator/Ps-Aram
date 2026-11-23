@@ -22,6 +22,82 @@
     return /^[0-9]{6}$/.test(digits) ? digits : null;
   }
 
+  // PSLINK_XBOX_SECURE_ENDPOINT_V1
+  // HTTPS pages must use WSS. Local HTTP pages may use WS.
+  function resolveSocketUrl(value, pageLocation) {
+    var input = String(value || "").trim();
+    if (!input) throw new Error("عنوان الهاتف أو نطاق الاتصال مطلوب");
+
+    var loc = pageLocation ||
+      (typeof location !== "undefined" ? location : null);
+
+    var securePage = !!(loc && loc.protocol === "https:");
+
+    if (/^wss?:\/\//i.test(input)) {
+      var explicit;
+      try {
+        explicit = new URL(input);
+      } catch (error) {
+        throw new Error("عنوان WebSocket غير صالح");
+      }
+
+      if (explicit.protocol !== "ws:" &&
+          explicit.protocol !== "wss:") {
+        throw new Error("بروتوكول WebSocket غير صالح");
+      }
+
+      if (explicit.username || explicit.password ||
+          explicit.search || explicit.hash ||
+          explicit.pathname !== PATH) {
+        throw new Error("عنوان WebSocket يجب أن ينتهي بالمسار /subtitle");
+      }
+
+      if (securePage && explicit.protocol !== "wss:") {
+        throw new Error("صفحة HTTPS تتطلب اتصال WSS آمنًا");
+      }
+
+      return explicit.href;
+    }
+
+    if (/[\s/?#@]/.test(input)) {
+      throw new Error("أدخل اسم المضيف أو عنوان IP فقط");
+    }
+
+    return (securePage ? "wss://" : "ws://") +
+      input +
+      (securePage ? "" : ":" + PORT) +
+      PATH;
+  }
+
+  function normalizeStreamUrl(value, pageLocation) {
+    var input = String(value || "").trim();
+    var loc = pageLocation ||
+      (typeof location !== "undefined" ? location : null);
+
+    var parsed;
+    try {
+      parsed = new URL(input);
+    } catch (error) {
+      return null;
+    }
+
+    if (parsed.protocol !== "http:" &&
+        parsed.protocol !== "https:") {
+      return null;
+    }
+
+    if (loc && loc.protocol === "https:" &&
+        parsed.protocol === "http:") {
+      if (parsed.pathname.indexOf("/hls/") !== 0) {
+        return null;
+      }
+
+      return loc.origin + parsed.pathname + parsed.search;
+    }
+
+    return parsed.href;
+  }
+
   function parseMediaPacket(input) {
     var bytes = input instanceof ArrayBuffer
       ? new Uint8Array(input)
@@ -120,7 +196,7 @@
     var self = this;
     var socket;
     try {
-      socket = new WebSocket("ws://" + this.host + ":" + PORT + PATH);
+      socket = new WebSocket(this.socketUrl);
     } catch (error) {
       this._emit("onStatus", "تعذر فتح الاتصال؛ ستتم إعادة المحاولة.");
       this._scheduleReconnect();
@@ -189,11 +265,17 @@
         } catch (ignore) {}
 
       } else if (message.kind === "stream_url") {
-        var streamUrl = String(message.url || "");
-        if (/^https?:\/\/[^\s]+$/i.test(streamUrl)) {
+        var streamUrl = normalizeStreamUrl(
+          message.url,
+          typeof location !== "undefined" ? location : null
+        );
+
+        if (streamUrl) {
           self._emit("onStreamUrl", { url: streamUrl });
         } else {
-          self._emit("onError", { message: "عنوان بث HLS الذي أرسله الهاتف غير صالح." });
+          self._emit("onError", {
+            message: "عنوان بث HLS غير صالح أو غير آمن لهذه الصفحة."
+          });
         }
 
       } else if (message.kind === "captions") {
@@ -217,13 +299,17 @@
   PsLinkReceiver.prototype.connect = function (host, code) {
     var normalized = normalizePairingCode(code);
     if (!normalized) throw new Error("رمز الاقتران يجب أن يتكون من 6 أرقام");
-    host = String(host || "").trim().replace(/^wss?:\/\//i, "").replace(/\/$/, "");
-    if (!host || /[\s/]/.test(host)) throw new Error("عنوان الهاتف غير صالح");
+    host = String(host || "").trim();
+    var socketUrl = resolveSocketUrl(
+      host,
+      typeof location !== "undefined" ? location : null
+    );
 
     this.disconnect();
     this.closedByUser = false;
     this.authRejected = false;
     this.host = host;
+    this.socketUrl = socketUrl;
     this.code = normalized;
     this.reconnectDelay = 1000;
     this._openSocket();
@@ -274,6 +360,8 @@
 
   PsLinkReceiver.parseMediaPacket = parseMediaPacket;
   PsLinkReceiver.normalizePairingCode = normalizePairingCode;
+  PsLinkReceiver.resolveSocketUrl = resolveSocketUrl;
+  PsLinkReceiver.normalizeStreamUrl = normalizeStreamUrl;
   PsLinkReceiver.PROTOCOL_VERSION = PROTOCOL_VERSION;
 
   if (typeof module !== "undefined" && module.exports) {

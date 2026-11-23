@@ -90,6 +90,12 @@
     this.closedByUser = false;
     this.ready = false;
     this.lastConfig = null;
+    this.host = "";
+    this.code = "";
+    this.authRejected = false;
+    this.reconnectTimer = null;
+    this.reconnectDelay = 1000;
+    this.maxReconnectDelay = 30000;
   }
 
   PsLinkReceiver.prototype._emit = function (name, value) {
@@ -97,47 +103,50 @@
     if (typeof callback === "function") callback(value);
   };
 
-  PsLinkReceiver.prototype.connect = function (host, code) {
-    var normalized = normalizePairingCode(code);
-
-    if (!normalized) {
-      throw new Error("رمز الاقتران يجب أن يتكون من 6 أرقام");
-    }
-
-    host = String(host || "")
-      .trim()
-      .replace(/^wss?:\/\//i, "")
-      .replace(/\/$/, "");
-
-    if (!host || /[\s/]/.test(host)) {
-      throw new Error("عنوان التلفاز غير صالح");
-    }
-
-    this.disconnect();
-    this.closedByUser = false;
-
+  PsLinkReceiver.prototype._scheduleReconnect = function () {
+    if (this.closedByUser || this.authRejected || this.reconnectTimer || !this.host || !this.code) return;
     var self = this;
-    var socket = new WebSocket("ws://" + host + ":" + PORT + PATH);
+    var delay = this.reconnectDelay;
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
+    this._emit("onStatus", "انقطع اتصال الشبكة؛ ستتم إعادة المحاولة تلقائيًا.");
+    this.reconnectTimer = setTimeout(function () {
+      self.reconnectTimer = null;
+      self._openSocket();
+    }, delay);
+  };
+
+  PsLinkReceiver.prototype._openSocket = function () {
+    if (this.closedByUser || this.authRejected || !this.host || !this.code) return;
+    var self = this;
+    var socket;
+    try {
+      socket = new WebSocket("ws://" + this.host + ":" + PORT + PATH);
+    } catch (error) {
+      this._emit("onStatus", "تعذر فتح الاتصال؛ ستتم إعادة المحاولة.");
+      this._scheduleReconnect();
+      return;
+    }
 
     this.socket = socket;
     socket.binaryType = "arraybuffer";
 
     socket.onopen = function () {
-      if (self.socket !== socket) return;
-
-      socket.send(JSON.stringify({
-        v: PROTOCOL_VERSION,
-        kind: "auth",
-        code: normalized,
-        client: "PS Link TV Web"
-      }));
-
-      self._emit("onStatus", "تم الاتصال؛ جارٍ التحقق من رمز الاقتران");
+      if (self.socket !== socket || self.closedByUser) return;
+      try {
+        socket.send(JSON.stringify({
+          v: PROTOCOL_VERSION,
+          kind: "auth",
+          code: self.code,
+          client: "PS Link TV Web"
+        }));
+        self._emit("onStatus", "تم الاتصال؛ جارٍ التحقق من رمز الاقتران.");
+      } catch (error) {
+        try { socket.close(); } catch (ignore) {}
+      }
     };
 
     socket.onmessage = function (event) {
       if (self.socket !== socket) return;
-
       if (typeof event.data !== "string") {
         var media = parseMediaPacket(event.data);
         if (media) self._emit("onMediaPacket", media);
@@ -145,32 +154,29 @@
       }
 
       var message;
-      try {
-        message = JSON.parse(event.data);
-      } catch (ignore) {
-        return;
-      }
-
+      try { message = JSON.parse(event.data); } catch (ignore) { return; }
       if (message.v !== PROTOCOL_VERSION) return;
 
       if (message.kind === "ready") {
         self.ready = true;
-
-        if (self.lastConfig) {
-          socket.send(self.lastConfig);
+        self.authRejected = false;
+        self.reconnectDelay = 1000;
+        if (self.lastConfig && socket.readyState === 1) {
+          try { socket.send(self.lastConfig); } catch (ignore) {}
         }
-
         self._emit("onReady", true);
-        self._emit("onStatus", "تم اقتران التلفاز؛ استقبال الترجمة جاهز");
+        self._emit("onStatus", "تم الاقتران؛ استقبال التلفاز جاهز.");
 
       } else if (message.kind === "error") {
         self.ready = false;
+        self.authRejected = true;
+        self._emit("onReady", false);
         self._emit("onError", message);
-        self._emit("onStatus", message.message || "رفض التلفاز الاقتران");
+        self._emit("onStatus", message.message || "رفض الهاتف الاقتران؛ تحقق من الرمز.");
+        try { socket.close(1008, "Pairing rejected"); } catch (ignore) {}
 
       } else if (message.kind === "subtitle") {
         if (typeof message.id !== "string" || !message.id) return;
-
         self._emit("onSubtitle", {
           id: message.id,
           game: String(message.game || "").slice(0, 100),
@@ -178,21 +184,16 @@
           translation: String(message.translation || "").slice(0, 4000),
           timestamp: Number(message.timestamp) || 0
         });
-
-        socket.send(JSON.stringify({
-          v: PROTOCOL_VERSION,
-          kind: "ack",
-          id: message.id
-        }));
+        try {
+          socket.send(JSON.stringify({ v: PROTOCOL_VERSION, kind: "ack", id: message.id }));
+        } catch (ignore) {}
 
       } else if (message.kind === "stream_url") {
         var streamUrl = String(message.url || "");
         if (/^https?:\/\/[^\s]+$/i.test(streamUrl)) {
           self._emit("onStreamUrl", { url: streamUrl });
         } else {
-          self._emit("onError", {
-            message: "عنوان بث الوسائط الذي أرسله الهاتف غير صالح"
-          });
+          self._emit("onError", { message: "عنوان بث HLS الذي أرسله الهاتف غير صالح." });
         }
 
       } else if (message.kind === "captions") {
@@ -201,22 +202,31 @@
     };
 
     socket.onerror = function () {
-      if (self.socket === socket) {
-        self._emit("onStatus", "حدث خطأ في اتصال التلفاز");
-      }
+      if (self.socket === socket) self._emit("onStatus", "حدث خطأ في اتصال الشبكة.");
     };
 
     socket.onclose = function () {
       if (self.socket !== socket) return;
-
       self.socket = null;
       self.ready = false;
       self._emit("onReady", false);
-
-      if (!self.closedByUser) {
-        self._emit("onStatus", "انقطع اتصال التلفاز");
-      }
+      if (!self.closedByUser && !self.authRejected) self._scheduleReconnect();
     };
+  };
+
+  PsLinkReceiver.prototype.connect = function (host, code) {
+    var normalized = normalizePairingCode(code);
+    if (!normalized) throw new Error("رمز الاقتران يجب أن يتكون من 6 أرقام");
+    host = String(host || "").trim().replace(/^wss?:\/\//i, "").replace(/\/$/, "");
+    if (!host || /[\s/]/.test(host)) throw new Error("عنوان الهاتف غير صالح");
+
+    this.disconnect();
+    this.closedByUser = false;
+    this.authRejected = false;
+    this.host = host;
+    this.code = normalized;
+    this.reconnectDelay = 1000;
+    this._openSocket();
   };
 
   PsLinkReceiver.prototype.configureMedia = function (
@@ -246,17 +256,19 @@
   PsLinkReceiver.prototype.disconnect = function () {
     this.closedByUser = true;
     this.ready = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     var old = this.socket;
     this.socket = null;
-
     if (old) {
       old.onclose = null;
-      try {
-        old.close(1000, "User disconnected");
-      } catch (ignore) {}
+      old.onmessage = null;
+      old.onerror = null;
+      try { old.close(1000, "User disconnected"); } catch (ignore) {}
     }
-
     this._emit("onReady", false);
   };
 

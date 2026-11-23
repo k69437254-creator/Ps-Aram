@@ -1,0 +1,13 @@
+# PSLINK_XBOX_CADDY_TEMPLATE_V1
+# PS Link Xbox Edge secure reverse proxy.
+# Use a real domain and a phone LAN address.
+# Caddy must use a certificate trusted by Xbox Edge.
+# Never expose phone port 8765 directly to the public internet.
+
+{$PSLINK_DOMAIN} {
+    @pslink_websocket path /subtitle
+    reverse_proxy @pslink_websocket {$PSLINK_PHONE_HOST}:8765
+
+    @pslink_hls path /hls/*
+    reverse_proxy @pslink_hls {$PSLINK_PHONE_HOST}:8765
+}

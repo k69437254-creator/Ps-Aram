@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - feature/multiplatform-tv-foundation
+      - feature/platform-completion-pack
     paths:
       - 'receivers/web/**'
+      - 'receivers/xbox-edge/**'
       - '.github/workflows/tv-web-receiver.yml'
 
   pull_request:
     paths:
       - 'receivers/web/**'
+      - 'receivers/xbox-edge/**'
       - '.github/workflows/tv-web-receiver.yml'
 
   workflow_dispatch:
