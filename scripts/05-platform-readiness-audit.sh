@@ -56,3 +56,4 @@ for t in java gradle ffmpeg ffprobe node python3; do command -v "$t" >/dev/null 
 [[ -x ./gradlew ]] && record PASS gradle-wrapper executable || { [[ -f ./gradlew ]] && record WARN gradle-wrapper 'exists but is not executable' || record WARN gradle-wrapper 'not found'; }
 { echo; echo '## Summary'; echo "- PASS: $PASS"; echo "- WARN: $WARN"; echo "- BLOCKER: $BLOCK"; } >> "$OUT"
 echo "REPORT=$OUT"; echo "PASS=$PASS WARN=$WARN BLOCKER=$BLOCK"
+[[ "$BLOCK" -eq 0 ]] || exit 2

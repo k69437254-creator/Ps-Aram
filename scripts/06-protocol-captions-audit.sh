@@ -23,3 +23,4 @@ else record WARN spatial-caption-tests 'test file missing'; fi
 if [[ -f receivers/tizen/tests/receiver.test.js && -f receivers/webos/tests/receiver.test.js ]] && cmp -s receivers/tizen/tests/receiver.test.js receivers/webos/tests/receiver.test.js; then record WARN independent-platform-tests 'Tizen and webOS receiver tests are identical; copied tests are not independent validation'; fi
 { echo; echo '## Summary'; echo "- PASS: $PASS"; echo "- WARN: $WARN"; echo "- BLOCKER: $BLOCK"; } >> "$OUT"
 echo "REPORT=$OUT"; echo "PASS=$PASS WARN=$WARN BLOCKER=$BLOCK"
+[[ "$BLOCK" -eq 0 ]] || exit 2

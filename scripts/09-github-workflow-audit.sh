@@ -20,3 +20,4 @@ for f in android.yml tv-native-web-receivers.yml tv-web-receiver.yml; do [[ -f "
 if rg -n 'ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY' "$WF" >/dev/null 2>&1; then record BLOCKER obvious-secret-pattern 'possible token/private key pattern found; inspect immediately'; else record PASS obvious-secret-pattern 'no obvious token/private-key pattern found; not a full secret scan'; fi
 { echo; echo '## Reminder'; echo '- Verify actual workflow run status, uploaded APK/package files, retention and downloadable artifact links after push.'; echo '- Do not expose tokens in workflow logs or committed files.'; echo; echo '## Summary'; echo "- PASS: $PASS"; echo "- WARN: $WARN"; echo "- BLOCKER: $BLOCK"; } >> "$OUT"
 echo "REPORT=$OUT"; echo "PASS=$PASS WARN=$WARN BLOCKER=$BLOCK"
+[[ "$BLOCK" -eq 0 ]] || exit 2

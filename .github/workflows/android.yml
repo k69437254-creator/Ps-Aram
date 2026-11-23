@@ -70,7 +70,7 @@ jobs:
       - name: Run PS Link controller regression tests
         run: bash ./gradlew --no-daemon --stacktrace :mobile:testDebugUnitTest
 
-      - name: Verify HLS MPEG-TS with ffprobe and ffmpeg decoder
+      - name: Verify HLS MPEG-TS H.264 video fixture (audio not covered)
         run: bash scripts/verify-hls-ts.sh
 
       - name: Build PS Link Mobile APK

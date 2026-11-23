@@ -34,23 +34,51 @@
     document.getElementById("empty-subtitle").hidden = true;
   }
 
+  /* PSLINK_SPATIAL_CAPTIONS_INTEGRATION_V2 */
   function showCaptions(message) {
-    var lines = Array.isArray(message.lines) ? message.lines : [];
-    captionsNode.textContent = "";
+    var target = document.getElementById("game-video") ||
+      document.getElementById("video-stage");
+    var spatialRendered = false;
 
-    lines.slice(0, 8).forEach(function (line) {
-      var row = document.createElement("div");
-      row.className = "caption-line";
-      row.textContent = typeof line === "string"
-        ? line
-        : String(line.text || line.translation || line.source || "");
-      captionsNode.appendChild(row);
-    });
+    if (window.PSLinkSpatialCaptions) {
+      try {
+        if (target) {
+          spatialRendered =
+            window.PSLinkSpatialCaptions.render(message, target) === true;
+        } else {
+          window.PSLinkSpatialCaptions.clear();
+        }
+      } catch (error) {
+        try {
+          window.PSLinkSpatialCaptions.clear();
+        } catch (ignore) {}
+        spatialRendered = false;
+      }
+    }
+
+    if (spatialRendered) {
+      captionsNode.textContent = "";
+      return;
+    }
+
+    if (window.PSLinkSpatialCaptions) {
+      window.PSLinkSpatialCaptions.clear();
+    }
+
+    var lines = message && Array.isArray(message.lines)
+      ? message.lines : [];
+
+    captionsNode.textContent = lines.slice(0, 3).map(function (line) {
+      if (typeof line === "string") return line;
+      if (!line || typeof line !== "object") return "";
+      return String(line.text || line.translation || line.source || "");
+    }).filter(Boolean).join("\n");
   }
 
   function disconnect() {
     if (receiver) receiver.disconnect();
     if (mediaPlayer) mediaPlayer.stop();
+    if (window.PSLinkSpatialCaptions) window.PSLinkSpatialCaptions.clear();
     streamUrlReceived = false;
     mediaNotice.hidden = true;
     receiver = null;

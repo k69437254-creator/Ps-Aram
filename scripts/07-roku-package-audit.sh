@@ -18,3 +18,4 @@ if command -v node >/dev/null 2>&1; then while IFS= read -r -d '' f; do node --c
  echo; echo '## Not verified'; echo '- Channel packaging/signing: NOT VERIFIED'; echo '- Developer-mode install and physical playback: NOT VERIFIED'; echo '- H.264 + AAC HLS playback: see script 08'; echo '- Remote control, reconnect and subtitle rendering on Roku: NOT VERIFIED'; echo; echo '## File inventory'; find "$R" -maxdepth 4 -type f -print 2>/dev/null | sort | sed 's#^#- `#;s#$#`#' || true; echo; echo '## Summary'; echo "- PASS: $PASS"; echo "- WARN: $WARN"; echo "- BLOCKER: $BLOCK";
 } >> "$OUT"
 echo "REPORT=$OUT"; echo "PASS=$PASS WARN=$WARN BLOCKER=$BLOCK"
+[[ "$BLOCK" -eq 0 ]] || exit 2

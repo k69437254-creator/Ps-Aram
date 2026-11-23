@@ -113,4 +113,5 @@ ffmpeg \
 
 echo
 echo "PASS: FFmpeg decoded an H.264 video frame."
-echo "PS LINK HLS MPEG-TS VERIFICATION PASSED."
+echo "NOTE: This fixture verifies H.264 video only; AAC audio and A/V sync are not tested."
+echo "PS LINK HLS MPEG-TS VIDEO-ONLY VERIFICATION PASSED."

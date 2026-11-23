@@ -51,7 +51,7 @@
 يُنفّذ البناء الموصى به عبر GitHub Actions:
 
 - افتح صفحة [GitHub Actions](https://github.com/k69437254-creator/Ps-Aram/actions).
-- اختر تشغيل `PS Link Android builds` على الفرع `feature/psn-oauth-integration`.
+- اختر تشغيل `PS Link Android builds` على الفرع `feature/platform-completion-pack`.
 - بعد نجاح جميع المراحل، نزّل الأثرين `PS-Link-Mobile-APK` و`PS-Link-TV-APK` من صفحة التشغيل نفسها.
 
 يثبت نجاح CI أن الشيفرة اجتازت الفحوصات والاختبارات الآلية المعرّفة وأن APKs بُنيت. لا يثبت تلقائيًا عمل الاتصال أو اللعب أو الصوت أو مزامنة الترجمة على كل جهاز.

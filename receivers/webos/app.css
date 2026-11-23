@@ -160,3 +160,11 @@ footer {
 .shell .subtitle-card {
   pointer-events: auto;
 }
+
+
+/* PSLINK_SPATIAL_CAPTIONS_CSS_V1 */
+.pslink-caption-box {
+  font-family: Arial, sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

@@ -3,7 +3,7 @@
 """Install the PS Link touch-input, clean stream UI, translation and recorder fixes.
 
 Run this file from the PS-Link repository root on branch
-feature/psn-oauth-integration. It does not commit, push, switch branches or delete files.
+feature/platform-completion-pack. It does not commit, push, switch branches or delete files.
 It creates timestamped backups before changing tracked project files.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Callable
 
-EXPECTED_BRANCH = "feature/psn-oauth-integration"
+EXPECTED_BRANCH = "feature/platform-completion-pack"
 INSTALL_MARKER = "PSLINK_COMPLETE_FIX_AUTORUN_V1"
 RUNTIME_MARKER = "PSLINK_COMPLETE_RUNTIME_FIX_V1"
 # PSLINK_BACKUPS_OUTSIDE_ANDROID_RES_V1

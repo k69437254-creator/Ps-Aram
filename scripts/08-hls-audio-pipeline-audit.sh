@@ -22,6 +22,15 @@ else
   grep -q '^#EXTINF:' "$p" && grep -q '^#EXT-X-TARGETDURATION:' "$p" && record PASS playlist-tags "$p has EXTINF and TARGETDURATION" || record WARN playlist-tags "$p missing expected tags"
  done
 fi
+# PSLINK_HLS_AUDIO_SOURCE_AUDIT_V2
+PUBLISHER="mobile/src/main/java/com/pslink/mobile/capture/HlsTransportStreamPublisher.kt"
+if [[ -f "$PUBLISHER" ]] && \
+   rg -qi 'writeAudioPes|writeAudioAccessUnit|audioPid|AAC.*PES|PES.*AAC|0x0F' "$PUBLISHER"; then
+    record WARN hls-aac-source "AAC-related mux markers found in $PUBLISHER; verify the actual stream with ffprobe"
+else
+    record BLOCKER hls-aac-source "The current HLS publisher has no identifiable AAC audio PES/stream mux path; the implemented publisher is video-only"
+fi
 [[ -f scripts/verify-hls-ts.sh ]] && record PASS existing-verifier 'scripts/verify-hls-ts.sh exists; not invoked because its CLI contract has not been inspected' || record WARN existing-verifier 'scripts/verify-hls-ts.sh not found'
 { echo; echo '## Not established'; echo '- Continuous A/V sync under load'; echo '- PTS monotonicity and PCR accuracy across segment boundaries'; echo '- Backpressure and long-duration playback'; echo '- Audio output on physical receiver devices'; echo; echo '## Summary'; echo "- PASS: $PASS"; echo "- WARN: $WARN"; echo "- BLOCKER: $BLOCK"; } >> "$OUT"
 echo "REPORT=$OUT"; echo "PASS=$PASS WARN=$WARN BLOCKER=$BLOCK"
+[[ "$BLOCK" -eq 0 ]] || exit 2

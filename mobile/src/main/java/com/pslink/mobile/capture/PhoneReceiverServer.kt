@@ -38,6 +38,8 @@ import org.json.JSONObject
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -52,6 +54,19 @@ class PhoneReceiverServer(
 ) {
     private val normalizedCode = requireNotNull(PairingCode.normalize(pairingCode)) {
         "Phone receiver pairing code must contain exactly six digits"
+    }
+    // Bearer token for HLS GET requests; the pairing code is never placed in media URLs.
+    private val streamToken: String = run {
+        val alphabet = "0123456789abcdef"
+        val bytes = ByteArray(24)
+        SecureRandom().nextBytes(bytes)
+        buildString(bytes.size * 2) {
+            bytes.forEach { byte ->
+                val value = byte.toInt() and 0xff
+                append(alphabet[value ushr 4])
+                append(alphabet[value and 0x0f])
+            }
+        }
     }
     private val sessions = ConcurrentHashMap.newKeySet<DefaultWebSocketServerSession>()
     private val streamAvailable = AtomicBoolean(false)
@@ -162,7 +177,11 @@ class PhoneReceiverServer(
                         )
                     }
 
-                    get("/hls/index.m3u8") {
+                    get("/hls/{token}/index.m3u8") {
+                        if (!isValidStreamToken(call.parameters["token"])) {
+                            call.respond(HttpStatusCode.NotFound)
+                            return@get
+                        }
                         val playlist = File(hlsDirectory, "index.m3u8")
                         if (!playlist.isFile) {
                             call.respond(HttpStatusCode.NotFound)
@@ -177,7 +196,11 @@ class PhoneReceiverServer(
                             )
                         }
                     }
-                    get("/hls/{name}") {
+                    get("/hls/{token}/{name}") {
+                        if (!isValidStreamToken(call.parameters["token"])) {
+                            call.respond(HttpStatusCode.NotFound)
+                            return@get
+                        }
                         val name = call.parameters["name"].orEmpty()
                         if (!name.matches(Regex("pslink-segment-[0-9]{6}\\.ts"))) {
                             call.respond(HttpStatusCode.BadRequest)
@@ -307,12 +330,20 @@ class PhoneReceiverServer(
         session.send(Frame.Text(message))
     }
 
+    private fun isValidStreamToken(candidate: String?): Boolean {
+        if (candidate == null) return false
+        return MessageDigest.isEqual(
+            candidate.toByteArray(Charsets.US_ASCII),
+            streamToken.toByteArray(Charsets.US_ASCII)
+        )
+    }
+
     private fun streamUrlMessage(): String? {
         val address = localIpv4Address() ?: return null
         return JSONObject()
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "stream_url")
-            .put("url", "http://$address:${PsLinkProtocol.PORT}/hls/index.m3u8")
+            .put("url", "http://$address:${PsLinkProtocol.PORT}/hls/$streamToken/index.m3u8")
             .toString()
     }
 
