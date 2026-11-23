@@ -85,7 +85,15 @@ android {
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
-    systemProperty("pslink.hls.test.outputDir", layout.buildDirectory.dir("hls-integration-test").get().asFile.absolutePath)
+    // PSLINK_HLS_TEST_OUTPUT_CACHE_V1
+    // Register the HLS fixture directory as a real Gradle task output.
+    // This ensures Gradle restores it together with cached test results.
+    val hlsIntegrationOutput = layout.buildDirectory.dir("hls-integration-test")
+    outputs.dir(hlsIntegrationOutput)
+    systemProperty(
+        "pslink.hls.test.outputDir",
+        hlsIntegrationOutput.get().asFile.absolutePath
+    )
 }
 
 dependencies {
