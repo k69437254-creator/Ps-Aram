@@ -106,6 +106,7 @@ class LiveGameTranslator(
     }
 
     fun stop() {
+        tvClient?.sendCaptions(emptyList(), System.nanoTime())
         enabled = false
         pause()
         recognizer?.close()

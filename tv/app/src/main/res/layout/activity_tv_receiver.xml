@@ -43,8 +43,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:gravity="center"
-            android:text="اللعبة على شاشتك، والترجمة في موضع الحوار"
-            android:fontFamily="sans-serif-medium"
+            android:text="اللعبة على شاشتك، والترجمة فوق حوارها"
             android:textColor="#F4F7FC"
             android:textSize="32sp"
             android:textStyle="bold" />
@@ -54,8 +53,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:gravity="center"
-            android:text="اربط هاتف PS Link بالتلفاز على الشبكة المحلية نفسها. يرسل الهاتف صورة اللعبة وصوتها، ويعرض هذا التطبيق الترجمة العربية فوق الحوار."
-            android:fontFamily="sans-serif"
+            android:text="اربط هاتف PS Link بالتلفاز على الشبكة المحلية نفسها. سيُرسل الهاتف صورة اللعبة وصوتها، ويعرض التلفاز العربية فوق موضع الحوار."
             android:textColor="#9AA9BD"
             android:textSize="17sp" />
 
@@ -87,7 +85,6 @@
                     android:fontFamily="monospace"
                     android:letterSpacing="0.18"
                     android:text="------"
-                    android:textDirection="ltr"
                     android:textColor="#FFFFFF"
                     android:textSize="52sp"
                     android:textStyle="bold" />
@@ -98,7 +95,6 @@
                     android:layout_marginTop="14dp"
                     android:gravity="center"
                     android:text="عنوان الشبكة سيظهر هنا"
-                    android:textDirection="ltr"
                     android:textColor="#5B9EFF"
                     android:textSize="18sp" />
                 <TextView
@@ -108,7 +104,6 @@
                     android:layout_marginTop="12dp"
                     android:gravity="center"
                     android:text="بدء خادم الاستقبال…"
-                    android:accessibilityLiveRegion="polite"
                     android:textColor="#9AA9BD"
                     android:textSize="13sp" />
             </LinearLayout>
