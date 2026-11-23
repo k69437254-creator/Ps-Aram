@@ -11,6 +11,7 @@
   var captionsNode = document.getElementById("captions");
   var mediaNotice = document.getElementById("media-notice");
   var mediaPlayer = new window.PSLinkMediaPlayer();
+  var streamUrlReceived = false;
 
   function status(message, state) {
     statusNode.textContent = message;
@@ -50,6 +51,8 @@
   function disconnect() {
     if (receiver) receiver.disconnect();
     if (mediaPlayer) mediaPlayer.stop();
+    streamUrlReceived = false;
+    mediaNotice.hidden = true;
     receiver = null;
     setConnected(false);
     status("تم فصل الاتصال", "info");
@@ -80,14 +83,17 @@
           status(String(error.message || "تعذر إتمام الاقتران"), "error");
         },
         onMediaPacket: function () {
-          mediaNotice.hidden = false;
+          // Raw transport packets are not rendered by the HTML video element.
+          if (!streamUrlReceived) mediaNotice.hidden = false;
         },
         onStreamUrl: function (stream) {
           try {
             mediaPlayer.start(stream.url);
+            streamUrlReceived = true;
             mediaNotice.hidden = true;
             status("تم استلام عنوان البث؛ جارٍ تشغيل الفيديو والصوت.", "info");
           } catch (error) {
+            streamUrlReceived = false;
             status(error.message || "تعذر تشغيل بث الوسائط", "error");
           }
         }

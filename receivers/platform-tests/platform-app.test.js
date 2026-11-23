@@ -70,6 +70,18 @@ var root = path.resolve(__dirname, "../..");
     throw new Error(name + " transport client differs from shared client");
   }
 
+  if (name === "webos" && (
+      app.indexOf("if (!streamUrlReceived)") === -1 ||
+      app.indexOf("streamUrlReceived = true;") === -1)) {
+    throw new Error("webOS HLS state regression detected");
+  }
+
+  if (name === "tizen" && (
+      app.indexOf("if (!streamUrlReceived)") === -1 ||
+      app.indexOf("streamUrlReceived = true;") === -1)) {
+    throw new Error("Tizen HLS state must prevent raw-packet notice regression");
+  }
+
   [
     "function PsLinkReceiver(options)",
     "PsLinkReceiver.prototype.connect = function",

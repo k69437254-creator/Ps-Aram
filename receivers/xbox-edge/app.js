@@ -93,6 +93,11 @@
     if (receiver) receiver.disconnect();
     receiver = null;
     stopVideo();
+
+    document.getElementById("game").textContent = "PS Link";
+    document.getElementById("translation").textContent = "";
+    document.getElementById("captions").textContent = "";
+
     connect.disabled = false;
     disconnect.disabled = true;
     setStatus("تم قطع الاتصال");

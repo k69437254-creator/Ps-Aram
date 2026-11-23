@@ -11,7 +11,7 @@ sub run()
         return
     end if
 
-    if host = "" or Len(code) <> 6 then
+    if host = "" or not isSixDigitCode(code) then
         m.top.error = "تحقق من عنوان IP ورمز الاقتران"
         return
     end if
@@ -30,8 +30,11 @@ sub run()
             parsed = ParseJson(response)
 
             if parsed <> invalid and parsed.url <> invalid
-                if parsed.url <> ""
+                if isValidStreamUrl(parsed.url)
                     m.top.url = parsed.url
+                    return
+                else
+                    m.top.error = "الهاتف أعاد رابط بث غير صالح"
                     return
                 end if
             end if
@@ -42,3 +45,31 @@ sub run()
         sleep(3000)
     end while
 end sub
+
+' PSLINK_ROKU_INPUT_VALIDATION_V1
+function isSixDigitCode(code as Dynamic) as Boolean
+    if code = invalid then return false
+    if Len(code) <> 6 then return false
+
+    for i = 1 to 6
+        digit = Mid(code, i, 1)
+        if Instr(1, "0123456789", digit) = 0 then
+            return false
+        end if
+    end for
+
+    return true
+end function
+
+function isValidStreamUrl(url as Dynamic) as Boolean
+    if url = invalid then return false
+    if Len(url) < 9 or Len(url) > 2048 then return false
+    if Instr(1, url, " ") > 0 then return false
+
+    scheme = LCase(Left(url, 8))
+    if scheme <> "https://" and LCase(Left(url, 7)) <> "http://" then
+        return false
+    end if
+
+    return true
+end function

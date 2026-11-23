@@ -27,8 +27,8 @@ sub startPairing()
         m.status.text = "عدّل عنوان IP الهاتف في receiver-config.json"
         return
     end if
-    if Len(code) <> 6 then
-        m.status.text = "عدّل رمز الاقتران في receiver-config.json"
+    if not isSixDigitCode(code) then
+        m.status.text = "رمز الاقتران يجب أن يتكون من 6 أرقام"
         return
     end if
 
@@ -42,7 +42,10 @@ end sub
 
 sub onStreamUrl()
     url = m.task.url
-    if url = invalid or url = "" then return
+    if not isValidStreamUrl(url) then
+        m.status.text = "رابط بث HLS غير صالح"
+        return
+    end if
 
     content = CreateObject("roSGNode", "ContentNode")
     content.url = url
@@ -101,6 +104,31 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         m.status.text = "تم إيقاف العرض"
         return true
     end if
+
+    return false
+end function
+
+' PSLINK_ROKU_SCENE_VALIDATION_V1
+function isSixDigitCode(code as Dynamic) as Boolean
+    if code = invalid then return false
+    if Len(code) <> 6 then return false
+
+    for i = 1 to 6
+        if Instr(1, "0123456789", Mid(code, i, 1)) = 0 then
+            return false
+        end if
+    end for
+
+    return true
+end function
+
+function isValidStreamUrl(url as Dynamic) as Boolean
+    if url = invalid then return false
+    if Len(url) < 9 or Len(url) > 2048 then return false
+    if Instr(1, url, " ") > 0 then return false
+
+    if LCase(Left(url, 8)) = "https://" then return true
+    if LCase(Left(url, 7)) = "http://" then return true
 
     return false
 end function
