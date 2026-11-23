@@ -9,7 +9,7 @@ import java.io.File
 class HlsTransportStreamPublisherTest {
     @Test fun writesIdrAlignedMpegTsThatCanBeDecodedByFfmpegInCi() {
         val fixture = javaClass.classLoader!!.getResourceAsStream("fixtures/hls-single-idr.h264")!!.use { it.readBytes() }
-        val output = File(requireNotNull(System.getProperty("pslink.hls.test.outputDir")))
+        val output = File(requireNotNull(System.getProperty("pslink.hls.test.outputDir")), "video-only")
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 
@@ -39,7 +39,7 @@ class HlsTransportStreamPublisherTest {
             .getResourceAsStream("fixtures/hls-single-idr.h264")!!
             .use { it.readBytes() }
 
-        val output = File(requireNotNull(System.getProperty("pslink.hls.test.outputDir")))
+        val output = File(requireNotNull(System.getProperty("pslink.hls.test.outputDir")), "structural-aac")
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 
@@ -115,7 +115,7 @@ class HlsTransportStreamPublisherTest {
             .getResourceAsStream("fixtures/hls-single-idr.h264")!!
             .use { it.readBytes() }
 
-        val output = File(requireNotNull(System.getProperty("pslink.hls.test.outputDir")))
+        val output = File(requireNotNull(System.getProperty("pslink.hls.test.outputDir")), "continuity")
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 
@@ -196,7 +196,7 @@ class HlsTransportStreamPublisherTest {
         val outputPath = requireNotNull(
             System.getProperty("pslink.hls.test.aacOutputDir")
         )
-        val output = File(outputPath)
+        val output = File(outputPath, "real-aac")
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 

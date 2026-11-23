@@ -1,55 +1,142 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "project": "PS Link",
   "targets": [
+    {
+      "id": "android-mobile",
+      "name": "Android Mobile",
+      "technology": "Native Android APK with pinned Chiaki-NG integration",
+      "state": "source-partial",
+      "validation": {
+        "sourceImplementation": "partial",
+        "automatedTests": "partial; unit tests passed in baseline CI",
+        "packageBuilt": "not-tested-in-baseline-run",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested-in-this-validation",
+        "fullMediaPath": "partial; playback capture and HLS path present",
+        "audioVideoSync": "not-validated-over-session-duration",
+        "longDurationStability": "not-tested"
+      }
+    },
     {
       "id": "android-tv",
       "name": "Android TV",
       "technology": "Native Android APK",
       "state": "existing",
-      "validation": "Build and physical-device media test required"
+      "validation": {
+        "sourceImplementation": "present",
+        "automatedTests": "not-fully-validated",
+        "packageBuilt": "not-tested-in-baseline-run",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested",
+        "fullMediaPath": "not-validated",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
     },
     {
       "id": "google-tv",
       "name": "Google TV",
       "technology": "Android TV APK",
       "state": "compatibility-pending",
-      "validation": "Google TV device compatibility test required"
+      "validation": {
+        "sourceImplementation": "reuses-android-tv-source",
+        "automatedTests": "not-tested-on-google-tv-target",
+        "packageBuilt": "not-tested",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested",
+        "fullMediaPath": "not-validated",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
     },
     {
       "id": "fire-tv",
       "name": "Amazon Fire TV",
       "technology": "Fire OS compatible Android APK",
       "state": "compatibility-pending",
-      "validation": "Fire OS compatibility and device media test required"
+      "validation": {
+        "sourceImplementation": "reuses-android-tv-source",
+        "automatedTests": "not-tested-on-fire-os-target",
+        "packageBuilt": "not-tested",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested",
+        "fullMediaPath": "not-validated",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
     },
     {
       "id": "tizen",
       "name": "Samsung Tizen",
       "technology": "Tizen Web application",
       "state": "hls-video-path-present",
-      "validation": "Audio path and physical-device test pending"
+      "validation": {
+        "sourceImplementation": "partial; AVPlay application and HLS path present",
+        "automatedTests": "behavioral-regressions-added; CI-rerun-required",
+        "packageBuilt": "not-tested",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested",
+        "fullMediaPath": "not-validated-on-device",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
     },
     {
       "id": "webos",
       "name": "LG webOS",
       "technology": "webOS application",
       "state": "hls-video-path-present",
-      "validation": "Audio path and physical-device test pending"
+      "validation": {
+        "sourceImplementation": "partial; HTML5 media and HLS path present",
+        "automatedTests": "behavioral-regressions-added; CI-rerun-required",
+        "packageBuilt": "not-tested",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested",
+        "fullMediaPath": "not-validated-on-device",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
     },
     {
       "id": "roku",
       "name": "Roku",
       "technology": "SceneGraph and BrightScript",
       "state": "prototype-generated",
-      "validation": "Package, install and physical-device test pending; video-only"
+      "validation": {
+        "sourceImplementation": "prototype",
+        "automatedTests": "resource-validation-only",
+        "packageBuilt": "not-tested",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested",
+        "fullMediaPath": "video-only-path-described; device-validation-pending",
+        "audioVideoSync": "not-supported-or-validated",
+        "longDurationStability": "not-tested"
+      }
     },
     {
       "id": "xbox-edge",
       "name": "Xbox Edge",
       "technology": "Browser receiver",
       "state": "prototype-generated",
-      "validation": "HTTPS/WSS hosting and physical-device test pending; not native"
+      "validation": {
+        "sourceImplementation": "browser-prototype; not-native",
+        "automatedTests": "receiver-protocol-tests-exist; device-deployment-not-tested",
+        "packageBuilt": "not-applicable-browser-receiver",
+        "packageSigned": "not-applicable-browser-receiver",
+        "installable": "not-applicable-browser-receiver",
+        "physicalDevice": "not-tested-on-xbox-edge",
+        "fullMediaPath": "not-validated-on-xbox-edge",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
     }
   ]
 }

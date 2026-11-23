@@ -71,6 +71,7 @@ class AacPlaybackCapture(
                 .setBufferSizeInBytes(bufferSize)
                 .setAudioPlaybackCaptureConfig(playbackConfig)
                 .build()
+            recorder = audioRecord
 
             check(audioRecord.state == AudioRecord.STATE_INITIALIZED) {
                 "AudioRecord initialization failed"
@@ -90,10 +91,8 @@ class AacPlaybackCapture(
             }
 
             val codec = MediaCodec.createEncoderByType(MIME)
-            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-
-            recorder = audioRecord
             encoder = codec
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
 
             codec.start()
             audioRecord.startRecording()
@@ -151,10 +150,24 @@ class AacPlaybackCapture(
                 nextInputPtsUs +=
                     (framesRead.toLong() * 1_000_000L) / SAMPLE_RATE
 
-                val inputIndex = codec.dequeueInputBuffer(10000)
+                // Retain this PCM chunk and apply bounded backpressure until
+                // MediaCodec accepts it; do not silently discard captured audio.
+                var inputIndex = codec.dequeueInputBuffer(10_000)
+                val inputDeadlineNs = System.nanoTime() + 1_000_000_000L
+                while (inputIndex < 0 && running.get()) {
+                    drainEncoder(codec, info)
+                    if (System.nanoTime() >= inputDeadlineNs) {
+                        throw IllegalStateException("AAC encoder input remained unavailable for 1 second")
+                    }
+                    inputIndex = codec.dequeueInputBuffer(10_000)
+                }
+                if (!running.get()) break
+                check(inputIndex >= 0) { "AAC encoder input remained unavailable" }
                 if (inputIndex >= 0) {
-                    val input = codec.getInputBuffer(inputIndex)
-                        ?: throw IllegalStateException("AAC input buffer unavailable")
+                    val input = codec.getInputBuffer(inputIndex) ?: run {
+                        codec.queueInputBuffer(inputIndex, 0, 0, chunkPtsUs, 0)
+                        throw IllegalStateException("AAC input buffer unavailable")
+                    }
 
                     input.clear()
                     if (input.remaining() < bytes) {
@@ -197,31 +210,43 @@ class AacPlaybackCapture(
     ) {
         while (true) {
             val index = codec.dequeueOutputBuffer(info, 0)
-            if (index == MediaCodec.INFO_TRY_AGAIN_LATER) return
-            if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue
-            if (index < 0) continue
+            when (index) {
+                MediaCodec.INFO_TRY_AGAIN_LATER -> return
+                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED,
+                MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> continue
+                else -> {
+                    if (index < 0) {
+                        throw IllegalStateException(
+                            "Unexpected AAC MediaCodec output status: $index"
+                        )
+                    }
 
-            try {
-                if (
-                    info.size > 0 &&
-                    info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
-                ) {
-                    val output = codec.getOutputBuffer(index)
-                        ?: continue
+                    try {
+                        if (
+                            info.size > 0 &&
+                            info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
+                        ) {
+                            val output = codec.getOutputBuffer(index)
+                                ?: throw IllegalStateException("AAC output buffer unavailable")
 
-                    output.position(info.offset)
-                    output.limit(info.offset + info.size)
+                            require(info.offset >= 0 && info.size >= 0 &&
+                                info.offset.toLong() + info.size <= output.capacity().toLong()) {
+                                "Invalid AAC output buffer range"
+                            }
+                            output.position(info.offset)
+                            output.limit(info.offset + info.size)
 
-                    val bytes = ByteArray(info.size)
-                    output.get(bytes)
-
-                    onEncodedFrame(
-                        bytes,
-                        info.presentationTimeUs.coerceAtLeast(0L)
-                    )
+                            val bytes = ByteArray(info.size)
+                            output.get(bytes)
+                            onEncodedFrame(
+                                bytes,
+                                info.presentationTimeUs.coerceAtLeast(0L)
+                            )
+                        }
+                    } finally {
+                        codec.releaseOutputBuffer(index, false)
+                    }
                 }
-            } finally {
-                codec.releaseOutputBuffer(index, false)
             }
         }
     }

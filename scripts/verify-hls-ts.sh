@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# PSLINK_HLS_VERIFY_JSON_V2
+# PSLINK_HLS_VERIFY_JSON_V3
 
-OUT="mobile/build/hls-integration-test"
+OUT="mobile/build/hls-integration-test/video-only"
 PLAYLIST="$OUT/index.m3u8"
 
 command -v ffprobe >/dev/null 2>&1 || {
@@ -48,6 +48,9 @@ for segment in "${SEGMENTS[@]}"; do
     if ! DETAILS="$(
         ffprobe \
             -v error \
+            -f mpegts \
+            -probesize 5000000 \
+            -analyzeduration 5000000 \
             -select_streams v \
             -show_entries stream=codec_name,width,height \
             -of json \
@@ -118,7 +121,7 @@ echo "NOTE: AAC transport and decoding are checked by the separate real-AAC inte
 echo
 echo "===== REAL AAC + H.264 MPEG-TS VERIFICATION ====="
 
-AAC_OUT="mobile/build/hls-aac-integration-test"
+AAC_OUT="mobile/build/hls-aac-integration-test/real-aac"
 AAC_PLAYLIST="$AAC_OUT/index.m3u8"
 
 [[ -s "$AAC_PLAYLIST" ]] || {
@@ -143,28 +146,46 @@ for segment in "${AAC_SEGMENTS[@]}"; do
         exit 1
     }
 
-    CODECS="$(ffprobe -v error \
-        -show_entries stream=codec_name \
-        -of csv=p=0 "$FILE" | sort -u)"
+    DETAILS="$(ffprobe -v error -f mpegts -probesize 5000000 \
+        -analyzeduration 5000000 \
+        -show_entries stream=codec_name,codec_type,width,height,sample_rate,channels \
+        -of json "$FILE")"
 
-    echo "Detected codecs in $FILE:"
-    printf '%s\n' "$CODECS"
+    DETAILS_JSON="$DETAILS" python3 - "$FILE" <<'PY'
+import json
+import os
+import sys
 
-    grep -qx "h264" <<< "$CODECS" || {
-        echo "ERROR: H.264 stream missing from $FILE" >&2
-        exit 1
-    }
+document = json.loads(os.environ["DETAILS_JSON"])
+streams = document.get("streams", [])
+video = [stream for stream in streams if stream.get("codec_type") == "video"]
+audio = [stream for stream in streams if stream.get("codec_type") == "audio"]
 
-    grep -qx "aac" <<< "$CODECS" || {
-        echo "ERROR: AAC stream missing from $FILE" >&2
-        exit 1
-    }
+if len(video) != 1 or video[0].get("codec_name") != "h264":
+    raise SystemExit(f"FAIL: expected exactly one H.264 stream in {sys.argv[1]}")
+if (video[0].get("width"), video[0].get("height")) != (64, 64):
+    raise SystemExit(f"FAIL: unexpected H.264 dimensions in {sys.argv[1]}")
+if len(audio) != 1 or audio[0].get("codec_name") != "aac":
+    raise SystemExit(f"FAIL: expected exactly one AAC stream in {sys.argv[1]}")
+if (audio[0].get("sample_rate"), audio[0].get("channels")) != ("48000", 2):
+    raise SystemExit(f"FAIL: expected 48 kHz stereo AAC in {sys.argv[1]}")
 
-    echo "PASS: H.264 and AAC streams detected."
+print("PASS: one 64x64 H.264 stream and one 48 kHz stereo AAC stream detected.")
+PY
 done
 
 echo
-echo "===== AAC DECODE TEST ====="
+echo "===== FULL H.264 AND AAC DECODE TESTS ====="
+
+ffmpeg \
+    -hide_banner \
+    -loglevel error \
+    -xerror \
+    -i "$AAC_PLAYLIST" \
+    -map 0:v:0 \
+    -f null -
+
+echo "PASS: FFmpeg decoded H.264 video from the real-AAC HLS output."
 
 ffmpeg \
     -hide_banner \
@@ -172,8 +193,7 @@ ffmpeg \
     -xerror \
     -i "$AAC_PLAYLIST" \
     -map 0:a:0 \
-    -frames:a 1 \
     -f null -
 
-echo "PASS: FFmpeg decoded an AAC frame from HLS."
+echo "PASS: FFmpeg decoded the AAC audio stream from HLS."
 echo "PS LINK HLS MPEG-TS VIDEO + AAC VERIFICATION PASSED."

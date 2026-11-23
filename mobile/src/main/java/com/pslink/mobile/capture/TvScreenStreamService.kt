@@ -50,6 +50,7 @@ class TvScreenStreamService : Service() {
     }
 
     private val running = AtomicBoolean(false)
+    private val encoderLock = Any()
     private var projection: MediaProjection? = null
     private var display: VirtualDisplay? = null
     private var encoder: MediaCodec? = null
@@ -249,58 +250,83 @@ class TvScreenStreamService : Service() {
 
         try {
             while (running.get() && !Thread.currentThread().isInterrupted) {
-                when (val index = codec.dequeueOutputBuffer(info, 10_000)) {
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
-
-                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        val outputFormat = codec.outputFormat
-                        codecConfig = combineCodecConfig(outputFormat)
-                        report("تم تجهيز مشفّر H.264؛ جارٍ إرسال إطارات الشاشة.")
+                synchronized(encoderLock) {
+                    if (!running.get() || Thread.currentThread().isInterrupted) {
+                        return
                     }
 
-                    else -> if (index >= 0) {
-                        val output = codec.getOutputBuffer(index)
-                        if (output != null &&
-                            info.size > 0 &&
-                            info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
-                        ) {
-                            output.position(info.offset)
-                            output.limit(info.offset + info.size)
-                            val encoded = ByteArray(info.size)
-                            output.get(encoded)
+                    when (val index = codec.dequeueOutputBuffer(info, 10_000)) {
+                        MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
 
-                            val keyFrame =
-                                info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
-
-                            val packet = if (keyFrame && codecConfig.isNotEmpty()) {
-                                codecConfig + encoded
-                            } else {
-                                encoded
-                            }
-
-                            // Keep the existing Android TV live path unchanged when paired.
-                            sink?.sendVideoSample(packet, System.nanoTime().coerceAtLeast(1L), keyFrame)
-
-                            // Publish the same real MediaCodec access unit as H.264/MPEG-TS HLS.
-                            try {
-                                hlsPublisher?.writeAccessUnit(
-                                    packet,
-                                    info.presentationTimeUs.coerceAtLeast(0L),
-                                    keyFrame
-                                )
-                            } catch (hlsError: Exception) {
-                                report("توقف نشر HLS: ${hlsError.localizedMessage ?: "خطأ في حزمة H.264"}")
-                                runCatching { hlsPublisher?.stop() }
-                                hlsPublisher = null
-                            }
+                        MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                            codecConfig = combineCodecConfig(codec.outputFormat)
+                            report("تم تجهيز مشفّر H.264؛ جارٍ إرسال إطارات الشاشة.")
                         }
-                        codec.releaseOutputBuffer(index, false)
+
+                        MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> Unit
+
+                        else -> if (index >= 0) {
+                            try {
+                                val output = codec.getOutputBuffer(index)
+                                if (
+                                    output != null &&
+                                    info.size > 0 &&
+                                    info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
+                                ) {
+                                    require(info.offset >= 0 && info.size >= 0 &&
+                                        info.offset.toLong() + info.size <= output.capacity().toLong()) {
+                                        "Invalid H.264 output buffer range"
+                                    }
+                                    output.position(info.offset)
+                                    output.limit(info.offset + info.size)
+                                    val encoded = ByteArray(info.size)
+                                    output.get(encoded)
+
+                                    val keyFrame =
+                                        info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
+                                    val packet = if (keyFrame && codecConfig.isNotEmpty()) {
+                                        codecConfig + encoded
+                                    } else {
+                                        encoded
+                                    }
+
+                                    sink?.sendVideoSample(
+                                        packet,
+                                        System.nanoTime().coerceAtLeast(1L),
+                                        keyFrame
+                                    )
+
+                                    try {
+                                        hlsPublisher?.writeAccessUnit(
+                                            packet,
+                                            info.presentationTimeUs.coerceAtLeast(0L),
+                                            keyFrame
+                                        )
+                                    } catch (hlsError: Exception) {
+                                        report(
+                                            "توقف نشر HLS: " +
+                                                (hlsError.localizedMessage ?: "خطأ في حزمة H.264")
+                                        )
+                                        runCatching { hlsPublisher?.stop() }
+                                        hlsPublisher = null
+                                    }
+                                }
+                            } finally {
+                                codec.releaseOutputBuffer(index, false)
+                            }
+                        } else {
+                            throw IllegalStateException(
+                                "Unexpected MediaCodec output status: $index"
+                            )
+                        }
                     }
                 }
             }
         } catch (error: Exception) {
             if (running.get()) {
-                report("توقف ترميز بث الشاشة: ${error.localizedMessage ?: "خطأ H.264"}")
+                report(
+                    "توقف ترميز بث الشاشة: ${error.localizedMessage ?: "خطأ H.264"}"
+                )
             }
         }
     }
@@ -327,19 +353,26 @@ class TvScreenStreamService : Service() {
         val oldThread = encoderThread
         encoderThread = null
         oldThread?.interrupt()
-        if (oldThread !== Thread.currentThread()) {
-            runCatching { oldThread?.join(500L) }
+        if (oldThread != null && oldThread !== Thread.currentThread()) {
+            try {
+                oldThread.join(2_000L)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
         }
 
         runCatching { display?.release() }
         display = null
 
-        val oldEncoder = encoder
-        encoder = null
-        if (oldEncoder != null) {
-            runCatching { oldEncoder.signalEndOfInputStream() }
-            runCatching { oldEncoder.stop() }
-            runCatching { oldEncoder.release() }
+        // Serialize codec teardown with any in-flight encoder operation.
+        synchronized(encoderLock) {
+            val oldEncoder = encoder
+            encoder = null
+            if (oldEncoder != null) {
+                runCatching { oldEncoder.signalEndOfInputStream() }
+                runCatching { oldEncoder.stop() }
+                runCatching { oldEncoder.release() }
+            }
         }
 
         val oldProjection = projection
