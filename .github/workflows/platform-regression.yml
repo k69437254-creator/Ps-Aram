@@ -1,0 +1,34 @@
+name: PS Link cross-platform regression
+
+on:
+  push:
+    branches:
+      - feature/platform-completion-pack
+      - repair/comprehensive-media-platform
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  receiver-regression:
+    name: Tizen and webOS receiver regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run cross-platform regression gate
+        run: bash scripts/check-platform-regressions.sh
