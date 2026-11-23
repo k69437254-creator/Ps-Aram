@@ -42,6 +42,7 @@ mlkit-text-chinese = { module = "com.google.mlkit:text-recognition-chinese", ver
 mlkit-text-japanese = { module = "com.google.mlkit:text-recognition-japanese", version.ref = "mlkit-text" }
 mlkit-text-korean = { module = "com.google.mlkit:text-recognition-korean", version.ref = "mlkit-text" }
 mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-translate" }
+leanback = { module = "androidx.leanback:leanback", version = "1.1.0-alpha09" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
 ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }

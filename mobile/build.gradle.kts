@@ -145,5 +145,8 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)
+    // PSLINK_ARABIC_OCR_V1 — Tesseract tess-two for Arabic OCR
+    implementation("com.rmtheis:tess-two:9.1.0")
+
     testImplementation("junit:junit:4.13.2")
 }

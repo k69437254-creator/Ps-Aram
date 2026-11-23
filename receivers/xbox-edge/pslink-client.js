@@ -22,8 +22,8 @@
     return /^[0-9]{6}$/.test(digits) ? digits : null;
   }
 
-  // PSLINK_XBOX_SECURE_ENDPOINT_V1
-  // HTTPS pages must use WSS. Local HTTP pages may use WS.
+  // PSLINK_LOCAL_ENDPOINT_V1
+  // Only ws:// is supported; wss:// requires SSL/TLS not configured on the phone.
   function resolveSocketUrl(value, pageLocation) {
     var input = String(value || "").trim();
     if (!input) throw new Error("عنوان الهاتف أو نطاق الاتصال مطلوب");
@@ -33,7 +33,7 @@
 
     var securePage = !!(loc && loc.protocol === "https:");
 
-    if (/^wss?:\/\//i.test(input)) {
+    if (/^ws:\/\//i.test(input)) {
       var explicit;
       try {
         explicit = new URL(input);
@@ -41,8 +41,7 @@
         throw new Error("عنوان WebSocket غير صالح");
       }
 
-      if (explicit.protocol !== "ws:" &&
-          explicit.protocol !== "wss:") {
+      if (explicit.protocol !== "ws:") {
         throw new Error("بروتوكول WebSocket غير صالح");
       }
 
@@ -52,8 +51,8 @@
         throw new Error("عنوان WebSocket يجب أن ينتهي بالمسار /subtitle");
       }
 
-      if (securePage && explicit.protocol !== "wss:") {
-        throw new Error("صفحة HTTPS تتطلب اتصال WSS آمنًا");
+      if (securePage) {
+        throw new Error("صفحة HTTPS تتطلب WSS، لكن الهاتف لا يدعم SSL/TLS. افتح الصفحة عبر HTTP.");
       }
 
       return explicit.href;
@@ -63,10 +62,7 @@
       throw new Error("أدخل اسم المضيف أو عنوان IP فقط");
     }
 
-    return (securePage ? "wss://" : "ws://") +
-      input +
-      (securePage ? "" : ":" + PORT) +
-      PATH;
+    return "ws://" + input + ":" + PORT + PATH;
   }
 
   function normalizeStreamUrl(value, pageLocation) {
@@ -84,15 +80,6 @@
     if (parsed.protocol !== "http:" &&
         parsed.protocol !== "https:") {
       return null;
-    }
-
-    if (loc && loc.protocol === "https:" &&
-        parsed.protocol === "http:") {
-      if (parsed.pathname.indexOf("/hls/") !== 0) {
-        return null;
-      }
-
-      return loc.origin + parsed.pathname + parsed.search;
     }
 
     return parsed.href;
@@ -179,6 +166,10 @@
     if (typeof callback === "function") callback(value);
   };
 
+  PsLinkReceiver.prototype._heartbeatTimer = null;
+  PsLinkReceiver.prototype._heartbeatInterval = 25000;
+  PsLinkReceiver.prototype._lastMessageTime = 0;
+
   PsLinkReceiver.prototype._scheduleReconnect = function () {
     if (this.closedByUser || this.authRejected || this.reconnectTimer || !this.host || !this.code) return;
     var self = this;
@@ -216,6 +207,8 @@
           client: "PS Link TV Web"
         }));
         self._emit("onStatus", "تم الاتصال؛ جارٍ التحقق من رمز الاقتران.");
+        self._lastMessageTime = Date.now();
+        self._startHeartbeat();
       } catch (error) {
         try { socket.close(); } catch (ignore) {}
       }
@@ -223,6 +216,7 @@
 
     socket.onmessage = function (event) {
       if (self.socket !== socket) return;
+      self._lastMessageTime = Date.now();
       if (typeof event.data !== "string") {
         var media = parseMediaPacket(event.data);
         if (media) self._emit("onMediaPacket", media);
@@ -291,6 +285,7 @@
       if (self.socket !== socket) return;
       self.socket = null;
       self.ready = false;
+      self._stopHeartbeat();
       self._emit("onReady", false);
       if (!self.closedByUser && !self.authRejected) self._scheduleReconnect();
     };
@@ -342,6 +337,7 @@
   PsLinkReceiver.prototype.disconnect = function () {
     this.closedByUser = true;
     this.ready = false;
+    this._stopHeartbeat();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -356,6 +352,46 @@
       try { old.close(1000, "User disconnected"); } catch (ignore) {}
     }
     this._emit("onReady", false);
+  };
+
+
+
+  PsLinkReceiver.prototype._startHeartbeat = function () {
+    this._stopHeartbeat();
+    var self = this;
+    this._heartbeatTimer = setInterval(function () {
+      if (!self.socket || self.socket.readyState !== 1) return;
+      var now = Date.now();
+      if (now - self._lastMessageTime > self._heartbeatInterval * 2) {
+        self._emit("onStatus", "لم ترد إجابات من الهاتف؛ جارٍ إعادة الاتصال.");
+        try { self.socket.close(1000, "Heartbeat timeout"); } catch (ignore) {}
+        self._stopHeartbeat();
+        if (!self.closedByUser && !self.authRejected) self._scheduleReconnect();
+        return;
+      }
+      try {
+        self.socket.send(JSON.stringify({ v: PROTOCOL_VERSION, kind: "ping" }));
+      } catch (ignore) {}
+    }, self._heartbeatInterval);
+  };
+
+  PsLinkReceiver.prototype._stopHeartbeat = function () {
+    if (this._heartbeatTimer) {
+      clearInterval(this._heartbeatTimer);
+      this._heartbeatTimer = null;
+    }
+  };
+
+  PsLinkReceiver.prototype.getConnectionState = function () {
+    if (this.closedByUser) return "closed";
+    if (this.authRejected) return "rejected";
+    if (this.ready) return "connected";
+    if (this.host && this.code) return "connecting";
+    return "idle";
+  };
+
+  PsLinkReceiver.prototype.isReady = function () {
+    return this.ready && this.socket && this.socket.readyState === 1;
   };
 
   PsLinkReceiver.parseMediaPacket = parseMediaPacket;

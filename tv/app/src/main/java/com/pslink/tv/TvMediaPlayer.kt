@@ -262,7 +262,10 @@ class TvMediaPlayer(
                         codec.queueInputBuffer(inputIndex, 0, frame.data.size, relativeUs, 0)
                     }
                 } else {
-                    awaitingKeyFrame = true
+                    // Input buffer temporarily unavailable — retry next iteration.
+                    // Do NOT set awaitingKeyFrame here; that would drop all frames until
+                    // a key frame arrives. Just yield briefly and try again.
+                    Thread.sleep(2)
                 }
 
                 while (true) {

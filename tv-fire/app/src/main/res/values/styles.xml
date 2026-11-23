@@ -1,0 +1,7 @@
+<resources>
+    <style name="TvTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#00A2D1</item>
+        <item name="colorPrimaryDark">#007BA7</item>
+        <item name="colorAccent">#FF9900</item>
+    </style>
+</resources>

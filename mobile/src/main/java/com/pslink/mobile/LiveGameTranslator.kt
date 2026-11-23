@@ -34,6 +34,17 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import com.google.android.gms.tasks.Task
 
+// PSLINK_ARABIC_OCR_V1
+// Arabic OCR uses Tesseract (tess-two) because ML Kit does not support Arabic as an OCR source language.
+// Add to app build.gradle.kts:
+//   implementation("com.rmtheis:tess-two:9.1.0")
+// Copy ara.traineddata to assets/tessdata/ara.traineddata
+import com.googlecode.tesseract.android.TessAPI
+import com.googlecode.tesseract.android.TessBaseAPI
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+
 /** Samples the actual Chiaki SurfaceView, performs on-device OCR + translation, and forwards captions to the TV. */
 class LiveGameTranslator(
     private val activity: Activity,
@@ -43,14 +54,15 @@ class LiveGameTranslator(
     private val onStatus: (String) -> Unit
 ) {
     data class Language(val label: String, val code: String, val script: Script)
-    enum class Script { LATIN, JAPANESE, CHINESE, KOREAN }
+    enum class Script { LATIN, JAPANESE, CHINESE, KOREAN, ARABIC }
 
     companion object {
         val languages = listOf(
             Language("الإنجليزية", TranslateLanguage.ENGLISH, Script.LATIN),
             Language("اليابانية", TranslateLanguage.JAPANESE, Script.JAPANESE),
             Language("الصينية", TranslateLanguage.CHINESE, Script.CHINESE),
-            Language("الكورية", TranslateLanguage.KOREAN, Script.KOREAN)
+            Language("الكورية", TranslateLanguage.KOREAN, Script.KOREAN),
+            Language("العربية", TranslateLanguage.ARABIC, Script.ARABIC)
         )
         private const val SAMPLE_INTERVAL_MS = 650L
         private const val MAX_OCR_CHARS = 160
@@ -113,6 +125,7 @@ class LiveGameTranslator(
         recognizer = null
         translator?.close()
         translator = null
+        closeTessBaseAPI()
         lastSource = ""
         lastTranslation = ""
         emptyFrameCount = 0
@@ -122,6 +135,7 @@ class LiveGameTranslator(
 
     fun close() {
         stop()
+        closeTessBaseAPI()
         scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
     }
 
@@ -155,57 +169,106 @@ class LiveGameTranslator(
                     } else {
                         consecutiveCaptureFailures = 0
                         try {
-                            val result = newRecognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitResult()
-                            // Game subtitles normally occupy the lower portion of the streamed frame.
-                            // Keep OCR geometry so the Arabic replacement can cover the original line.
-                            val detected = result.textBlocks
-                                .flatMap { block -> block.lines }
-                                .mapNotNull { line ->
-                                    val rect = line.boundingBox ?: return@mapNotNull null
-                                    val sourceText = line.text.trim().replace(Regex("[\\t ]+"), " ")
-                                    if (sourceText.length < 2 || sourceText.length > MAX_OCR_CHARS ||
-                                        rect.centerY() < bitmap.height * 0.48f ||
-                                        rect.width() < bitmap.width * 0.06f ||
-                                        rect.height() < 8
-                                    ) return@mapNotNull null
+                            if (language.script == Script.ARABIC) {
+                                // PSLINK_ARABIC_OCR_V1 — Use Tesseract for Arabic OCR (source IS Arabic,
+                                // no translation step needed; ML Kit does not support Arabic OCR).
+                                initTessBaseAPI(activity)
+                                if (!tessInitialized) {
+                                    emptyFrameCount++
+                                    if (emptyFrameCount >= 2 && lastSource.isNotEmpty()) {
+                                        lastSource = ""
+                                        lastTranslation = ""
+                                        onCaption(emptyList())
+                                        tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                    }
+                                    return@try
+                                }
+                                val arabicText = ocrArabic(bitmap) ?: ""
+                                val lines = arabicText.lines()
+                                    .map { it.trim() }
+                                    .filter { it.length >= 2 && it.length <= MAX_OCR_CHARS }
+                                    .take(3)
+                                val detected = lines.mapIndexed { index, sourceText ->
                                     CaptionLine(
                                         source = sourceText,
-                                        translated = "",
-                                        left = (rect.left.toFloat() / bitmap.width).coerceIn(0f, 1f),
-                                        top = (rect.top.toFloat() / bitmap.height).coerceIn(0f, 1f),
-                                        right = (rect.right.toFloat() / bitmap.width).coerceIn(0f, 1f),
-                                        bottom = (rect.bottom.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                                        translated = sourceText, // Arabic → Arabic: identity translation
+                                        left = 0.05f,
+                                        top = 0.48f + (index * 0.08f),
+                                        right = 0.95f,
+                                        bottom = 0.48f + (index * 0.08f) + 0.06f
                                     )
                                 }
-                                .sortedWith(compareBy<CaptionLine> { it.top }.thenBy { it.left })
-                                .take(3)
-                            val signature = detected.joinToString("|") {
-                                "${it.source}@${(it.left * 1000).toInt()},${(it.top * 1000).toInt()},${(it.right * 1000).toInt()},${(it.bottom * 1000).toInt()}"
-                            }
-                            if (detected.isEmpty()) {
-                                emptyFrameCount++
-                                if (emptyFrameCount >= 2 && lastSource.isNotEmpty()) {
-                                    lastSource = ""
-                                    lastTranslation = ""
-                                    onCaption(emptyList())
-                                    tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                val signature = detected.joinToString("|") { it.source }
+                                if (detected.isEmpty()) {
+                                    emptyFrameCount++
+                                    if (emptyFrameCount >= 2 && lastSource.isNotEmpty()) {
+                                        lastSource = ""
+                                        lastTranslation = ""
+                                        onCaption(emptyList())
+                                        tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                    }
+                                } else {
+                                    emptyFrameCount = 0
+                                    if (signature != lastSource) {
+                                        lastSource = signature
+                                        lastTranslation = detected.joinToString("\n") { it.translated }
+                                        onCaption(detected)
+                                        tvClient?.sendCaptions(detected, samplePtsNs)
+                                    }
                                 }
                             } else {
-                                emptyFrameCount = 0
-                                if (signature != lastSource) {
-                                    val translatedLines = detected.map { line ->
-                                        newTranslator.translate(line.source).awaitResult().trim()
+                                val result = newRecognizer.process(InputImage.fromBitmap(bitmap, 0)).awaitResult()
+                                // Game subtitles normally occupy the lower portion of the streamed frame.
+                                // Keep OCR geometry so the Arabic replacement can cover the original line.
+                                val detected = result.textBlocks
+                                    .flatMap { block -> block.lines }
+                                    .mapNotNull { line ->
+                                        val rect = line.boundingBox ?: return@mapNotNull null
+                                        val sourceText = line.text.trim().replace(Regex("[\\t ]+"), " ")
+                                        if (sourceText.length < 2 || sourceText.length > MAX_OCR_CHARS ||
+                                            rect.centerY() < bitmap.height * 0.48f ||
+                                            rect.width() < bitmap.width * 0.06f ||
+                                            rect.height() < 8
+                                        ) return@mapNotNull null
+                                        CaptionLine(
+                                            source = sourceText,
+                                            translated = "",
+                                            left = (rect.left.toFloat() / bitmap.width).coerceIn(0f, 1f),
+                                            top = (rect.top.toFloat() / bitmap.height).coerceIn(0f, 1f),
+                                            right = (rect.right.toFloat() / bitmap.width).coerceIn(0f, 1f),
+                                            bottom = (rect.bottom.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                                        )
                                     }
-                                    val captions = detected.zip(translatedLines)
-                                        .mapNotNull { (line, translated) ->
-                                            if (translated.isBlank()) null else line.copy(translated = translated)
+                                    .sortedWith(compareBy<CaptionLine> { it.top }.thenBy { it.left })
+                                    .take(3)
+                                val signature = detected.joinToString("|") {
+                                    "${it.source}@${(it.left * 1000).toInt()},${(it.top * 1000).toInt()},${(it.right * 1000).toInt()},${(it.bottom * 1000).toInt()}"
+                                }
+                                if (detected.isEmpty()) {
+                                    emptyFrameCount++
+                                    if (emptyFrameCount >= 2 && lastSource.isNotEmpty()) {
+                                        lastSource = ""
+                                        lastTranslation = ""
+                                        onCaption(emptyList())
+                                        tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                    }
+                                } else {
+                                    emptyFrameCount = 0
+                                    if (signature != lastSource) {
+                                        val translatedLines = detected.map { line ->
+                                            newTranslator.translate(line.source).awaitResult().trim()
                                         }
-                                    lastSource = signature
-                                    lastTranslation = captions.joinToString("\n") { it.translated }
-                                    onCaption(captions)
-                                    // The TV receives the exact OCR geometry so Arabic covers the
-                                    // source dialogue in the streamed game image, not in a text panel.
-                                    tvClient?.sendCaptions(captions, samplePtsNs)
+                                        val captions = detected.zip(translatedLines)
+                                            .mapNotNull { (line, translated) ->
+                                                if (translated.isBlank()) null else line.copy(translated = translated)
+                                            }
+                                        lastSource = signature
+                                        lastTranslation = captions.joinToString("\n") { it.translated }
+                                        onCaption(captions)
+                                        // The TV receives the exact OCR geometry so Arabic covers the
+                                        // source dialogue in the streamed game image, not in a text panel.
+                                        tvClient?.sendCaptions(captions, samplePtsNs)
+                                    }
                                 }
                             }
                         } finally {
@@ -235,6 +298,11 @@ class LiveGameTranslator(
         Script.JAPANESE -> TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
         Script.CHINESE -> TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
         Script.KOREAN -> TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
+        Script.ARABIC -> {
+            // Arabic OCR is handled separately via Tesseract (tess-two), not ML Kit.
+            // Return null marker — caller uses ocrArabic() instead.
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        }
     }
 
     private suspend fun captureFrame(): Bitmap? = withContext(Dispatchers.Main.immediate) {
@@ -260,6 +328,46 @@ class LiveGameTranslator(
                 if (continuation.isActive) continuation.resume(null)
             }
         }
+    }
+
+
+    // PSLINK_ARABIC_OCR_V1 — Tesseract-based Arabic OCR
+    private var tessBaseApi: TessBaseAPI? = null
+    private var tessInitialized = false
+
+    private fun initTessBaseAPI(activity: Activity) {
+        if (tessInitialized) return
+        try {
+            tessBaseApi = TessBaseAPI()
+            val assets = activity.assets
+            val tessdataDir = File(activity.cacheDir, "tessdata")
+            tessdataDir.mkdirs()
+            val araData = File(tessdataDir, "ara.traineddata")
+            if (!araData.exists()) {
+                assets.open("tessdata/ara.traineddata").use { input ->
+                    araData.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            tessBaseApi?.init(tessdataDir.absolutePath, "ara", TessAPI.OcrEngineMode.OEM_DEFAULT)
+            tessInitialized = true
+        } catch (e: Exception) {
+            onStatus("تعذر تشغيل OCR العربي (Tesseract): ${e.localizedMessage ?: "خطأ غير معروف"}", false)
+            tessInitialized = false
+        }
+    }
+
+    private fun ocrArabic(bitmap: android.graphics.Bitmap): String? {
+        if (!tessInitialized || tessBaseApi == null) return null
+        tessBaseApi?.setImage(bitmap)
+        return tessBaseApi?.getUTF8Text()?.trim()
+    }
+
+    private fun closeTessBaseAPI() {
+        tessBaseApi?.end()
+        tessBaseApi = null
+        tessInitialized = false
     }
 }
 

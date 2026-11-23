@@ -124,11 +124,30 @@ end function
 
 function isValidStreamUrl(url as Dynamic) as Boolean
     if url = invalid then return false
-    if Len(url) < 9 or Len(url) > 2048 then return false
-    if Instr(1, url, " ") > 0 then return false
+    if Len(url) < 20 or Len(url) > 2048 then return false
 
-    if LCase(Left(url, 8)) = "https://" then return true
-    if LCase(Left(url, 7)) = "http://" then return true
+    lowerUrl = LCase(url)
+    if Instr(1, url, " ") > 0 or Instr(1, url, Chr(9)) > 0 then return false
+    if Instr(1, url, "@") > 0 or Instr(1, url, "?") > 0 or Instr(1, url, "#") > 0 then return false
 
-    return false
+    schemeLength = 0
+    if Left(lowerUrl, 8) = "https://" then
+        schemeLength = 8
+    else if Left(lowerUrl, 7) = "http://" then
+        schemeLength = 7
+    else
+        return false
+    end if
+
+    remainder = Mid(url, schemeLength + 1)
+    pathStart = Instr(1, remainder, "/")
+    if pathStart < 2 then return false
+    authority = Left(remainder, pathStart - 1)
+    if authority = "" then return false
+
+    path = Mid(remainder, pathStart)
+    lowerPath = LCase(path)
+    ' Accept any HLS playlist path (.m3u8 or .m3u) under any path, not just /hls/index.m3u8
+    if Right(lowerPath, 5) <> ".m3u8" and Right(lowerPath, 4) <> ".m3u" then return false
+    return true
 end function

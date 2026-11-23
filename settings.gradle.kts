@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "PS-Link"
-include(":core:shared", ":mobile", ":tv:app")
+include(":core:shared", ":mobile", ":tv:app", ":tv-google:app", ":tv-fire:app")

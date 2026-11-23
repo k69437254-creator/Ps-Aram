@@ -100,6 +100,16 @@ jobs:
         if: ${{ always() && steps.build_mobile.outcome != 'skipped' }}
         run: bash ./gradlew --no-daemon --stacktrace :tv:app:assembleDebug
 
+      - name: Build PS Link Google TV APK
+        id: build_google_tv
+        if: ${{ always() && steps.build_mobile.outcome != 'skipped' }}
+        run: bash ./gradlew --no-daemon --stacktrace :tv-google:app:assembleDebug
+
+      - name: Build PS Link Fire TV APK
+        id: build_fire_tv
+        if: ${{ always() && steps.build_mobile.outcome != 'skipped' }}
+        run: bash ./gradlew --no-daemon --stacktrace :tv-fire:app:assembleDebug
+
       - name: Verify PS Link Mobile APK package ID
         if: ${{ always() && steps.build_mobile.outcome == 'success' }}
         shell: bash
@@ -118,6 +128,24 @@ jobs:
           [[ -n "$APK" ]] || { echo "TV APK was not found" >&2; exit 1; }
           bash scripts/verify-apk.sh "$APK" com.pslink.tv
 
+      - name: Verify PS Link Google TV APK package ID
+        if: ${{ always() && steps.build_google_tv.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APK="$(find tv-google/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          [[ -n "$APK" ]] || { echo "Google TV APK was not found" >&2; exit 1; }
+          bash scripts/verify-apk.sh "$APK" com.pslink.tvgoogle
+
+      - name: Verify PS Link Fire TV APK package ID
+        if: ${{ always() && steps.build_fire_tv.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APK="$(find tv-fire/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          [[ -n "$APK" ]] || { echo "Fire TV APK was not found" >&2; exit 1; }
+          bash scripts/verify-apk.sh "$APK" com.pslink.tvfire
+
       - name: Upload PS Link Mobile APK
         if: ${{ always() && steps.build_mobile.outcome == 'success' }}
         uses: actions/upload-artifact@v4
@@ -133,6 +161,24 @@ jobs:
         with:
           name: PS-Link-TV-APK
           path: tv/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload PS Link Google TV APK
+        if: ${{ always() && steps.build_google_tv.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Link-Google-TV-APK
+          path: tv-google/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload PS Link Fire TV APK
+        if: ${{ always() && steps.build_fire_tv.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Link-Fire-TV-APK
+          path: tv-fire/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
