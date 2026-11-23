@@ -67,10 +67,26 @@ jobs:
       - name: Run shared core tests
         run: bash ./gradlew --no-daemon --stacktrace :core:shared:testDebugUnitTest
 
+      - name: Generate real AAC-LC ADTS fixture for HLS integration
+        run: |
+          set -Eeuo pipefail
+          mkdir -p mobile/build/aac-fixtures
+          ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=1" \
+            -ac 2 -c:a aac -profile:a aac_low -b:a 128k \
+            -f adts mobile/build/aac-fixtures/test-tone.aac
+          test -s mobile/build/aac-fixtures/test-tone.aac
+          ffprobe -v error -select_streams a:0 \
+            -show_entries stream=codec_name,sample_rate,channels \
+            -of default=noprint_wrappers=1 mobile/build/aac-fixtures/test-tone.aac
+
+      - name: Run PS Link final source audit
+        run: bash scripts/10-final-repair-gate.sh
+
       - name: Run PS Link controller regression tests
         run: bash ./gradlew --no-daemon --stacktrace :mobile:testDebugUnitTest
 
-      - name: Verify HLS MPEG-TS H.264 video fixture (audio not covered)
+      - name: Verify HLS MPEG-TS video and real AAC integration
         run: bash scripts/verify-hls-ts.sh
 
       - name: Build PS Link Mobile APK
@@ -118,4 +134,20 @@ jobs:
           name: PS-Link-TV-APK
           path: tv/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 14
+
+      # Keep test reports and generated transport streams available even
+      # when a later verification or packaging step fails.
+      - name: Upload PS Link test reports and HLS evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Link-Test-Reports-and-HLS-Evidence
+          path: |
+            mobile/build/test-results/testDebugUnitTest/**
+            mobile/build/reports/tests/testDebugUnitTest/**
+            mobile/build/hls-integration-test/**
+            mobile/build/hls-aac-integration-test/**
+            mobile/build/repair-audit/**
+          if-no-files-found: warn
           retention-days: 14

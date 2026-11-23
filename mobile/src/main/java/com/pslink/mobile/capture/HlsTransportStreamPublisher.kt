@@ -135,6 +135,80 @@ class HlsTransportStreamPublisher(
         writeTsPayload(stream, pid, true, payload, null)
     }
 
+
+    /**
+     * Writes one raw AAC-LC access unit.
+     * The publisher adds an ADTS header before placing it in MPEG-TS.
+     */
+    @Synchronized fun writeAudioAccessUnit(accessUnit: ByteArray, ptsUs: Long) {
+        check(!closed) { "Publisher is closed" }
+        require(accessUnit.isNotEmpty()) { "Empty AAC access unit" }
+        require(ptsUs >= 0L) { "Negative AAC timestamp" }
+
+        val stream = output ?: return
+        val adts = addAacAdtsHeader(accessUnit)
+        val pts90k = (ptsUs * 9L) / 100L
+        writeAudioPes(stream, adts, pts90k)
+        lastPtsUs = maxOf(lastPtsUs, ptsUs)
+    }
+
+    private fun addAacAdtsHeader(raw: ByteArray): ByteArray {
+        // AAC-LC, 48 kHz, stereo.
+        val profile = 1
+        val frequencyIndex = 3
+        val channels = 2
+        val frameLength = raw.size + 7
+
+        require(frameLength <= 0x1FFF) {
+            "AAC frame exceeds ADTS frame length"
+        }
+
+        val header = ByteArray(7)
+        header[0] = 0xFF.toByte()
+        header[1] = 0xF1.toByte()
+        header[2] = ((profile shl 6) or
+            (frequencyIndex shl 2) or
+            (channels shr 2)).toByte()
+        header[3] = (((channels and 3) shl 6) or
+            (frameLength shr 11)).toByte()
+        header[4] = ((frameLength shr 3) and 0xFF).toByte()
+        header[5] = (((frameLength and 7) shl 5) or 0x1F).toByte()
+        header[6] = 0xFC.toByte()
+
+        return header + raw
+    }
+
+    private fun writeAudioPes(
+        stream: OutputStream,
+        accessUnit: ByteArray,
+        pts90k: Long
+    ) {
+        val pesAfterLength = 8L + accessUnit.size
+        val pesLength = if (pesAfterLength <= 0xFFFFL) {
+            pesAfterLength.toInt()
+        } else {
+            0
+        }
+
+        val header = ByteArray(14)
+        header[0] = 0x00
+        header[1] = 0x00
+        header[2] = 0x01
+        header[3] = 0xC0.toByte()
+        header[4] = ((pesLength ushr 8) and 0xFF).toByte()
+        header[5] = (pesLength and 0xFF).toByte()
+        header[6] = 0x80.toByte()
+        header[7] = 0x80.toByte()
+        header[8] = 0x05
+        encodePts(pts90k, header, 9)
+
+        val payload = ByteArray(header.size + accessUnit.size)
+        System.arraycopy(header, 0, payload, 0, header.size)
+        System.arraycopy(accessUnit, 0, payload, header.size, accessUnit.size)
+
+        writeTsPayload(stream, 0x0101, true, payload, null)
+    }
+
     private fun writePes(stream: OutputStream, accessUnit: ByteArray, pts90k: Long) {
         val pesAfterLength = 8L + accessUnit.size
         val pesLength = if (pesAfterLength <= 0xFFFFL) pesAfterLength.toInt() else 0
@@ -215,10 +289,11 @@ class HlsTransportStreamPublisher(
     ))
 
     private fun pmtSection(): ByteArray = withCrc(byteArrayOf(
-        0x02, 0xB0.toByte(), 0x12,
+        0x02, 0xB0.toByte(), 0x17,
         0x00, 0x01, 0xC1.toByte(), 0x00, 0x00,
         0xE1.toByte(), 0x00, 0xF0.toByte(), 0x00,
-        0x1B, 0xE1.toByte(), 0x00, 0xF0.toByte(), 0x00
+        0x1B, 0xE1.toByte(), 0x00, 0xF0.toByte(), 0x00,
+        0x0F, 0xE1.toByte(), 0x01, 0xF0.toByte(), 0x00
     ))
 
     private fun withCrc(section: ByteArray): ByteArray {

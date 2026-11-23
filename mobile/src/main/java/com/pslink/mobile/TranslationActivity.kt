@@ -4,7 +4,9 @@ package com.pslink.mobile
 import com.pslink.mobile.capture.PhoneReceiverServer
 
 import android.net.Uri
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.media.projection.MediaProjectionManager
 import com.pslink.mobile.capture.TvScreenStreamService
@@ -68,6 +70,15 @@ class TranslationActivity : AppCompatActivity() {
         if (uri != null) runOcr(uri)
     }
 
+    private val requestAudioCapturePermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) {
+                binding.screenStreamStatus.text =
+                    "لم يُمنح إذن التقاط الصوت؛ سيستمر الإعداد لبث الفيديو فقط."
+            }
+            launchScreenProjection()
+        }
+
     private val requestScreenStream =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val data = result.data
@@ -93,7 +104,14 @@ class TranslationActivity : AppCompatActivity() {
                     if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent)
                     else startService(intent)
                     binding.screenStreamStatus.text =
-                        "تم منح إذن مشاركة الشاشة؛ جارٍ تجهيز بث H.264."
+                        if (
+                            Build.VERSION.SDK_INT >= 29 &&
+                            checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            "تم منح مشاركة الشاشة؛ جارٍ تجهيز بث الفيديو دون صوت."
+                        } else {
+                            "تم منح إذن مشاركة الشاشة؛ جارٍ تجهيز بث H.264 والصوت إذا كان مسموحًا."
+                        }
                 } catch (error: Exception) {
                     binding.screenStreamStatus.text =
                         "تعذر بدء البث: ${error.localizedMessage ?: "خطأ غير معروف"}"
@@ -152,8 +170,7 @@ class TranslationActivity : AppCompatActivity() {
                 )
                 binding.screenStreamStatus.text = "جارٍ إيقاف بث الشاشة…"
             } else {
-                val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                requestScreenStream.launch(manager.createScreenCaptureIntent())
+                beginScreenStream()
             }
         }
 
@@ -211,6 +228,22 @@ class TranslationActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
         })
+    }
+
+    private fun beginScreenStream() {
+        if (
+            Build.VERSION.SDK_INT >= 29 &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestAudioCapturePermission.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            launchScreenProjection()
+        }
+    }
+
+    private fun launchScreenProjection() {
+        val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        requestScreenStream.launch(manager.createScreenCaptureIntent())
     }
 
     private fun selectedLanguage(): SourceLanguage = sourceLanguages[

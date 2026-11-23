@@ -94,6 +94,23 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
         "pslink.hls.test.outputDir",
         hlsIntegrationOutput.get().asFile.absolutePath
     )
+    // Separate output and fixture for real AAC integration.
+    val hlsAacIntegrationOutput =
+        layout.buildDirectory.dir("hls-aac-integration-test")
+    val hlsAacFixture =
+        layout.buildDirectory.file("aac-fixtures/test-tone.aac")
+
+    outputs.dir(hlsAacIntegrationOutput)
+    inputs.file(hlsAacFixture).optional()
+
+    systemProperty(
+        "pslink.hls.test.aacOutputDir",
+        hlsAacIntegrationOutput.get().asFile.absolutePath
+    )
+    systemProperty(
+        "pslink.hls.test.aacFixture",
+        hlsAacFixture.get().asFile.absolutePath
+    )
 }
 
 dependencies {

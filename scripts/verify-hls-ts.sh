@@ -113,5 +113,67 @@ ffmpeg \
 
 echo
 echo "PASS: FFmpeg decoded an H.264 video frame."
-echo "NOTE: This fixture verifies H.264 video only; AAC audio and A/V sync are not tested."
-echo "PS LINK HLS MPEG-TS VIDEO-ONLY VERIFICATION PASSED."
+echo "NOTE: AAC transport and decoding are checked by the separate real-AAC integration fixture; device A/V sync remains unverified."
+
+echo
+echo "===== REAL AAC + H.264 MPEG-TS VERIFICATION ====="
+
+AAC_OUT="mobile/build/hls-aac-integration-test"
+AAC_PLAYLIST="$AAC_OUT/index.m3u8"
+
+[[ -s "$AAC_PLAYLIST" ]] || {
+    echo "ERROR: Real AAC HLS playlist missing: $AAC_PLAYLIST" >&2
+    exit 1
+}
+
+mapfile -t AAC_SEGMENTS < <(
+    grep -E '^pslink-segment-[0-9]{6}\.ts$' "$AAC_PLAYLIST"
+)
+
+[[ ${#AAC_SEGMENTS[@]} -gt 0 ]] || {
+    echo "ERROR: AAC playlist references no TS segments" >&2
+    exit 1
+}
+
+for segment in "${AAC_SEGMENTS[@]}"; do
+    FILE="$AAC_OUT/$segment"
+
+    [[ -s "$FILE" ]] || {
+        echo "ERROR: Missing AAC integration segment: $FILE" >&2
+        exit 1
+    }
+
+    CODECS="$(ffprobe -v error \
+        -show_entries stream=codec_name \
+        -of csv=p=0 "$FILE" | sort -u)"
+
+    echo "Detected codecs in $FILE:"
+    printf '%s\n' "$CODECS"
+
+    grep -qx "h264" <<< "$CODECS" || {
+        echo "ERROR: H.264 stream missing from $FILE" >&2
+        exit 1
+    }
+
+    grep -qx "aac" <<< "$CODECS" || {
+        echo "ERROR: AAC stream missing from $FILE" >&2
+        exit 1
+    }
+
+    echo "PASS: H.264 and AAC streams detected."
+done
+
+echo
+echo "===== AAC DECODE TEST ====="
+
+ffmpeg \
+    -hide_banner \
+    -loglevel error \
+    -xerror \
+    -i "$AAC_PLAYLIST" \
+    -map 0:a:0 \
+    -frames:a 1 \
+    -f null -
+
+echo "PASS: FFmpeg decoded an AAC frame from HLS."
+echo "PS LINK HLS MPEG-TS VIDEO + AAC VERIFICATION PASSED."

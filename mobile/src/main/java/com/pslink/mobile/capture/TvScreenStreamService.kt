@@ -56,6 +56,7 @@ class TvScreenStreamService : Service() {
     private var encoderThread: Thread? = null
     private var phoneReceiverServer: PhoneReceiverServer? = null
     private var hlsPublisher: HlsTransportStreamPublisher? = null
+    private var audioCapture: AacPlaybackCapture? = null
     private var stopping = false
     private var streamWidth = 0
     private var streamHeight = 0
@@ -185,6 +186,44 @@ class TvScreenStreamService : Service() {
                 publisher.start()
                 hlsPublisher = publisher
                 receiver.start()
+
+                if (Build.VERSION.SDK_INT >= 29) {
+                    if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        try {
+                            val capture = AacPlaybackCapture(
+                                activeProjection,
+                                { frame, ptsUs ->
+                                    try {
+                                        publisher.writeAudioAccessUnit(frame, ptsUs)
+                                    } catch (audioError: Exception) {
+                                        report(
+                                            "تعذر نشر إطار AAC: " +
+                                                (audioError.localizedMessage ?: "خطأ غير معروف")
+                                        )
+                                    }
+                                },
+                                { message ->
+                                    report("تعذر التقاط صوت التطبيقات: $message")
+                                }
+                            )
+                            capture.start()
+                            audioCapture = capture
+                            report("تم تشغيل التقاط صوت التطبيقات وترميز AAC-LC.")
+                        } catch (audioError: Exception) {
+                            report(
+                                "سيستمر بث الفيديو دون صوت: " +
+                                    (audioError.localizedMessage ?: "تعذر بدء التقاط الصوت")
+                            )
+                        }
+                    } else {
+                        report(
+                            "سيستمر بث الفيديو دون صوت: إذن RECORD_AUDIO غير ممنوح."
+                        )
+                    }
+                } else {
+                    report("التقاط صوت التطبيقات يتطلب Android 10 أو أحدث.")
+                }
             }
 
             sink?.configureMediaStream(streamWidth, streamHeight, 0, 30)
@@ -306,6 +345,9 @@ class TvScreenStreamService : Service() {
         val oldProjection = projection
         projection = null
         if (stopProjection) runCatching { oldProjection?.stop() }
+
+        runCatching { audioCapture?.stop() }
+        audioCapture = null
 
         runCatching { hlsPublisher?.stop() }
         hlsPublisher = null
