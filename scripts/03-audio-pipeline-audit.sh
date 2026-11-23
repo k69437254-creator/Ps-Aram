@@ -1,7 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -Eeuo pipefail
 
-EXPECTED_BRANCH="feature/platform-completion-pack"
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "ERROR: Not inside a Git repository"
@@ -18,11 +17,6 @@ command -v python3 >/dev/null 2>&1 || {
 BRANCH="$(git branch --show-current)"
 HEAD="$(git rev-parse HEAD)"
 
-if [ "$BRANCH" != "$EXPECTED_BRANCH" ]; then
-  echo "ERROR: Unexpected branch: $BRANCH"
-  echo "Expected: $EXPECTED_BRANCH"
-  exit 1
-fi
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="build/audio-pipeline-audit-$STAMP"

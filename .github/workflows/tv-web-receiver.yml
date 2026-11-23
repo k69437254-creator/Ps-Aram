@@ -5,6 +5,7 @@ on:
     branches:
       - feature/multiplatform-tv-foundation
       - feature/platform-completion-pack
+      - repair/comprehensive-media-platform
     paths:
       - 'receivers/web/**'
       - 'receivers/xbox-edge/**'

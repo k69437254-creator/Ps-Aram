@@ -3,7 +3,6 @@
 # Read-only source audit. Reports are written under build/.
 set -Eeuo pipefail
 
-EXPECTED_BRANCH="feature/platform-completion-pack"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "ERROR: Not inside the PS Link Git repository" >&2
   exit 1
@@ -11,11 +10,6 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 cd "$ROOT"
 
 BRANCH="$(git branch --show-current)"
-if [[ "$BRANCH" != "$EXPECTED_BRANCH" ]]; then
-  echo "ERROR: Wrong branch: $BRANCH"
-  echo "Expected: $EXPECTED_BRANCH"
-  exit 1
-fi
 
 [[ -s platforms/targets.json ]] || {
   echo "ERROR: platforms/targets.json is missing"

@@ -2,7 +2,7 @@ name: PS Link Android builds
 
 on:
   push:
-    branches: [ main, master, 'feature/psn-oauth-integration', 'feature/multiplatform-tv-foundation', 'feature/phone-hls-receiver-v2', 'feature/platform-completion-pack' ]
+    branches: [ main, master, 'feature/psn-oauth-integration', 'feature/multiplatform-tv-foundation', 'feature/phone-hls-receiver-v2', 'feature/platform-completion-pack', 'repair/comprehensive-media-platform' ]
   pull_request:
   workflow_dispatch:
 

@@ -1,7 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -Eeuo pipefail
 
-EXPECTED_BRANCH="feature/platform-completion-pack"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     echo "ERROR: Not a Git repository"
     exit 1
@@ -9,10 +8,6 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 cd "$ROOT"
 
 BRANCH="$(git branch --show-current)"
-if [[ "$BRANCH" != "$EXPECTED_BRANCH" ]]; then
-    echo "ERROR: Wrong branch: $BRANCH"
-    exit 1
-fi
 
 HEAD_BEFORE="$(git rev-parse HEAD)"
 STATUS_BEFORE="$(git status --short)"

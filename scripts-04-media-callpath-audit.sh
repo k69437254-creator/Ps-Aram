@@ -1,7 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -Eeuo pipefail
 
-EXPECTED_BRANCH="feature/platform-completion-pack"
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "ERROR: هذا المسار ليس داخل Git repository."
@@ -11,12 +10,6 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 cd "$ROOT"
 
 CURRENT_BRANCH="$(git branch --show-current)"
-if [ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]; then
-  echo "ERROR: الفرع الحالي غير المتوقع."
-  echo "Expected: $EXPECTED_BRANCH"
-  echo "Current:  $CURRENT_BRANCH"
-  exit 1
-fi
 
 command -v python3 >/dev/null 2>&1 || {
   echo "ERROR: python3 غير متوفر."
