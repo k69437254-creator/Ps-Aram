@@ -7,7 +7,11 @@ scene = (root / "receivers/roku/source/MainScene.brs").read_text()
 
 assert "isSixDigitCode(code)" in pair
 assert "isValidStreamUrl(url)" in pair
-assert 'Right(LCase(path), 11) <> "/index.m3u8"' in pair
+assert 'Right(lowerPath, 5) <> ".m3u8"' in pair
+assert 'Right(lowerPath, 4) <> ".m3u"' in pair
+main_scene = scene
+assert 'Right(lowerPath, 5) <> ".m3u8"' in main_scene
+assert 'Right(lowerPath, 4) <> ".m3u"' in main_scene
 
 assert "isSixDigitCode(code)" in scene
 assert "isValidStreamUrl(url)" in scene

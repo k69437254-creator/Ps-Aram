@@ -34,6 +34,14 @@ echo
 
 echo "===== RECEIVER BEHAVIOR REGRESSION TESTS ====="
 node receivers/platform-tests/platform-app.test.js
+node receivers/web/tests/protocol.test.js
+node receivers/web/tests/receiver.test.js
+node receivers/web/tests/hls-integration.test.js
+node receivers/tizen/tests/receiver.test.js
+node receivers/webos/tests/receiver.test.js
+node receivers/xbox-edge/tests/receiver.test.js
+node receivers/xbox-edge/tests/lifecycle.test.js
+python3 receivers/roku/tests/receiver_contract.test.py
 echo
 
 echo "===== PLATFORM JSON AND PACKAGE STRUCTURE ====="
@@ -71,7 +79,7 @@ if len(ids) != len(set(ids)):
     raise SystemExit("FAIL: duplicate platform target IDs")
 
 required = {"android-mobile", "android-tv", "google-tv", "fire-tv",
-            "tizen", "webos", "roku", "xbox-edge"}
+            "tizen", "webos", "roku", "web", "xbox-edge", "playstation"}
 missing = sorted(required - set(ids))
 if missing:
     raise SystemExit("FAIL: target matrix is missing: " + ", ".join(missing))

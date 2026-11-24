@@ -158,18 +158,18 @@
     {
       "id": "playstation",
       "name": "PlayStation",
-      "technology": "PS5/PS4 native application (TBD)",
-      "state": "not-started",
+      "technology": "PlayStation Remote Play through Android Mobile + pinned Chiaki-NG integration",
+      "state": "source-partial",
       "validation": {
-        "sourceImplementation": "none; no native PlayStation receiver implemented",
-        "automatedTests": "none",
-        "packageBuilt": "not-tested",
-        "packageSigned": "not-tested",
-        "installable": "not-tested",
-        "physicalDevice": "not-tested-on-playstation",
-        "fullMediaPath": "not-validated",
-        "audioVideoSync": "not-validated",
-        "longDurationStability": "not-tested"
+        "sourceImplementation": "Android Chiaki-NG stream integration and phone-side PS Link relay; no native PS4/PS5 receiver is claimed",
+        "automatedTests": "source and protocol checks exist; Android bootstrap/build must pass",
+        "packageBuilt": "Android package pending successful CI build",
+        "packageSigned": "not-validated",
+        "installable": "not-validated",
+        "physicalDevice": "PS4/PS5 + Android phone end-to-end test pending",
+        "fullMediaPath": "native video/audio bridge requires successful Android build and device test",
+        "audioVideoSync": "not-validated-on-device",
+        "longDurationStability": "not-tested-on-device"
       }
     }
   ]

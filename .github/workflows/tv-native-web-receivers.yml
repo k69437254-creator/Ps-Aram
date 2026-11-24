@@ -57,5 +57,13 @@ jobs:
       - name: Run Tizen and webOS package smoke tests
         run: node receivers/platform-tests/platform-app.test.js
 
-      - name: Run Xbox Edge receiver tests
-        run: node receivers/xbox-edge/tests/receiver.test.js
+      - name: Run Tizen receiver tests
+        run: node receivers/tizen/tests/receiver.test.js
+
+      - name: Run webOS receiver tests
+        run: node receivers/webos/tests/receiver.test.js
+
+      - name: Run Xbox Edge receiver and lifecycle tests
+        run: |
+          node receivers/xbox-edge/tests/receiver.test.js
+          node receivers/xbox-edge/tests/lifecycle.test.js

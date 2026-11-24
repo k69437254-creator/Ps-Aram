@@ -131,7 +131,7 @@ stream_methods = r'''
 					binding.psLinkLiveOcrButton.text = "ترجمة حية"
 					livePrefs.edit().putBoolean("enabled", false).apply()
 				}
-			} })
+			} }, sessionId = java.util.UUID.randomUUID().toString())
 
 		binding.psLinkLiveOcrButton.setOnClickListener {
 			val engine = psLinkTranslator ?: return@setOnClickListener

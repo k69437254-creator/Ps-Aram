@@ -788,7 +788,7 @@ class TvSubtitleClient(
         mediaQueue.offer(packet)
     }
 
-    fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long) {
+    fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long, sessionId: String = "") {
         if (!ready || ptsNs <= 0L) return
         val array = JSONArray()
         lines.take(3).forEach { line ->
@@ -803,6 +803,7 @@ class TvSubtitleClient(
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "captions")
             .put("timestampNs", ptsNs)
+            .put("sessionId", sessionId)
             .put("lines", array)
             .toString())
     }
@@ -876,20 +877,27 @@ def patch_phone_translation() -> None:
         "private const val SAMPLE_INTERVAL_MS = 650L\n        private const val MAX_OCR_CHARS = 160",
         "bound OCR text length",
     )
-    src = replace_once(
-        src,
-        """                                    if (sourceText.length < 2 ||
+    # PSLINK_OCR_FILTER_IDEMPOTENT_V1
+    dialogue_filter_is_current = (
+        "sourceText.length > MAX_OCR_CHARS" in src
+        and "rect.centerY() < bitmap.height * 0.48f" in src
+        and "rect.width() < bitmap.width * 0.06f" in src
+    )
+    if not dialogue_filter_is_current:
+        src = replace_once(
+            src,
+            """                                    if (sourceText.length < 2 ||
                                         rect.centerY() < bitmap.height * 0.60f ||
                                         rect.width() < bitmap.width * 0.10f ||
                                         rect.height() < 8
 """,
-        """                                    if (sourceText.length < 2 || sourceText.length > MAX_OCR_CHARS ||
+            """                                    if (sourceText.length < 2 || sourceText.length > MAX_OCR_CHARS ||
                                         rect.centerY() < bitmap.height * 0.48f ||
                                         rect.width() < bitmap.width * 0.06f ||
                                         rect.height() < 8
 """,
-        "expand dialogue detection while rejecting small HUD text and OCR blocks",
-    )
+            "expand dialogue detection while rejecting small HUD text and OCR blocks",
+        )
     src = replace_once(
         src,
         "                    val sampleStartedAt = SystemClock.elapsedRealtime()\n                    val bitmap = captureFrame()",

@@ -12,7 +12,9 @@ TARGETS = [
 ("tizen","Samsung Tizen",["receivers/tizen/config.xml","receivers/tizen/index.html","receivers/tizen/app.js","receivers/tizen/pslink-client.js","receivers/tizen/media-player.js"]),
 ("webos","LG webOS",["receivers/webos/appinfo.json","receivers/webos/index.html","receivers/webos/app.js","receivers/webos/pslink-client.js","receivers/webos/media-player.js"]),
 ("roku","Roku",["receivers/roku/manifest","receivers/roku/source/main.brs","receivers/roku/source/MainScene.brs","receivers/roku/source/components/PairingTask.brs"]),
-("xbox-edge","Xbox Edge",["receivers/xbox-edge/index.html","receivers/xbox-edge/app.js","receivers/xbox-edge/pslink-client.js"])
+("xbox-edge","Xbox Edge",["receivers/xbox-edge/index.html","receivers/xbox-edge/app.js","receivers/xbox-edge/pslink-client.js"]),
+("web","Web Browser",["receivers/web/index.html","receivers/web/app.js","receivers/web/pslink-client.js","receivers/web/media-player.js"]),
+("playstation","PlayStation via Chiaki-NG",["mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt","mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt","mobile/src/main/java/com/pslink/mobile/capture/PhoneReceiverServer.kt","scripts/prepare_pslink_live_tv_streaming.py","scripts/prepare_pslink_upstream.py"])
 ]
 GAPS = {
 "android-mobile":["PSN account extraction is manual redirect-link handling, not silent OAuth.","Live OCR samples frames; Arabic OCR is not included.","Long-duration A/V synchronization and device stability are not proven by source tests.","Phone-to-TV transport includes local unencrypted ws:// paths."],
@@ -22,7 +24,9 @@ GAPS = {
 "tizen":["AVPlay/HLS adapter exists, but complete playback/audio behavior is not proven on a supported Tizen device.","Vendor package build/sign/install and long-session A/V sync are not evidenced by this source audit."],
 "webos":["HTML media/HLS adapter exists, but complete playback/audio behavior is not proven on a supported webOS device.","IPK build/sign/install and long-session A/V sync are not evidenced by this source audit."],
 "roku":["SceneGraph/BrightScript HLS receiver is a prototype.","No complete audio pipeline or A/V synchronization implementation is evidenced by current Roku source.","Package build/sign/device validation are not evidenced by source presence."],
-"xbox-edge":["This is a browser receiver, not a native Xbox application.","Browser HLS playback exists, but device-level A/V synchronization and long-session stability are not proven."]
+"xbox-edge":["This is a browser receiver, not a native Xbox application.","Browser HLS playback exists, but device-level A/V synchronization and long-session stability are not proven."],
+"web":["The browser receiver has source and automated adapter tests, but browser/device HLS decoding, autoplay behavior, A/V synchronization and long-session stability are not proven."],
+"playstation":["The supported route is Android Mobile + pinned Chiaki-NG Remote Play + phone-side PS Link relay; no native PS4/PS5 application is claimed.","Android CI must complete bootstrap and Gradle compilation, then the PS console/phone/TV path must be tested on hardware."]
 }
 def main():
     root=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else Path.cwd().resolve()
@@ -54,7 +58,7 @@ def main():
     report={"generated_utc":datetime.now(timezone.utc).isoformat(),"branch":branch,"head":head,"tracked_file_count":len(tracked),"text_file_count":text_count,"binary_file_count":binary_count,"missing_tracked_files":missing,"platforms":matrix,"declared_target_states":declared,"inventory":inventory,"scope_note":"Source inventory/evidence audit only; not vendor-device certification or a 100% completion claim."}
     out=root/"reports"; out.mkdir(exist_ok=True)
     (out/"PS-LINK-FULL-AUDIT.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
-    lines=["# PS Link — تقرير تدقيق ملفات المستودع","",f"- الفرع: `{branch}`",f"- HEAD: `{head}`",f"- الملفات المتتبعة: **{len(tracked)}**",f"- الملفات النصية: **{text_count}**",f"- الملفات الثنائية: **{binary_count}**",f"- ملفات متتبعة مفقودة من نسخة العمل: **{len(missing)}**","","هذا تدقيق جرد وأدلة مصدر، وليس شهادة تشغيل على الأجهزة أو ادعاء اكتمال 100%.","","## المنصات الثماني",""]
+    lines=["# PS Link — تقرير تدقيق ملفات المستودع","",f"- الفرع: `{branch}`",f"- HEAD: `{head}`",f"- الملفات المتتبعة: **{len(tracked)}**",f"- الملفات النصية: **{text_count}**",f"- الملفات الثنائية: **{binary_count}**",f"- ملفات متتبعة مفقودة من نسخة العمل: **{len(missing)}**","","هذا تدقيق جرد وأدلة مصدر، وليس شهادة تشغيل على الأجهزة أو ادعاء اكتمال 100%.","","## المنصات العشر",""]
     for ident,item in matrix.items():
         lines += [f"### {item['name']} (`{ident}`)",f"- ملفات المصدر الموجودة: {item['source_artifacts_present']}/{item['source_artifacts_expected']}",f"- الحالة: **{item['source_status']}**"]
         if item["missing_artifacts"]: lines += ["- ملفات مفقودة:"]+[f"  - `{x}`" for x in item["missing_artifacts"]]
