@@ -248,7 +248,22 @@ class PhoneReceiverServer(
                                 .toString()))
                             if (streamAvailable.get()) sendStreamUrl(this)
                             for (frame in incoming) {
-                                if (frame is Frame.Close) break
+                                when (frame) {
+                                    is Frame.Close -> break
+                                    is Frame.Text -> {
+                                        val message = runCatching {
+                                            JSONObject(frame.readText())
+                                        }.getOrNull()
+                                        if (message?.optInt("v", -1) == PsLinkProtocol.VERSION &&
+                                            message.optString("kind") == PsLinkProtocol.KIND_HEARTBEAT) {
+                                            send(Frame.Text(JSONObject()
+                                                .put("v", PsLinkProtocol.VERSION)
+                                                .put("kind", PsLinkProtocol.KIND_HEARTBEAT_ACK)
+                                                .toString()))
+                                        }
+                                    }
+                                    else -> Unit
+                                }
                             }
                         } finally {
                             sessions.remove(this)

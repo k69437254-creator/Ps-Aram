@@ -10,6 +10,7 @@ var root = path.resolve(__dirname, "../..");
 function loadClient(relativePath, pageLocation) {
   var sockets = [];
   var timers = [];
+  var now = 1000000;
 
   function FakeWebSocket(url) {
     this.url = url;
@@ -41,6 +42,7 @@ function loadClient(relativePath, pageLocation) {
     exports: {},
     WebSocket: FakeWebSocket,
     URL: URL,
+    Date: { now: function () { return now; } },
     location: pageLocation,
     setTimeout: function (callback, delay) {
       var timer = { callback: callback, delay: delay, cancelled: false };
@@ -63,7 +65,8 @@ function loadClient(relativePath, pageLocation) {
     Receiver: context.module.exports,
     context: context,
     sockets: sockets,
-    timers: timers
+    timers: timers,
+    advanceTime: function (milliseconds) { now += milliseconds; }
   };
 }
 
@@ -89,7 +92,8 @@ function verifyTransportBehavior(name) {
     requireMethod(shared, method, "shared transport");
     requireMethod(Receiver.prototype, method === "parseMediaPacket" ? "connect" : "disconnect", name);
   });
-  ["connect", "disconnect", "configureMedia"].forEach(function (method) {
+  ["connect", "disconnect", "configureMedia", "getConnectionState", "isReady"]
+    .forEach(function (method) {
     requireMethod(Receiver.prototype, method, name);
     requireMethod(shared.prototype, method, "shared transport");
   });
@@ -99,30 +103,38 @@ function verifyTransportBehavior(name) {
   assert.strictEqual(Receiver.normalizePairingCode("12345"), null);
   assert.strictEqual(Receiver.normalizePairingCode("12x456"), null);
 
-  assert.strictEqual(
-    Receiver.resolveSocketUrl("192.168.1.5", { protocol: "http:" }),
-    "ws://192.168.1.5:8765/subtitle"
-  );
-  assert.strictEqual(
-    Receiver.resolveSocketUrl("tv.example", { protocol: "https:" }),
-    "wss://tv.example/subtitle"
-  );
-  assert.throws(function () {
-    Receiver.resolveSocketUrl("ws://tv.example:8765/subtitle", { protocol: "https:" });
-  }, /WSS|آمن/);
-  assert.throws(function () {
-    Receiver.resolveSocketUrl("wss://tv.example/other", { protocol: "https:" });
-  });
-  assert.throws(function () {
-    Receiver.resolveSocketUrl("tv.example/path", { protocol: "http:" });
-  });
-
-  assert.strictEqual(
-    Receiver.normalizeStreamUrl("http://phone.local/hls/index.m3u8", {
-      protocol: "https:", origin: "https://receiver.example"
-    }),
-    "https://receiver.example/hls/index.m3u8"
-  );
+  if (typeof Receiver.resolveSocketUrl === "function") {
+    assert.strictEqual(
+      Receiver.resolveSocketUrl("192.168.1.5", { protocol: "http:" }),
+      "ws://192.168.1.5:8765/subtitle"
+    );
+    assert.strictEqual(
+      Receiver.resolveSocketUrl("tv.example", { protocol: "https:" }),
+      "wss://tv.example/subtitle"
+    );
+    assert.throws(function () {
+      Receiver.resolveSocketUrl("ws://tv.example:8765/subtitle", { protocol: "https:" });
+    }, /WSS|آمن/);
+    assert.throws(function () {
+      Receiver.resolveSocketUrl("wss://tv.example/other", { protocol: "https:" });
+    });
+    assert.throws(function () {
+      Receiver.resolveSocketUrl("tv.example/path", { protocol: "http:" });
+    });
+    assert.strictEqual(
+      Receiver.normalizeStreamUrl("http://phone.local/hls/index.m3u8", {
+        protocol: "https:", origin: "https://receiver.example"
+      }),
+      "https://receiver.example/hls/index.m3u8"
+    );
+  } else {
+    assert.strictEqual(
+      Receiver.normalizeStreamUrl("http://phone.local/hls/index.m3u8", {
+        protocol: "https:", origin: "https://receiver.example"
+      }),
+      null
+    );
+  }
   assert.strictEqual(
     Receiver.normalizeStreamUrl("http://phone.local/private/file.m3u8", {
       protocol: "https:", origin: "https://receiver.example"
@@ -147,8 +159,11 @@ function verifyTransportBehavior(name) {
   assert.strictEqual(harness.sockets.length, 1);
   var socket = harness.sockets[0];
   assert.strictEqual(socket.url, "ws://192.168.1.5:8765/subtitle");
+  assert.strictEqual(receiver.getConnectionState(), "connecting");
+  assert.strictEqual(receiver.isReady(), false);
   receiver.configureMedia(1920, 1080, 0, 30);
   socket.open();
+  assert.strictEqual(receiver.getConnectionState(), "authenticating");
 
   var auth = JSON.parse(socket.sent[0]);
   assert.strictEqual(auth.v, Receiver.PROTOCOL_VERSION);
@@ -157,6 +172,21 @@ function verifyTransportBehavior(name) {
 
   socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "ready" }));
   assert.strictEqual(observed.ready[observed.ready.length - 1], true);
+  assert.strictEqual(receiver.getConnectionState(), "ready");
+  assert.strictEqual(receiver.isReady(), true);
+  var heartbeatTimer = harness.timers.find(function (timer) {
+    return !timer.cancelled && timer.delay === 15000;
+  });
+  assert(heartbeatTimer, "ready connection must schedule a heartbeat");
+  heartbeatTimer.callback();
+  assert(socket.sent.some(function (item) {
+    return typeof item === "string" && JSON.parse(item).kind === "heartbeat";
+  }), "heartbeat must be sent over the active socket");
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION,
+    kind: "heartbeat_ack"
+  }));
+  assert.strictEqual(receiver.isReady(), true);
   assert(socket.sent.some(function (item) {
     return typeof item === "string" && JSON.parse(item).kind === "media_config";
   }), "media configuration must be replayed after authentication");
@@ -196,12 +226,47 @@ function verifyTransportBehavior(name) {
   assert.strictEqual(observed.media[0].keyFrame, true);
 
   socket.close(1006, "network lost");
-  assert.strictEqual(harness.timers.length, 1, "unexpected close must schedule bounded reconnect");
-  assert.strictEqual(harness.timers[0].delay, 1000);
+  assert.strictEqual(receiver.getConnectionState(), "disconnected");
+  var reconnectTimer = harness.timers.find(function (timer) {
+    return !timer.cancelled && timer.delay === 1000;
+  });
+  assert(reconnectTimer, "unexpected close must schedule bounded reconnect");
   receiver.disconnect();
-  assert.strictEqual(harness.timers[0].cancelled, true,
+  assert.strictEqual(reconnectTimer.cancelled, true,
     "manual disconnect must cancel a pending reconnect");
+  assert.strictEqual(receiver.getConnectionState(), "disconnected");
   assert.strictEqual(receiver.closedByUser, true);
+}
+
+function verifyHeartbeatTimeout(name) {
+  var harness = loadClient(name + "/pslink-client.js", {
+    protocol: "http:",
+    origin: "http://tv.local"
+  });
+  var receiver = new harness.Receiver();
+  receiver.connect("192.168.1.5", "123456");
+  var socket = harness.sockets[0];
+  socket.open();
+  socket.message(JSON.stringify({
+    v: receiver.constructor.PROTOCOL_VERSION,
+    kind: "ready"
+  }));
+
+  var heartbeatTimer = harness.timers.find(function (timer) {
+    return !timer.cancelled && timer.delay === 15000;
+  });
+  assert(heartbeatTimer, name + " must start a heartbeat after readiness");
+  harness.advanceTime(45000);
+  heartbeatTimer.callback();
+  assert.strictEqual(socket.closeCode, 4000, name + " must close a stale heartbeat");
+  assert.strictEqual(receiver.getConnectionState(), "disconnected");
+
+  var reconnectTimer = harness.timers.find(function (timer) {
+    return !timer.cancelled && timer.delay === 1000;
+  });
+  assert(reconnectTimer, name + " must reconnect after heartbeat timeout");
+  receiver.disconnect();
+  assert.strictEqual(reconnectTimer.cancelled, true);
 }
 
 ["tizen", "webos"].forEach(function (name) {
@@ -233,6 +298,9 @@ function verifyTransportBehavior(name) {
   assert(app.indexOf("streamUrlReceived = true;") !== -1, name + " HLS received state missing");
   verifyTransportBehavior(name);
 });
+
+["web", "xbox-edge"].forEach(verifyTransportBehavior);
+["web", "tizen", "webos", "xbox-edge"].forEach(verifyHeartbeatTimeout);
 
 var tizenManifest = fs.readFileSync(path.join(root, "receivers", "tizen", "config.xml"), "utf8");
 var webosManifest = JSON.parse(fs.readFileSync(path.join(root, "receivers", "webos", "appinfo.json"), "utf8"));

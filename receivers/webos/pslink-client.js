@@ -10,6 +10,8 @@
   var MEDIA_VERSION = 1;
   var MEDIA_HEADER_BYTES = 28;
   var MAX_MEDIA_BYTES = 2 * 1024 * 1024;
+  var HEARTBEAT_INTERVAL_MS = 15000;
+  var HEARTBEAT_TIMEOUT_MS = 45000;
 
   function normalizePairingCode(value) {
     var digits = String(value == null ? "" : value)
@@ -182,11 +184,62 @@
     this.reconnectTimer = null;
     this.reconnectDelay = 1000;
     this.maxReconnectDelay = 30000;
+    this.heartbeatTimer = null;
+    this.lastHeartbeatAt = 0;
   }
 
   PsLinkReceiver.prototype._emit = function (name, value) {
     var callback = this.options[name];
     if (typeof callback === "function") callback(value);
+  };
+
+  PsLinkReceiver.prototype.getConnectionState = function () {
+    if (this.authRejected) return "rejected";
+    if (!this.socket) return "disconnected";
+    if (this.socket.readyState === 0) return "connecting";
+    if (this.socket.readyState === 1) return this.ready ? "ready" : "authenticating";
+    if (this.socket.readyState === 2) return "closing";
+    return "disconnected";
+  };
+
+  PsLinkReceiver.prototype.isReady = function () {
+    return this.getConnectionState() === "ready";
+  };
+
+  PsLinkReceiver.prototype._stopHeartbeat = function () {
+    if (this.heartbeatTimer !== null) {
+      clearTimeout(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    this.lastHeartbeatAt = 0;
+  };
+
+  PsLinkReceiver.prototype._startHeartbeat = function (socket) {
+    this._stopHeartbeat();
+    this.lastHeartbeatAt = Date.now();
+    var self = this;
+
+    function sendHeartbeat() {
+      self.heartbeatTimer = null;
+      if (self.socket !== socket || !self.isReady() || self.closedByUser) return;
+      if (Date.now() - self.lastHeartbeatAt >= HEARTBEAT_TIMEOUT_MS) {
+        try { socket.close(4000, "Heartbeat timeout"); } catch (ignore) {}
+        return;
+      }
+
+      try {
+        socket.send(JSON.stringify({
+          v: PROTOCOL_VERSION,
+          kind: "heartbeat"
+        }));
+      } catch (error) {
+        try { socket.close(); } catch (ignore) {}
+        return;
+      }
+      self.heartbeatTimer = setTimeout(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+    }
+
+    this.heartbeatTimer = setTimeout(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
   };
 
   PsLinkReceiver.prototype._scheduleReconnect = function () {
@@ -247,6 +300,7 @@
         self.ready = true;
         self.authRejected = false;
         self.reconnectDelay = 1000;
+        self._startHeartbeat(socket);
         if (self.lastConfig && socket.readyState === 1) {
           try { socket.send(self.lastConfig); } catch (ignore) {}
         }
@@ -256,10 +310,14 @@
       } else if (message.kind === "error") {
         self.ready = false;
         self.authRejected = true;
+        self._stopHeartbeat();
         self._emit("onReady", false);
         self._emit("onError", message);
         self._emit("onStatus", message.message || "رفض الهاتف الاقتران؛ تحقق من الرمز.");
         try { socket.close(1008, "Pairing rejected"); } catch (ignore) {}
+
+      } else if (message.kind === "heartbeat_ack") {
+        if (self.isReady()) self.lastHeartbeatAt = Date.now();
 
       } else if (message.kind === "subtitle") {
         if (typeof message.id !== "string" || !message.id) return;
@@ -275,6 +333,7 @@
         } catch (ignore) {}
 
       } else if (message.kind === "stream_url") {
+        if (!self.isReady()) return;
         var streamUrl = normalizeStreamUrl(
           message.url,
           typeof location !== "undefined" ? location : null
@@ -301,6 +360,7 @@
       if (self.socket !== socket) return;
       self.socket = null;
       self.ready = false;
+      self._stopHeartbeat();
       self._emit("onReady", false);
       if (!self.closedByUser && !self.authRejected) self._scheduleReconnect();
     };
@@ -344,7 +404,7 @@
       fps: fps
     });
 
-    if (this.ready && this.socket && this.socket.readyState === 1) {
+    if (this.isReady()) {
       this.socket.send(this.lastConfig);
     }
   };
@@ -352,6 +412,8 @@
   PsLinkReceiver.prototype.disconnect = function () {
     this.closedByUser = true;
     this.ready = false;
+    this.authRejected = false;
+    this._stopHeartbeat();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

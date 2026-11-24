@@ -119,6 +119,15 @@ class TvSubtitleServer(
                                 }
                                 is Frame.Text -> {
                                     val raw = frame.readText()
+                                    val message = runCatching { JSONObject(raw) }.getOrNull()
+                                    if (message?.optInt("v", -1) == PsLinkProtocol.VERSION &&
+                                        message.optString("kind") == PsLinkProtocol.KIND_HEARTBEAT) {
+                                        send(Frame.Text(JSONObject()
+                                            .put("v", PsLinkProtocol.VERSION)
+                                            .put("kind", PsLinkProtocol.KIND_HEARTBEAT_ACK)
+                                            .toString()))
+                                        continue
+                                    }
                                     handleTextFrame(raw)
 
                                     // PSLINK_MEDIA_CONFIG_ACK_V1 — only acknowledge media_config messages,

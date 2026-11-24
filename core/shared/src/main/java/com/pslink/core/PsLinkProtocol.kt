@@ -11,6 +11,8 @@ object PsLinkProtocol {
     const val PATH = "/subtitle"
     const val KIND_AUTH = "auth"
     const val KIND_READY = "ready"
+    const val KIND_HEARTBEAT = "heartbeat"
+    const val KIND_HEARTBEAT_ACK = "heartbeat_ack"
     const val KIND_SUBTITLE = "subtitle"
     const val KIND_ACK = "ack"
 

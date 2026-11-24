@@ -6,13 +6,16 @@ A platform is not considered supported merely because a project folder exists.
 
 Target matrix
 
-Platform| Native application technology| State
-Android TV / Google TV| Android APK / MediaCodec| Existing Android receiver; Google TV device compatibility still requires validation
-Amazon Fire TV| Fire OS / Android APK| Not validated; compatibility work required
-Samsung Smart TV| Tizen Web application| Not implemented
-LG Smart TV| webOS TV application / IPK| Not implemented
-Roku TV / Roku player| SceneGraph / BrightScript| Not implemented
-Xbox| UWP / Windows application| Not implemented
+| Platform | Application technology | Current implementation |
+|---|---|---|
+| Android TV | Native Android APK / MediaCodec | Native binary-media and subtitle receiver |
+| Google TV | Separate Android APK module | Native receiver module; device validation pending |
+| Fire TV | Separate Android APK module | Native receiver module; Fire OS validation pending |
+| Samsung Tizen | Tizen Web application / AVPlay | HLS video playback adapter; vendor package/device validation pending |
+| LG webOS | webOS application / HTML media | HLS playback adapter; vendor package/device validation pending |
+| Roku | SceneGraph / BrightScript | HLS video and subtitle prototype; audio/device validation pending |
+| Web browser | Browser application | WebSocket, HLS and binary media client |
+| Xbox Edge | Browser receiver | Edge-compatible web receiver; not a native Xbox application |
 
 Existing transport contract
 
@@ -41,15 +44,10 @@ A complete receiver therefore needs a tested native media path on each OS,
 or a future transport redesign around a portable delivery format. A successful
 WebSocket handshake alone does not mean game video and audio are supported.
 
-Implementation sequence
-
-1. Preserve the existing Android receiver and wire protocol.
-2. Complete Tizen and webOS apps using the shared browser transport and
-   separate native media adapters.
-3. Implement Roku using SceneGraph/BrightScript and its native media pipeline.
-4. Implement Xbox using its Windows networking and Media Foundation pipeline.
-5. Validate codecs, frame pacing, audio, captions, pairing, reconnect, and
-   long-running sessions on physical devices for each supported OS generation.
+The targets listed above have source implementations at different maturity
+levels. Keep their media adapters platform-specific and validate codec support,
+pairing, reconnect, captions, audio, frame pacing, and long-running sessions on
+physical devices before declaring any target fully supported.
 
 Do not advertise a platform as fully supported until its application builds
 and its complete media path passes device testing.

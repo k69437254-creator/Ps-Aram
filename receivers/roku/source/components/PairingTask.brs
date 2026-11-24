@@ -21,34 +21,17 @@ sub run()
     backoffMs = 3000
 
     while m.top.control = "RUN" and retryCount < maxRetries
-        ' PSLINK_ROKU_WS_V1 — Use WebSocket like other platforms (Tizen/webOS/Xbox Edge/Android)
-        ' roWebSocket API (Roku OS 9.4+): CreateObject("roWebSocket"), connect(url), sendText(text),
-        ' close(), getConnectionState(), setMessagePort(port). Messages arrive via roMessagePort.
         ws = CreateObject("roWebSocket")
-
-        ' Set up message port for receiving WebSocket messages
         msgPort = CreateObject("roMessagePort")
-        ws.setMessagePort(msgPort)
+        ws.SetMessagePort(msgPort)
 
-        ' Connect to the WebSocket server
-        ws.connect("ws://" + host + ":8765/subtitle")
+        if not ws.SetUrl("ws://" + host + ":8765/subtitle") then
+            m.top.error = "عنوان WebSocket للهاتف غير صالح"
+            return
+        end if
 
-        ' Wait for connection with timeout (poll getConnectionState())
-        waitStart = roTimespan()
-        waitStart.mark()
-        connected = false
-        while not connected and waitStart.TotalSeconds() < 10
-            state = ws.getConnectionState()
-            if state = 1  ' CONNECTED
-                connected = true
-            else if state = 2  ' CLOSED - connection failed
-                exit while
-            end if
-            sleep(200)
-        end while
-
-        if not connected
-            ws.close()
+        if not ws.Open(10000) then
+            ws.Close()
             retryCount = retryCount + 1
             if retryCount < maxRetries
                 sleep(backoffMs)
@@ -58,81 +41,77 @@ sub run()
             continue
         end if
 
-        ' Send auth frame
-        authMsg = "{ "v": 2, "kind": "auth", "code": "" + code + "", "client": "PS Link Roku" }"
-        ws.sendText(authMsg)
+        authMsg = FormatJson({
+            v: 2,
+            kind: "auth",
+            code: code,
+            client: "PS Link Roku"
+        })
+        ws.Send(authMsg)
 
-        ' Wait for ready or stream_url messages via message port
-        waitStart.mark()
-        gotResponse = false
-        while not gotResponse and waitStart.TotalSeconds() < 10
-            ' Check for waiting messages (non-blocking)
-            if msgPort.IsMessageWaiting()
-                msg = msgPort.GetMessage()
-                if type(msg) = "roAssociativeArray"
-                    kind = msg.kind
-                    if kind = "ready"
-                        ' Request media config to trigger stream_url from phone
-                        cfgMsg = "{ "v": 2, "kind": "media_config", "width": 1920, "height": 1080, "codec": 0, "fps": 60 }"
-                        ws.sendText(cfgMsg)
-                    else if kind = "stream_url"
-                        url = msg.url
-                        if url <> invalid
-                            if isValidStreamUrl(url)
-                                m.top.url = url
-                                ws.close()
-                                return
-                            else
+        responseStart = roTimespan()
+        responseStart.mark()
+        gotReady = false
+        while m.top.control = "RUN" and responseStart.TotalSeconds() < 10
+            msg = wait(200, msgPort)
+            if type(msg) = "roWebSocketEvent"
+                eventType = msg.GetType()
+                if eventType = 5
+                    info = msg.GetInfo()
+                    if info <> invalid and info.Text <> invalid
+                        response = ParseJson(info.Text)
+                        if response <> invalid and response.v = 2
+                            if response.kind = "ready"
+                                gotReady = true
+                            else if response.kind = "stream_url" and gotReady
+                                url = response.url
+                                if isValidStreamUrl(url)
+                                    m.top.url = url
+                                    ws.Close()
+                                    return
+                                end if
                                 m.top.error = "الهاتف أعاد رابط بث غير صالح"
-                                ws.close()
+                                ws.Close()
+                                return
+                            else if response.kind = "error"
+                                m.top.error = response.message
+                                ws.Close()
                                 return
                             end if
                         end if
-                    else if kind = "error"
-                        m.top.error = msg.message
-                        ws.close()
-                        return
                     end if
+                else if eventType = 2 or eventType = 3
+                    exit while
                 end if
-                ' Clear remaining messages
-                while msgPort.IsMessageWaiting()
-                    msgPort.GetMessage()
-                end while
             end if
-            sleep(200)
         end while
 
-        ws.close()
-
-        ' The phone may not have started HLS yet. Retry without requiring
-        ' the user to restart the Roku receiver.
+        ws.Close()
         retryCount = retryCount + 1
-        if retryCount < maxRetries
+        if retryCount < maxRetries and m.top.control = "RUN"
             sleep(backoffMs)
             backoffMs = backoffMs * 2
             if backoffMs > 12000 then backoffMs = 12000
         end if
     end while
+
+    if m.top.control = "RUN" and m.top.error = invalid
+        m.top.error = "تعذر الحصول على رابط بث HLS من الهاتف"
+    end if
 end sub
 
-' PSLINK_ROKU_INPUT_VALIDATION_V1
 function isSixDigitCode(code as Dynamic) as Boolean
-    if code = invalid then return false
-    if Len(code) <> 6 then return false
+    if code = invalid or Len(code) <> 6 then return false
 
     for i = 1 to 6
-        digit = Mid(code, i, 1)
-        if Instr(1, "0123456789", digit) = 0 then
-            return false
-        end if
+        if Instr(1, "0123456789", Mid(code, i, 1)) = 0 then return false
     end for
 
     return true
 end function
 
 function isValidStreamUrl(url as Dynamic) as Boolean
-    if url = invalid then return false
-    if Len(url) < 20 or Len(url) > 2048 then return false
+    if url = invalid or Len(url) < 20 or Len(url) > 2048 then return false
 
     lowerUrl = LCase(url)
     if Instr(1, url, " ") > 0 or Instr(1, url, Chr(9)) > 0 then return false
@@ -153,9 +132,7 @@ function isValidStreamUrl(url as Dynamic) as Boolean
     authority = Left(remainder, pathStart - 1)
     if authority = "" then return false
 
-    path = Mid(remainder, pathStart)
-    lowerPath = LCase(path)
-    ' Accept any HLS playlist path (.m3u8 or .m3u) under any path
+    lowerPath = LCase(Mid(remainder, pathStart))
     if Right(lowerPath, 5) <> ".m3u8" and Right(lowerPath, 4) <> ".m3u" then return false
     return true
 end function

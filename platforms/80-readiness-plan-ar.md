@@ -2,10 +2,10 @@
 
 ## ما الذي تضيفه هذه الحزمة؟
 
-1. بوابة تحقق مستقلة لمنصتي Samsung Tizen وLG webOS.
+1. بوابة تحقق للمستقبلات المسجلة، بما فيها Samsung Tizen وLG webOS.
 2. فحص صياغة جميع ملفات JavaScript الخاصة بالمستقبلات.
 3. تشغيل اختبارات البروتوكول والاقتران وإعادة الاتصال وعناوين WebSocket وHLS الموجودة في المستودع.
-4. التحقق من ملفات JSON ووجود أهداف المنصات الثمانية دون تكرار.
+4. التحقق من ملفات JSON ووجود الأهداف العشرة في `platforms/targets.json` دون تكرار.
 5. إعادة تشغيل مدقق بنية Android/XML الحالي.
 6. تشغيل الفحوصات نفسها تلقائياً عبر GitHub Actions عند الدفع إلى فرع التطوير أو فتح Pull Request.
 
@@ -16,7 +16,7 @@
 - `platforms/80-readiness-plan-ar.md`
 - `platforms/repair-pack-manifest.json`
 
-الحزمة إضافية وآمنة: لا تستبدل ملفات Kotlin أو إعدادات Gradle أو ملفات المنصات الموجودة، ولا تنفذ commit أو push.
+تسجل `platforms/targets.json` عشرة أهداف: Android Mobile، Android TV، Google TV، Fire TV، Tizen، webOS، Roku، Web، Xbox Edge وPlayStation. اختلاف الحالة في manifest مقصود؛ وجود مصدر أو اجتياز فحص ثابت لا يثبت اكتمال المنصة.
 
 ## ما الذي لا تدّعي الحزمة إنجازه؟
 
@@ -32,15 +32,14 @@
 - اختبار Tizen وwebOS على أجهزة فعلية أو محاكيات رسمية معتمدة، بما في ذلك فك الوسائط.
 - تحديد حالة Roku وXbox بدقة وعدم احتسابهما كتطبيقين أصليين مكتملين ما داما نماذج أولية/مستقبل متصفح.
 
-## التنفيذ من Termux
+يتضمن تطبيق الهاتف ملف OCR العربي `mobile/src/main/assets/tessdata/ara.traineddata`.
+يتحقق اختبار المصدر من وجوده فقط؛ لا يثبت دقة التعرف أو توافقه على جهاز حقيقي.
 
-بعد فك ضغط الحزمة داخل مجلد المشروع:
+## تشغيل بوابة التحقق
+
+من جذر المستودع:
 
 ```bash
-bash PS-Link-80-Readiness-Pack/apply-to-repo.sh "$HOME/PS-Link-platform-completion"
-cd "$HOME/PS-Link-platform-completion"
 bash scripts/check-platform-regressions.sh
 git status --short
 ```
-
-بعد مراجعة الملفات والنتيجة، ارفع التغييرات بنفسك إلى فرع `feature/platform-completion-pack` فقط. لا ترفع إلى `main`.

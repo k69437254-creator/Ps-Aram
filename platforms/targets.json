@@ -39,11 +39,11 @@
     {
       "id": "google-tv",
       "name": "Google TV",
-      "technology": "Android TV APK",
+      "technology": "Dedicated Google TV-compatible Android APK module",
       "state": "compatibility-pending",
       "validation": {
-        "sourceImplementation": "reuses-android-tv-source",
-        "automatedTests": "not-tested-on-google-tv-target",
+        "sourceImplementation": "separate-module-with-shared-protocol; target compatibility pending",
+        "automatedTests": "source-contract-checks-passed; Android compilation and target device pending",
         "packageBuilt": "not-tested",
         "packageSigned": "not-tested",
         "installable": "not-tested",
@@ -56,11 +56,11 @@
     {
       "id": "fire-tv",
       "name": "Amazon Fire TV",
-      "technology": "Fire OS compatible Android APK",
+      "technology": "Dedicated Fire OS-compatible Android APK module",
       "state": "compatibility-pending",
       "validation": {
-        "sourceImplementation": "reuses-android-tv-source",
-        "automatedTests": "not-tested-on-fire-os-target",
+        "sourceImplementation": "separate-module-with-shared-protocol; Fire OS compatibility pending",
+        "automatedTests": "source-contract-checks-passed; Android compilation and target device pending",
         "packageBuilt": "not-tested",
         "packageSigned": "not-tested",
         "installable": "not-tested",
@@ -77,7 +77,7 @@
       "state": "hls-video-path-present",
       "validation": {
         "sourceImplementation": "partial; AVPlay application and HLS path present",
-        "automatedTests": "behavioral-regressions-added; CI-rerun-required",
+        "automatedTests": "behavioral-regression-tests-passed-locally; vendor package and device pending",
         "packageBuilt": "not-tested",
         "packageSigned": "not-tested",
         "installable": "not-tested",
@@ -94,7 +94,7 @@
       "state": "hls-video-path-present",
       "validation": {
         "sourceImplementation": "partial; HTML5 media and HLS path present",
-        "automatedTests": "behavioral-regressions-added; CI-rerun-required",
+        "automatedTests": "behavioral-regression-tests-passed-locally; vendor package and device pending",
         "packageBuilt": "not-tested",
         "packageSigned": "not-tested",
         "installable": "not-tested",
@@ -111,7 +111,7 @@
       "state": "prototype-generated",
       "validation": {
         "sourceImplementation": "prototype",
-        "automatedTests": "resource-validation-only",
+        "automatedTests": "pairing and HLS source-contract tests passed; package and device pending",
         "packageBuilt": "not-tested",
         "packageSigned": "not-tested",
         "installable": "not-tested",
@@ -128,7 +128,7 @@
       "state": "source-partial",
       "validation": {
         "sourceImplementation": "partial; shared pslink-client.js transport present",
-        "automatedTests": "browser receiver protocol tests exist",
+        "automatedTests": "receiver protocol and media adapter tests passed locally; browser device pending",
         "packageBuilt": "not-applicable-browser-receiver",
         "packageSigned": "not-applicable-browser-receiver",
         "installable": "not-applicable-browser-receiver",
@@ -145,7 +145,7 @@
       "state": "prototype-generated",
       "validation": {
         "sourceImplementation": "browser-prototype; not-native",
-        "automatedTests": "receiver-protocol-tests-exist; device-deployment-not-tested",
+        "automatedTests": "protocol, pairing, HLS and heartbeat tests passed locally; Xbox deployment pending",
         "packageBuilt": "not-applicable-browser-receiver",
         "packageSigned": "not-applicable-browser-receiver",
         "installable": "not-applicable-browser-receiver",

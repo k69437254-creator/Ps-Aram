@@ -11,9 +11,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.pslink.core.PsLinkProtocol
-import com.pslink.tv.TvCaptionOverlayView
-import com.pslink.tv.TvMediaPlayer
-import com.pslink.tv.TvSubtitleServer
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.NetworkInterface

@@ -1,19 +1,16 @@
-# Language model packs
+# OCR and translation model data
 
-No machine-translation model binaries are bundled in this source archive.
+Google ML Kit translation model binaries are not bundled. The phone downloads a
+source-language-to-Arabic model when the user enables translation; after a successful
+download, translation runs on-device. Model sizes and supported languages can change.
 
-PS Link uses the on-device Google ML Kit Translation API. The app explicitly downloads a
-source-language -> Arabic model pack over Wi-Fi when the user requests it. Once the model
-has downloaded successfully, translation is performed on-device and the app can translate
-without an internet connection. ML Kit models are approximately 30 MB per language pack;
-model sizes and supported languages can change.
+The Arabic OCR model is bundled separately at
+`mobile/src/main/assets/tessdata/ara.traineddata` (about 2.5 MB). `LiveGameTranslator`
+copies it into the app cache and initializes Tesseract with the `ara` language. Arabic
+OCR output is displayed as-is; it does not require an Arabic-to-Arabic translation model.
+Latin, Japanese, Chinese and Korean OCR recognizers are supplied by ML Kit dependencies.
 
-Current source-language choices in the UI: Japanese, English, Chinese and Korean.
-Target language: Arabic.
-
-OCR recognizers for Latin, Japanese, Chinese and Korean are bundled as Maven dependencies.
-The bundled Text Recognition v2 API does not offer Arabic script recognition in the current
-integration. OCR is presently exposed for images selected by the user, not live Chiaki frames.
-
-Do not place third-party model binaries here without checking their commercial-use license,
-redistribution conditions, model card, attribution and runtime requirements.
+The source provenance and redistribution terms for the bundled Tesseract model must be
+confirmed and included in release notices before distribution. The repository test checks
+that the asset is present and non-empty; it does not measure OCR accuracy or validate the
+model on a physical device.

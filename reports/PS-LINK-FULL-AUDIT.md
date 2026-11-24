@@ -1,22 +1,23 @@
 # PS Link — تقرير تدقيق ملفات المستودع
 
 - الفرع: `feature/platform-completion-pack`
-- HEAD: `a67a5a2871ed5fe45c937eedd76f69b4459dbfc0`
-- الملفات المتتبعة: **156**
-- الملفات النصية: **152**
-- الملفات الثنائية: **4**
+- HEAD: `aa64202def8e680a9a351896c0d0584ff97b9163`
+- تغييرات محلية غير ملتزمة: **نعم**
+- الملفات المتتبعة: **190**
+- الملفات النصية: **185**
+- الملفات الثنائية: **5**
 - ملفات متتبعة مفقودة من نسخة العمل: **0**
 
-هذا تدقيق جرد وأدلة مصدر، وليس شهادة تشغيل على الأجهزة أو ادعاء اكتمال 100%.
+هذا تدقيق جرد وأدلة مصدر من نسخة العمل، وليس شهادة تشغيل على الأجهزة أو ادعاء اكتمال 100%.
 
-## المنصات الثماني
+## المنصات العشر
 
 ### Android Mobile (`android-mobile`)
-- ملفات المصدر الموجودة: 6/6
+- ملفات المصدر الموجودة: 8/8
 - الحالة: **PARTIAL**
 - النواقص:
   - PSN account extraction is manual redirect-link handling, not silent OAuth.
-  - Live OCR samples frames; Arabic OCR is not included.
+  - Live OCR samples frames; Arabic OCR uses a bundled Tesseract model but accuracy is not validated on devices.
   - Long-duration A/V synchronization and device stability are not proven by source tests.
   - Phone-to-TV transport includes local unencrypted ws:// paths.
 
@@ -28,17 +29,17 @@
   - A/V synchronization and long-session decoder stability require more than structural/unit tests.
 
 ### Google TV (`google-tv`)
-- ملفات المصدر الموجودة: 3/3
+- ملفات المصدر الموجودة: 5/5
 - الحالة: **PARTIAL**
 - النواقص:
-  - Reuses Android TV APK; no dedicated Google TV product flavor or target-specific compatibility implementation is evidenced.
-  - Device/emulator compatibility is not established by source presence.
+  - A separate Android APK module exists; device/emulator compatibility and target-specific behavior are not established by source presence.
+  - Google TV codec, remote-control, and lifecycle compatibility remain unproven.
 
 ### Amazon Fire TV (`fire-tv`)
-- ملفات المصدر الموجودة: 3/3
+- ملفات المصدر الموجودة: 5/5
 - الحالة: **PARTIAL**
 - النواقص:
-  - Reuses Android TV APK; no dedicated Fire OS compatibility layer/product flavor is evidenced.
+  - A separate Android APK module exists; Fire OS device compatibility is not established by source presence.
   - Fire TV codec, remote-control, and lifecycle compatibility remain unproven.
 
 ### Samsung Tizen (`tizen`)
@@ -70,10 +71,23 @@
   - This is a browser receiver, not a native Xbox application.
   - Browser HLS playback exists, but device-level A/V synchronization and long-session stability are not proven.
 
+### Web Browser (`web`)
+- ملفات المصدر الموجودة: 4/4
+- الحالة: **PARTIAL**
+- النواقص:
+  - The browser receiver has source and automated adapter tests, but browser/device HLS decoding, autoplay behavior, A/V synchronization and long-session stability are not proven.
+
+### PlayStation via Chiaki-NG (`playstation`)
+- ملفات المصدر الموجودة: 5/5
+- الحالة: **PARTIAL**
+- النواقص:
+  - The supported route is Android Mobile + pinned Chiaki-NG Remote Play + phone-side PS Link relay; no native PS4/PS5 application is claimed.
+  - Android CI must complete bootstrap and Gradle compilation, then the PS console/phone/TV path must be tested on hardware.
+
 ## تفسير النتائج
 
 - عدد الملفات ليس نسبة إنجاز.
 - وجود ملفات المصدر لا يثبت اكتمال المسار الوظيفي.
 - إعادة استخدام APK لا تثبت توافق Google TV أو Fire TV.
 - نجاح CI أو توقيع APK أو تثبيته لا يدخل في قياس اكتمال ملفات المصدر.
-- ملف JSON يتضمن SHA-256 لكل ملف متتبع لتوثيق نسخة التدقيق.
+- ملف JSON يتضمن SHA-256 للملفات المتتبعة باستثناء تقريري التدقيق المولّدين، لتجنب تضمين بصمات قديمة ذاتية الإحالة.

@@ -29,4 +29,12 @@ class StableTextGateTest {
         assertNull(gate.offer("B", 3L))
         assertEquals("B", gate.offer("B", 4L))
     }
+
+    @Test
+    fun resetAllowsTheSameCaptionToBeEmittedAgain() {
+        val gate = StableTextGate(requiredMatches = 1)
+        assertEquals("Continue", gate.offer("Continue", 1L))
+        gate.reset()
+        assertEquals("Continue", gate.offer("Continue", 2L))
+    }
 }

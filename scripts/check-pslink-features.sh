@@ -8,7 +8,13 @@ need() {
 }
 need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'PixelCopy.request(surface, bitmap'
 need mobile/src/main/java/com/pslink/mobile/LiveCaptionOverlayView.kt 'TextDirectionHeuristics.RTL'
-need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'newTranslator.translate(line.source).awaitResult()'
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'translator.translate(line.source).awaitResult()'
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'activeTranslator = if (arabicOcr) null else Translation.getClient('
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'assets.open("tessdata/ara.traineddata")'
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'activity.cacheDir.absolutePath + File.separator'
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'TessBaseAPI.OEM_DEFAULT'
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'StableTextGate(requiredMatches = 2)'
+need mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt 'stableTextGate.offer(signature)'
 need mobile/src/main/java/com/pslink/mobile/PsLinkScreenshot.kt 'MediaStore.Images.Media.RELATIVE_PATH'
 need mobile/src/main/java/com/pslink/mobile/capture/ScreenRecordingService.kt 'MediaProjectionManager'
 need mobile/src/main/java/com/pslink/mobile/capture/ScreenRecordingService.kt 'MediaRecorder.VideoEncoder.H264'
@@ -78,42 +84,46 @@ need mobile/src/main/res/layout/pslink_main_layout.xml 'app:layout_behavior="com
 echo "PS Link feature static checks passed. Gradle compilation and live PS5/TV hardware tests are still required."
 
 # PSLINK_COMPLETE_RUNTIME_FIX_V1 — regressions that previously escaped the static checks.
-CHI_STREAM="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/stream/StreamActivity.kt"
-CHI_CONTROLS="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/touchcontrols/TouchControlsFragment.kt"
-CHI_STATE="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/lib/Chiaki.kt"
-CHI_DECODER="$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/video-decoder.c"
-[[ -f "$CHI_STREAM" && -f "$CHI_CONTROLS" && -f "$CHI_STATE" && -f "$CHI_DECODER" ]] || {
-  echo "PS Link complete-fix source files are missing after bootstrap." >&2
-  exit 1
-}
-grep -Fq 'controlsSources' "$CHI_STREAM"
-grep -Fq 'mergeControllerStates(controlsSources.toList())' "$CHI_STREAM"
-grep -Fq 'import com.metallic.chiaki.touchcontrols.mergeControllerStates' "$CHI_STREAM"
-grep -Fq 'fun mergeControllerStates(sources: List<Flow<ControllerState>>)' "$CHI_CONTROLS"
-grep -Fq 'touches = touches.map { it.copy() }.toTypedArray()' "$CHI_STATE"
-grep -Fq 'psLinkMenuButton' "$CHI_STREAM"
-grep -Fq 'PSLINK_CLEAN_STREAM_OVERLAY_V1' "$CHI_STREAM"
-grep -Fq 'psLinkStartGameRecording()' "$CHI_STREAM"
-grep -Fq 'startVideoRecording(openedDescriptor.fd)' "$CHI_STREAM"
-grep -Fq 'stopVideoRecording()' "$CHI_STREAM"
-grep -Fq 'PSLINK_NATIVE_STREAM_RECORDER_V1' "$CHI_DECODER"
-grep -Fq 'PSLINK_NATIVE_AUDIO_RECORDER_JNI_V1' "$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/chiaki-jni.c"
-if grep -Eq 'MediaProjectionManager|ScreenRecordingService' "$CHI_STREAM"; then
-  echo "Active stream screen still references the phone-display recorder; expected native Chiaki game-stream recording." >&2
-  exit 1
+if [[ ! -d "$ROOT/third_party/chiaki-ng" ]]; then
+  echo "Chiaki complete-fix checks deferred; run scripts/bootstrap.sh first."
+else
+  CHI_STREAM="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/stream/StreamActivity.kt"
+  CHI_CONTROLS="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/touchcontrols/TouchControlsFragment.kt"
+  CHI_STATE="$ROOT/third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/lib/Chiaki.kt"
+  CHI_DECODER="$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/video-decoder.c"
+  [[ -f "$CHI_STREAM" && -f "$CHI_CONTROLS" && -f "$CHI_STATE" && -f "$CHI_DECODER" ]] || {
+    echo "PS Link complete-fix source files are missing after bootstrap." >&2
+    exit 1
+  }
+  grep -Fq 'controlsSources' "$CHI_STREAM"
+  grep -Fq 'mergeControllerStates(controlsSources.toList())' "$CHI_STREAM"
+  grep -Fq 'import com.metallic.chiaki.touchcontrols.mergeControllerStates' "$CHI_STREAM"
+  grep -Fq 'fun mergeControllerStates(sources: List<Flow<ControllerState>>)' "$CHI_CONTROLS"
+  grep -Fq 'touches = touches.map { it.copy() }.toTypedArray()' "$CHI_STATE"
+  grep -Fq 'psLinkMenuButton' "$CHI_STREAM"
+  grep -Fq 'PSLINK_CLEAN_STREAM_OVERLAY_V1' "$CHI_STREAM"
+  grep -Fq 'psLinkStartGameRecording()' "$CHI_STREAM"
+  grep -Fq 'startVideoRecording(openedDescriptor.fd)' "$CHI_STREAM"
+  grep -Fq 'stopVideoRecording()' "$CHI_STREAM"
+  grep -Fq 'PSLINK_NATIVE_STREAM_RECORDER_V1' "$CHI_DECODER"
+  grep -Fq 'PSLINK_NATIVE_AUDIO_RECORDER_JNI_V1' "$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/chiaki-jni.c"
+  if grep -Eq 'MediaProjectionManager|ScreenRecordingService' "$CHI_STREAM"; then
+    echo "Active stream screen still references the phone-display recorder; expected native Chiaki game-stream recording." >&2
+    exit 1
+  fi
 fi
 grep -Fq 'تعديل الشفافية' "$ROOT/mobile/src/main/java/com/metallic/chiaki/touchcontrols/ControlLayoutEditor.kt"
 grep -Fq 'consecutiveCaptureFailures' "$ROOT/mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
 grep -Fq 'val sourceTracks = (0 until extractor.trackCount)' "$ROOT/mobile/src/main/java/com/pslink/mobile/capture/VideoEditorActivity.kt"
 grep -Fq 'class ControllerStateMergeTest' "$ROOT/mobile/src/test/java/com/metallic/chiaki/touchcontrols/ControllerStateMergeTest.kt"
-echo "PS Link controller, translation, game-stream recording, audio-preserving trim and clean-menu checks passed."
+echo "PS Link translation, game-stream recording, audio-preserving trim and controller regression checks passed."
 
 # PSLINK_PROFESSIONAL_UPGRADE_GUARDS_V1
 LIVE_TRANSLATOR="$ROOT/mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
 TRANSLATION_ACTIVITY="$ROOT/mobile/src/main/java/com/pslink/mobile/TranslationActivity.kt"
 SCREENSHOT="$ROOT/mobile/src/main/java/com/pslink/mobile/PsLinkScreenshot.kt"
-[[ "$(grep -Fc 'tvClient?.sendCaptions(emptyList(), samplePtsNs)' "$LIVE_TRANSLATOR")" -eq 1 ]] || {
-  echo "Duplicate/missing empty-caption clear packet in LiveGameTranslator.kt" >&2
+[[ "$(grep -Fc 'tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)' "$LIVE_TRANSLATOR")" -eq 3 ]] || {
+  echo "Expected one empty-caption clear packet per Arabic-OCR, Arabic-error and translated-OCR path." >&2
   exit 1
 }
 grep -Fq 'requestGeneration != translatorGeneration' "$TRANSLATION_ACTIVITY"

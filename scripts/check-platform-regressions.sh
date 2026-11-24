@@ -42,6 +42,7 @@ node receivers/webos/tests/receiver.test.js
 node receivers/xbox-edge/tests/receiver.test.js
 node receivers/xbox-edge/tests/lifecycle.test.js
 python3 receivers/roku/tests/receiver_contract.test.py
+python3 -m unittest tests.test_pslink_audit_contracts tests.test_v2_protocol_source_contracts
 echo
 
 echo "===== PLATFORM JSON AND PACKAGE STRUCTURE ====="

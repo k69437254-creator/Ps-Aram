@@ -7,6 +7,17 @@ scene = (root / "receivers/roku/source/MainScene.brs").read_text()
 
 assert "isSixDigitCode(code)" in pair
 assert "isValidStreamUrl(url)" in pair
+assert 'CreateObject("roWebSocket")' in pair
+assert 'ws.SetUrl("ws://" + host + ":8765/subtitle")' in pair
+assert "ws.Open(10000)" in pair
+assert "ws.Send(authMsg)" in pair
+assert 'type(msg) = "roWebSocketEvent"' in pair
+assert "msg.GetType()" in pair
+assert "msg.GetInfo()" in pair
+assert "info.Text" in pair
+assert "ws.connect(" not in pair
+assert "ws.sendText(" not in pair
+assert "getConnectionState()" not in pair
 assert 'Right(lowerPath, 5) <> ".m3u8"' in pair
 assert 'Right(lowerPath, 4) <> ".m3u"' in pair
 main_scene = scene
