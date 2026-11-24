@@ -16,7 +16,11 @@ sub run()
         return
     end if
 
-    while m.top.control = "RUN"
+    retryCount = 0
+    maxRetries = 5
+    backoffMs = 3000
+
+    while m.top.control = "RUN" and retryCount < maxRetries
         ' PSLINK_ROKU_WS_V1 — Use WebSocket like other platforms (Tizen/webOS/Xbox Edge/Android)
         ' roWebSocket API (Roku OS 9.4+): CreateObject("roWebSocket"), connect(url), sendText(text),
         ' close(), getConnectionState(), setMessagePort(port). Messages arrive via roMessagePort.
@@ -45,7 +49,12 @@ sub run()
 
         if not connected
             ws.close()
-            sleep(3000)
+            retryCount = retryCount + 1
+            if retryCount < maxRetries
+                sleep(backoffMs)
+                backoffMs = backoffMs * 2
+                if backoffMs > 12000 then backoffMs = 12000
+            end if
             continue
         end if
 
@@ -97,7 +106,12 @@ sub run()
 
         ' The phone may not have started HLS yet. Retry without requiring
         ' the user to restart the Roku receiver.
-        sleep(3000)
+        retryCount = retryCount + 1
+        if retryCount < maxRetries
+            sleep(backoffMs)
+            backoffMs = backoffMs * 2
+            if backoffMs > 12000 then backoffMs = 12000
+        end if
     end while
 end sub
 

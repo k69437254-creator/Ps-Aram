@@ -122,6 +122,23 @@
       }
     },
     {
+      "id": "web",
+      "name": "Web Browser",
+      "technology": "Browser-based receiver (HTML5/JS)",
+      "state": "source-partial",
+      "validation": {
+        "sourceImplementation": "partial; shared pslink-client.js transport present",
+        "automatedTests": "browser receiver protocol tests exist",
+        "packageBuilt": "not-applicable-browser-receiver",
+        "packageSigned": "not-applicable-browser-receiver",
+        "installable": "not-applicable-browser-receiver",
+        "physicalDevice": "not-tested-on-browser",
+        "fullMediaPath": "not-validated-on-browser",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
+    },
+    {
       "id": "xbox-edge",
       "name": "Xbox Edge",
       "technology": "Browser receiver",
@@ -134,6 +151,23 @@
         "installable": "not-applicable-browser-receiver",
         "physicalDevice": "not-tested-on-xbox-edge",
         "fullMediaPath": "not-validated-on-xbox-edge",
+        "audioVideoSync": "not-validated",
+        "longDurationStability": "not-tested"
+      }
+    },
+    {
+      "id": "playstation",
+      "name": "PlayStation",
+      "technology": "PS5/PS4 native application (TBD)",
+      "state": "not-started",
+      "validation": {
+        "sourceImplementation": "none; no native PlayStation receiver implemented",
+        "automatedTests": "none",
+        "packageBuilt": "not-tested",
+        "packageSigned": "not-tested",
+        "installable": "not-tested",
+        "physicalDevice": "not-tested-on-playstation",
+        "fullMediaPath": "not-validated",
         "audioVideoSync": "not-validated",
         "longDurationStability": "not-tested"
       }

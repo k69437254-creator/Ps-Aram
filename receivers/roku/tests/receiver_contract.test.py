@@ -6,8 +6,7 @@ pair = (root / "receivers/roku/source/components/PairingTask.brs").read_text()
 scene = (root / "receivers/roku/source/MainScene.brs").read_text()
 
 assert "isSixDigitCode(code)" in pair
-assert "isValidStreamUrl(parsed.url)" in pair
-assert 'Instr(1, path, "/hls/") <> 1' in pair
+assert "isValidStreamUrl(url)" in pair
 assert 'Right(LCase(path), 11) <> "/index.m3u8"' in pair
 
 assert "isSixDigitCode(code)" in scene

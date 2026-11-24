@@ -1,0 +1,27 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+:root {
+  --bg: #0b1220;
+  --card: #121a2b;
+  --text: #e6eaf2;
+  --muted: #9aa4b2;
+  --accent: #3b82f6;
+  --danger: #ef4444;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+#video-stage { position: fixed; inset: 0; z-index: -1; }
+#game-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.shell { max-width: 640px; margin: 0 auto; padding: 1rem; }
+.header { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.brand-mark { width: 40px; height: 40px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; font-weight: 700; }
+.pair-card, .subtitle-card { background: var(--card); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+label { display: block; margin: .5rem 0 .25rem; font-size: .9rem; }
+input { width: 100%; padding: .5rem; border-radius: 6px; border: 1px solid #2a3346; background: #0f1624; color: var(--text); }
+button { margin-top: .75rem; padding: .6rem 1rem; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+button.secondary { background: #374151; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+#status { margin-top: .75rem; padding: .5rem; border-radius: 6px; background: #0f1624; }
+#status[data-state="error"] { background: #3b1212; color: #fca5a5; }
+.captions { white-space: pre-line; margin-top: .5rem; }
+.notice { color: var(--muted); font-size: .85rem; }
+.muted { color: var(--muted); }

@@ -51,7 +51,8 @@ class LiveGameTranslator(
     private val surface: SurfaceView,
     private val tvClient: TvSubtitleClient?,
     private val onCaption: (List<CaptionLine>) -> Unit,
-    private val onStatus: (String) -> Unit
+    private val onStatus: (String) -> Unit,
+    val sessionId: String = ""
 ) {
     data class Language(val label: String, val code: String, val script: Script)
     enum class Script { LATIN, JAPANESE, CHINESE, KOREAN, ARABIC }
@@ -108,7 +109,7 @@ class LiveGameTranslator(
     }
 
     fun pause() {
-        tvClient?.sendCaptions(emptyList(), System.nanoTime())
+        tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)
         loop?.cancel()
         loop = null
     }
@@ -118,7 +119,7 @@ class LiveGameTranslator(
     }
 
     fun stop() {
-        tvClient?.sendCaptions(emptyList(), System.nanoTime())
+        tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)
         enabled = false
         pause()
         recognizer?.close()
@@ -179,7 +180,7 @@ class LiveGameTranslator(
                                         lastSource = ""
                                         lastTranslation = ""
                                         onCaption(emptyList())
-                                        tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                        tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)
                                     }
                                     return@try
                                 }
@@ -205,7 +206,7 @@ class LiveGameTranslator(
                                         lastSource = ""
                                         lastTranslation = ""
                                         onCaption(emptyList())
-                                        tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                        tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)
                                     }
                                 } else {
                                     emptyFrameCount = 0
@@ -213,7 +214,7 @@ class LiveGameTranslator(
                                         lastSource = signature
                                         lastTranslation = detected.joinToString("\n") { it.translated }
                                         onCaption(detected)
-                                        tvClient?.sendCaptions(detected, samplePtsNs)
+                                        tvClient?.sendCaptions(detected, samplePtsNs, sessionId)
                                     }
                                 }
                             } else {
@@ -250,7 +251,7 @@ class LiveGameTranslator(
                                         lastSource = ""
                                         lastTranslation = ""
                                         onCaption(emptyList())
-                                        tvClient?.sendCaptions(emptyList(), samplePtsNs)
+                                        tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)
                                     }
                                 } else {
                                     emptyFrameCount = 0
@@ -267,7 +268,7 @@ class LiveGameTranslator(
                                         onCaption(captions)
                                         // The TV receives the exact OCR geometry so Arabic covers the
                                         // source dialogue in the streamed game image, not in a text panel.
-                                        tvClient?.sendCaptions(captions, samplePtsNs)
+                                        tvClient?.sendCaptions(captions, samplePtsNs, sessionId)
                                     }
                                 }
                             }
@@ -286,7 +287,7 @@ class LiveGameTranslator(
                 runCatching { translator?.close() }
                 recognizer = null
                 translator = null
-                tvClient?.sendCaptions(emptyList(), System.nanoTime())
+                tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)
                 onCaption(emptyList())
                 onStatus("توقفت الترجمة الحية: ${error.localizedMessage ?: "تعذر معالجة إطار الفيديو"}")
             }

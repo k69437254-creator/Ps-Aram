@@ -22,6 +22,48 @@
     return /^[0-9]{6}$/.test(digits) ? digits : null;
   }
 
+  function normalizeStreamUrl(value, pageLocation) {
+    var input = String(value || "").trim();
+    var loc = pageLocation ||
+      (typeof location !== "undefined" ? location : null);
+
+    var parsed;
+    try {
+      parsed = new URL(input);
+    } catch (error) {
+      return null;
+    }
+
+    if (parsed.protocol !== "http:" &&
+        parsed.protocol !== "https:") {
+      return null;
+    }
+
+    // Reject URLs containing credentials (including empty @)
+    if (parsed.username || parsed.password) {
+      return null;
+    }
+    // Also reject raw @ in authority (handles http://@example.com)
+    var authority = input.split("://")[1].split("/")[0];
+    if (authority.indexOf("@") !== -1) {
+      return null;
+    }
+
+    // Invalid ports throw in URL constructor; no extra check needed.
+    // parsed.port is empty for default ports (80/443), which is valid.
+
+    var securePage = !!(loc && loc.protocol === "https:");
+
+    // On HTTPS pages, only HTTPS HLS playlists are safe. HTTP HLS is
+    // rejected (no proxy is implemented in this transport). On HTTP pages,
+    // both HTTP and HTTPS URLs pass through unchanged.
+    if (securePage && parsed.protocol === "http:") {
+      return null;
+    }
+
+    return parsed.href;
+  }
+
   function parseMediaPacket(input) {
     var bytes = input instanceof ArrayBuffer
       ? new Uint8Array(input)
@@ -189,11 +231,17 @@
         } catch (ignore) {}
 
       } else if (message.kind === "stream_url") {
-        var streamUrl = String(message.url || "");
-        if (/^https?:\/\/[^\s]+$/i.test(streamUrl)) {
+        var streamUrl = normalizeStreamUrl(
+          message.url,
+          typeof location !== "undefined" ? location : null
+        );
+
+        if (streamUrl) {
           self._emit("onStreamUrl", { url: streamUrl });
         } else {
-          self._emit("onError", { message: "عنوان بث HLS الذي أرسله الهاتف غير صالح." });
+          self._emit("onError", {
+            message: "عنوان بث HLS غير صالح أو غير آمن لهذه الصفحة."
+          });
         }
 
       } else if (message.kind === "captions") {
@@ -275,6 +323,7 @@
   PsLinkReceiver.parseMediaPacket = parseMediaPacket;
   PsLinkReceiver.normalizePairingCode = normalizePairingCode;
   PsLinkReceiver.PROTOCOL_VERSION = PROTOCOL_VERSION;
+  PsLinkReceiver.normalizeStreamUrl = normalizeStreamUrl;
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = PsLinkReceiver;

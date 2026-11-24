@@ -408,7 +408,7 @@ class TvSubtitleClient(
         mediaQueue.offer(packet)
     }
 
-    fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long): Boolean {
+    fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long, sessionId: String = ""): Boolean {
         if (!ready || ptsNs <= 0L) return false
         val array = JSONArray()
         lines.take(3).forEach { line ->
@@ -423,6 +423,7 @@ class TvSubtitleClient(
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "captions")
             .put("timestampNs", ptsNs)
+            .put("sessionId", sessionId)
             .put("lines", array)
             .toString()
         val current = socket

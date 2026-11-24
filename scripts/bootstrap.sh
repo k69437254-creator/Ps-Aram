@@ -12,11 +12,16 @@ if ! command -v git >/dev/null 2>&1; then
   exit 2
 fi
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "ERROR: python3 is required. Install it first (Termux: pkg install python)." >&2
+  exit 3
+fi
+
 mkdir -p "$ROOT/third_party"
 if [[ ! -d "$DEST/.git" ]]; then
   if [[ -e "$DEST" ]]; then
     echo "ERROR: $DEST exists but is not a Git checkout. Move it aside; refusing to overwrite." >&2
-    exit 3
+    exit 4
   fi
   echo "Fetching official Chiaki-NG source..."
   git -C "$ROOT" init -q "$DEST"
@@ -24,12 +29,31 @@ if [[ ! -d "$DEST/.git" ]]; then
 fi
 
 cd "$DEST"
+
+# Ensure the pinned commit is present locally. Try shallow fetch first,
+# then fall back to a full fetch if the pinned commit is not a shallow object.
 if ! git cat-file -e "$PIN^{commit}" 2>/dev/null; then
-  git fetch --depth=1 origin "$PIN"
+  echo "Pinned commit $PIN not present locally. Fetching..."
+  if ! git fetch --depth=1 origin "$PIN" 2>/dev/null; then
+    echo "Shallow fetch failed; falling back to full fetch..."
+    git fetch origin "$PIN"
+  fi
 fi
+
+if ! git cat-file -e "$PIN^{commit}" 2>/dev/null; then
+  echo "ERROR: Could not obtain pinned Chiaki-NG commit $PIN from $URL" >&2
+  exit 5
+fi
+
 git checkout --detach "$PIN"
 git submodule sync --recursive
 git submodule update --init --recursive
+
+# Validate that the pinned upstream source is intact before applying overlays.
+if [[ ! -f "$DEST/CMakeLists.txt" ]]; then
+  echo "ERROR: Chiaki-NG source is incomplete (CMakeLists.txt missing)." >&2
+  exit 6
+fi
 
 cd "$ROOT"
 python3 scripts/prepare_upstream.py

@@ -447,7 +447,8 @@ class TranslationActivity : AppCompatActivity() {
         val packet = SubtitlePacket(
             game = "PS Link",
             sourceText = lastSource,
-            translatedText = lastTranslation
+            translatedText = lastTranslation,
+            sessionId = currentSessionId
         )
         val sentToAndroidTv = tvClient?.send(packet) == true
         val sentToScreenReceivers = PhoneReceiverServer.publishToReceivers(packet)
