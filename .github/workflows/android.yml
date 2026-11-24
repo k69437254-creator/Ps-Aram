@@ -44,9 +44,13 @@ jobs:
       - name: Install native protobuf compiler
         run: |
           sudo apt-get update
-          sudo apt-get install --yes protobuf-compiler ffmpeg
+          sudo apt-get install --yes protobuf-compiler ffmpeg tesseract-ocr
           protoc --version
           ffmpeg -version | head -n 1
+          tesseract --version
+
+      - name: Run Arabic OCR sample accuracy tests
+        run: python3 tests/test_arabic_ocr.py
 
       - name: Prepare stable debug signing key when configured
         env:

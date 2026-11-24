@@ -45,7 +45,7 @@ if ! git cat-file -e "$PIN^{commit}" 2>/dev/null; then
   exit 5
 fi
 
-git checkout --detach "$PIN"
+git switch --detach "$PIN"
 git submodule sync --recursive
 git submodule update --init --recursive
 

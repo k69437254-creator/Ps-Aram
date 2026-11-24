@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Static source-contract checks for v2 heartbeat handling and Arabic OCR assets."""
 
+import re
 import unittest
 from pathlib import Path
 
@@ -24,7 +25,10 @@ class V2ProtocolSourceContracts(unittest.TestCase):
         for path in server_paths:
             with self.subTest(server=path):
                 server = (ROOT / path).read_text(encoding="utf-8")
-                self.assertIn("message?.optInt(\"v\", -1) == PsLinkProtocol.VERSION", server)
+                self.assertRegex(
+                    server,
+                    r'\w+\??\.optInt\("v",\s*-1\)\s*(?:==|!=)\s*PsLinkProtocol.VERSION',
+                )
                 self.assertIn("message.optString(\"kind\") == PsLinkProtocol.KIND_HEARTBEAT", server)
                 self.assertIn("PsLinkProtocol.KIND_HEARTBEAT_ACK", server)
 

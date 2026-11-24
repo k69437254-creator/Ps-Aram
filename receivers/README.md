@@ -71,10 +71,12 @@ The phone exposes `POST /receiver/roku/stream-url` on the existing PS Link
 port. The endpoint checks the six-digit pairing code and returns the HLS URL
 only after the first playlist is ready.
 
-Media limitation: the current HLS publisher carries H.264 video. It does
-not establish complete audio support. Do not advertise full audio/video
-support for Roku, Tizen, webOS or Xbox until the audio path is implemented
-and tested on physical devices.
+Media limitation: the HLS publisher carries H.264 and can optionally mux AAC
+from Android Playback Capture when Android permissions and source-app policy
+permit it. This does not establish that PS5/Chiaki game audio is captured.
+The separate Chiaki decoded-PCM path targets Android TV and is not proven by
+the HLS fixture. Do not advertise complete audio/video support for Roku,
+Tizen, webOS or Xbox before real audio and device playback are verified.
 
 Xbox Edge production hosting requires secure WebSocket/HTTP delivery through
 a trusted reverse proxy if the receiver page is served over HTTPS.
@@ -104,11 +106,13 @@ subtitles rather than the browser WebSocket client.
 
 ### Media limitations
 
-The current phone HLS publisher carries H.264 video. It does not establish
-complete captured game audio or verified audio/video synchronization.
+The current phone HLS publisher carries H.264 and may carry AAC from Android
+Playback Capture when allowed by the source app and Android permission state.
+Neither this conditional path nor the synthetic AAC integration fixture proves
+capture of real PS5 game audio or A/V synchronization.
 
 Tizen and webOS caption panels display text; they are not calibrated
-geometric overlays on the video. Roku's current HLS path is video-only.
+geometric overlays on the video. Roku's HLS audio handling is not validated.
 Xbox Edge is a browser receiver, not a native Xbox application.
 
 Physical-device validation must be recorded separately from automated

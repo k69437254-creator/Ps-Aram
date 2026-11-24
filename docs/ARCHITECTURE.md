@@ -29,8 +29,30 @@ these messages after a successful pairing handshake. The transport is local
 network WebSocket (`ws://`) unless an external trusted TLS proxy is configured.
 
 The server rejects invalid codes before accepting subtitle or media messages.
-The six-digit pairing code is short-lived and is not a substitute for transport
-encryption or strong device identity.
+The six-digit pairing code is generated with `SecureRandom` and persisted in
+TV preferences. It currently has no expiry or enforced attempt limit and is
+sent over cleartext WebSocket. It is not transport encryption or strong device
+identity; restrict this prototype to a trusted local network and never expose
+port 8765 directly to the Internet.
+
+Browser receivers hosted over HTTPS need a trusted WSS/HTTPS reverse proxy.
+That protects the browser-to-proxy hop only; the proxy-to-phone hop is still
+cleartext unless separately secured. No end-to-end TLS identity or protection
+against a local-network man-in-the-middle is implemented.
+
+## Media paths and audio limits
+
+The Android TV binary WebSocket path is a separate Chiaki bridge: the native
+decoder callback emits H.264/H.265 access units and decoded PCM to the phone
+client. It is not the phone's MediaProjection HLS path, and the current CI
+failure means this native bridge has not been compiled or validated at runtime
+for this commit.
+
+The HLS path captures the Android display and optionally uses Android 10+
+`AudioPlaybackCaptureConfiguration` for `USAGE_MEDIA`/`USAGE_GAME`. Capture
+depends on runtime permission and the source app's capture policy; it is not
+proof that Chiaki/PS5 game audio is present. The FFmpeg AAC fixture validates
+MPEG-TS/AAC packaging only, not real game-audio capture or A/V synchronization.
 
 ## Live OCR and translation
 

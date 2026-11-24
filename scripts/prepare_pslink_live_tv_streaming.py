@@ -88,6 +88,128 @@ def replace_once(src: str, old: str, new: str, label: str) -> str:
     return src.replace(old, new, 1)
 
 
+def ensure_sample_timestamp(src: str) -> str:
+    timestamp = re.compile(r"(?m)^[ \t]*val samplePtsNs = System\.nanoTime\(\)$")
+    timestamp_matches = list(timestamp.finditer(src))
+    if timestamp_matches:
+        if len(timestamp_matches) != 1:
+            raise SystemExit(
+                f"Expected one OCR sample timestamp, found {len(timestamp_matches)}"
+            )
+        return src
+
+    anchor = re.compile(
+        r"(?m)^(?P<indent>[ \t]*)val sampleStartedAt = SystemClock\.elapsedRealtime\(\)\n"
+        r"(?P=indent)val bitmap = captureFrame\(\)$"
+    )
+    matches = list(anchor.finditer(src))
+    if len(matches) != 1:
+        raise SystemExit(
+            "Anchor mismatch (timestamp the frame sampled for OCR): "
+            f"expected exactly one match, found {len(matches)}"
+        )
+    match = matches[0]
+    indent = match.group("indent")
+    replacement = (
+        f"{indent}val sampleStartedAt = SystemClock.elapsedRealtime()\n"
+        f"{indent}val samplePtsNs = System.nanoTime()\n"
+        f"{indent}val bitmap = captureFrame()"
+    )
+    return src[:match.start()] + replacement + src[match.end():]
+
+
+def ensure_caption_clear_paths(src: str) -> str:
+    for method, next_statement, label in (
+        ("stop", "enabled = false", "clear TV captions when translation stops"),
+        ("pause", "loop?.cancel()", "clear TV captions while game stream is paused"),
+    ):
+        existing = re.search(
+            rf"(?m)^(?P<i>[ \t]*)fun {method}\(\) \{{\n(?P=i)    "
+            r"tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)(?:,\s*sessionId)?\)",
+            src,
+        )
+        if existing:
+            continue
+        pattern = re.compile(
+            rf"(?m)^(?P<i>[ \t]*)fun {method}\(\) \{{\n(?P=i)    "
+            + re.escape(next_statement)
+        )
+        src, count = pattern.subn(
+            lambda match: (
+                f"{match.group('i')}fun {method}() {{\n"
+                f"{match.group('i')}    tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)\n"
+                f"{match.group('i')}    {next_statement}"
+            ),
+            src,
+            count=1,
+        )
+        if count != 1:
+            raise SystemExit(f"Anchor mismatch ({label}): found {count}")
+
+    empty_clear = re.search(
+        r"(?m)^[ \t]*lastSource = \"\"\n"
+        r"(?P<i>[ \t]*)lastTranslation = \"\"\n"
+        r"(?P=i)(?:stableTextGate\.reset\(\)\n(?P=i))?"
+        r"onCaption\(emptyList\(\)\)\n"
+        r"(?P=i)tvClient\?\.sendCaptions\(emptyList\(\), samplePtsNs(?:,\s*sessionId)?\)",
+        src,
+    )
+    if not empty_clear:
+        clear_pattern = re.compile(
+            r"(?m)^(?P<i>[ \t]*)lastSource = \"\"\n(?P=i)lastTranslation = \"\"\n"
+            r"(?P=i)onCaption\(emptyList\(\)\)$"
+        )
+        matches = list(clear_pattern.finditer(src))
+        if not matches:
+            raise SystemExit("Anchor mismatch (clear TV captions after empty OCR): found 0")
+        match = matches[0]
+        indent = match.group("i")
+        replacement = (
+            f'{indent}lastSource = ""\n{indent}lastTranslation = ""\n'
+            f"{indent}onCaption(emptyList())\n"
+            f"{indent}tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)"
+        )
+        src = src[:match.start()] + replacement + src[match.end():]
+
+    clear_packets = re.findall(
+        r"tvClient\?\.sendCaptions\(emptyList\(\), samplePtsNs(?:,\s*sessionId)?\)",
+        src,
+    )
+    if not clear_packets:
+        raise SystemExit("Expected a timestamped empty-caption packet after empty OCR")
+    return src
+
+
+def ensure_caption_geometry_signature(src: str) -> str:
+    signature = re.compile(
+        r'(?m)^(?P<indent>[ \t]*)val signature = detected\.joinToString\("\|"\) \{\n'
+        r'(?P=indent)    "(?P<expression>\$\{it\.source\}@[^"\n]+)"$'
+    )
+    matches = list(signature.finditer(src))
+    if len(matches) != 1:
+        raise SystemExit(
+            "Anchor mismatch (caption geometry signature): "
+            f"expected exactly one match, found {len(matches)}"
+        )
+
+    match = matches[0]
+    expression = match.group("expression")
+    if "it.left * 1000" in expression and "it.top * 1000" in expression \
+            and "it.right * 1000" in expression and "it.bottom * 1000" in expression:
+        return src
+    if "it.left * 100" not in expression or "it.top * 100" not in expression:
+        raise SystemExit("Unexpected caption geometry signature; refusing to overwrite it")
+
+    indent = match.group("indent")
+    replacement = (
+        f'{indent}val signature = detected.joinToString("|") {{\n'
+        f'{indent}    "${{it.source}}@${{(it.left * 1000).toInt()}},'
+        f'${{(it.top * 1000).toInt()}},${{(it.right * 1000).toInt()}},'
+        f'${{(it.bottom * 1000).toInt()}}"'
+    )
+    return src[:match.start()] + replacement + src[match.end():]
+
+
 def function_bounds(src: str, pattern: str, label: str) -> tuple[int, int, int, int]:
     matches = list(re.finditer(pattern, src, re.S))
     if len(matches) != 1:
@@ -898,56 +1020,9 @@ def patch_phone_translation() -> None:
 """,
             "expand dialogue detection while rejecting small HUD text and OCR blocks",
         )
-    src = replace_once(
-        src,
-        "                    val sampleStartedAt = SystemClock.elapsedRealtime()\n                    val bitmap = captureFrame()",
-        "                    val sampleStartedAt = SystemClock.elapsedRealtime()\n                    val samplePtsNs = System.nanoTime()\n                    val bitmap = captureFrame()",
-        "timestamp the frame sampled for OCR",
-    )
-    # Clear the TV overlay explicitly on stop/pause and when OCR no longer sees text.
-    if not re.search(r'(?m)^(?P<i>[ \t]*)fun stop\(\) \{\n(?P=i)    tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)\)', src):
-        src, count = re.subn(
-            r'(?m)^(?P<i>[ \t]*)fun stop\(\) \{\n(?P=i)    enabled = false',
-            lambda m: f'{m.group("i")}fun stop() {{\n{m.group("i")}    tvClient?.sendCaptions(emptyList(), System.nanoTime())\n{m.group("i")}    enabled = false',
-            src,
-            count=1,
-        )
-        if count != 1:
-            raise SystemExit(f"Anchor mismatch (clear TV captions when translation stops): found {count}")
-    if not re.search(r'(?m)^(?P<i>[ \t]*)fun pause\(\) \{\n(?P=i)    tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)\)', src):
-        src, count = re.subn(
-            r'(?m)^(?P<i>[ \t]*)fun pause\(\) \{\n(?P=i)    loop\?\.cancel\(\)',
-            lambda m: f'{m.group("i")}fun pause() {{\n{m.group("i")}    tvClient?.sendCaptions(emptyList(), System.nanoTime())\n{m.group("i")}    loop?.cancel()',
-            src,
-            count=1,
-        )
-        if count != 1:
-            raise SystemExit(f"Anchor mismatch (clear TV captions while game stream is paused): found {count}")
-    already_clears_after_empty = re.search(
-        r'(?m)^[ \t]*lastSource = ""\n[ \t]*lastTranslation = ""\n[ \t]*onCaption\(emptyList\(\)\)\n[ \t]*tvClient\?\.sendCaptions\(emptyList\(\), (?:System\.nanoTime\(\)|samplePtsNs)\)',
-        src,
-    )
-    if not already_clears_after_empty:
-        clear_pattern = re.compile(
-            r'(?m)^(?P<i>[ \t]*)lastSource = ""\n(?P=i)lastTranslation = ""\n(?P=i)onCaption\(emptyList\(\)\)$'
-        )
-        def add_empty_clear(match):
-            indent = match.group("i")
-            return (f'{indent}lastSource = ""\n{indent}lastTranslation = ""\n'
-                    f'{indent}onCaption(emptyList())\n{indent}tvClient?.sendCaptions(emptyList(), samplePtsNs)')
-        src, count = clear_pattern.subn(add_empty_clear, src, count=1)
-        if count != 1:
-            raise SystemExit(f"Anchor mismatch (clear TV captions after two empty OCR frames): found {count}")
-    clear_packet_count = src.count("tvClient?.sendCaptions(emptyList(), samplePtsNs)")
-    if clear_packet_count != 1:
-        raise SystemExit(f"Expected exactly one timestamped empty-caption packet, found {clear_packet_count}")
-    old_signature = '''                            val signature = detected.joinToString("|") {
-                                "${it.source}@${(it.left * 100).toInt()},${(it.top * 100).toInt()}"
-                            }'''
-    new_signature = '''                            val signature = detected.joinToString("|") {
-                                "${it.source}@${(it.left * 1000).toInt()},${(it.top * 1000).toInt()},${(it.right * 1000).toInt()},${(it.bottom * 1000).toInt()}"
-                            }'''
-    src = replace_once(src, old_signature, new_signature, "caption geometry signature")
+    src = ensure_sample_timestamp(src)
+    src = ensure_caption_clear_paths(src)
+    src = ensure_caption_geometry_signature(src)
     old_send = '''                                    if (captions.isNotEmpty()) {
                                         tvClient?.send(
                                             SubtitlePacket(
@@ -960,17 +1035,35 @@ def patch_phone_translation() -> None:
     new_send = '''                                    // The TV receives the exact OCR geometry so Arabic covers the
                                     // source dialogue in the streamed game image, not in a text panel.
                                     tvClient?.sendCaptions(captions, samplePtsNs)'''
-    src = replace_once(src, old_send, new_send, "send positioned Arabic captions to TV")
-    src = replace_once(
+    if not re.search(
+        r"tvClient\?\.sendCaptions\(captions,\s*samplePtsNs(?:,\s*sessionId)?\)",
         src,
-        '''                translator = null
+    ):
+        src = replace_once(
+            src,
+            old_send,
+            new_send.replace(
+                "tvClient?.sendCaptions(captions, samplePtsNs)",
+                "tvClient?.sendCaptions(captions, samplePtsNs, sessionId)",
+            ),
+            "send positioned Arabic captions to TV",
+        )
+    catch_clear = re.search(
+        r"(?s)catch \(error: Exception\) \{\s*if \(generation == loopGeneration\) \{"
+        r".*?tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)(?:,\s*sessionId)?\)",
+        src,
+    )
+    if not catch_clear:
+        src = replace_once(
+            src,
+            '''                translator = null
                 onStatus("توقفت الترجمة الحية: ${error.localizedMessage ?: \"تعذر معالجة إطار الفيديو\"}")''',
-        '''                translator = null
-                tvClient?.sendCaptions(emptyList(), System.nanoTime())
+            '''                translator = null
+                tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)
                 onCaption(emptyList())
                 onStatus("توقفت الترجمة الحية: ${error.localizedMessage ?: \"تعذر معالجة إطار الفيديو\"}")''',
-        "clear TV captions after OCR failure",
-    )
+            "clear TV captions after OCR failure",
+        )
     # SubtitlePacket is no longer needed by this live translator.
     src = src.replace("import com.pslink.core.SubtitlePacket\n", "")
     write(translator_path, src)

@@ -13,8 +13,9 @@ Important:
 - The current phone endpoint uses plain ws:// and http://.
 - A page hosted over HTTPS may block these insecure connections.
 - Production hosting requires a trusted HTTPS/WSS reverse proxy.
-- HLS currently carries H.264 video only; complete audio support is not
-  implemented or verified by this prototype.
+- HLS carries H.264 and may carry AAC if Android Playback Capture is allowed
+  by the source app; real PS5 game audio and Xbox audio playback are not
+  established by this prototype.
 - Physical Xbox Edge testing is required.
 
 <!-- PSLINK_XBOX_EDGE_DOCS_V1 -->
@@ -50,8 +51,9 @@ firewall rules, or a deployed server.
 
 ## Media limitations
 
-The current HLS path carries H.264 video only. Complete captured game audio
-and verified audio/video synchronization are not established.
+The current HLS path carries H.264 and can optionally mux AAC from Android
+Playback Capture. This does not establish captured PS5 game audio, Xbox Edge
+audio playback, or verified audio/video synchronization.
 
 ## Testing
 

@@ -36,11 +36,32 @@ network tests must not be reported as physical-device test results.
 - [ ] Audio capability is tested separately and not assumed.
 - [ ] Audio/video synchronization is measured rather than assumed.
 
-Current implementation limitation: the phone HLS path provides H.264 video.
-Complete captured game audio and verified audio/video synchronization
-are not established.
+Current implementation limitation: the phone HLS path captures the Android
+display as H.264 and may mux AAC from Android Playback Capture on Android 10+
+when permission and source-app capture policy allow it. This is not a verified
+PS5/Chiaki game-audio source. The separate Chiaki decoded-PCM WebSocket bridge
+has not been compiled or validated on a real device for this commit. Real
+game audio and A/V synchronization remain NOT TESTED.
 
-## 4. Platform-specific validation
+## 4. Current acceptance evidence
+
+| Target | Build/package | Automated evidence | Pairing/media/device evidence |
+|---|---|---|---|
+| Android Mobile | Bootstrap failed before Gradle; no APK | Android tests did not run | NOT TESTED |
+| Android TV | Not built | Android tests did not run | NOT TESTED |
+| Google TV | Not built | Android tests did not run | NOT TESTED |
+| Fire TV | Not built | Android tests did not run | NOT TESTED |
+| Tizen | WGT not built or signed | Simulated receiver tests passed | NOT TESTED |
+| webOS | IPK not built or signed | Simulated receiver tests passed | NOT TESTED |
+| Roku | Package not built | Source-contract test only | NOT TESTED |
+| Web Browser | No native package | Protocol and adapter simulations passed | NOT TESTED in a browser/device |
+| Xbox Edge | Browser receiver; no native package | Receiver/lifecycle simulations passed | NOT TESTED on Xbox |
+| PlayStation via Chiaki-NG | Android path not built | Android tests did not run | NOT TESTED with PS4/PS5 |
+
+See `platforms/targets.json` for the individual acceptance criteria and
+current GitHub Actions run IDs. Automated checks are not device evidence.
+
+## 5. Platform-specific validation
 
 ### Android TV / Google TV
 
@@ -97,7 +118,7 @@ are not established.
 
 Xbox Edge is a browser receiver, not a native Xbox application.
 
-## 5. Evidence required for each physical test
+## 6. Evidence required for each physical test
 
 Record the following for every tested device:
 
@@ -112,7 +133,7 @@ Record the following for every tested device:
 - Screenshots, logs or a short recording where appropriate.
 - Tester conclusion: PASS, FAIL or NOT TESTED.
 
-## 6. Reporting rules
+## 7. Reporting rules
 
 - Automated source tests are not physical-device tests.
 - A successful pairing handshake does not prove media playback.

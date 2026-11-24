@@ -25,23 +25,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
-import java.security.SecureRandom
 
 data class TvCaptionLine(val text: String, val left: Float, val top: Float, val right: Float, val bottom: Float)
 data class TvCaptionFrame(val timestampNs: Long, val lines: List<TvCaptionLine>)
 
-/**
- * WebSocket receiver for PS Link TV applications.
- *
- * Improvements over the baseline:
- * - Accepts ws://. wss:// requires SSL/TLS configuration not part of this local-network protocol.
- * - Explicit pairing code rotation support.
- * - Session replacement with proper cleanup of the previous session.
- * - Bounded media packet validation (PSLM v1 header).
- * - Graceful shutdown with caption clearing.
- */
 class TvSubtitleServer(
-    private var pairingCode: String,
+    private val pairingCode: String,
     private val onMediaConfig: (TvMediaConfig) -> Unit,
     private val onMediaPacket: (ByteArray) -> Unit,
     private val onMediaStop: () -> Unit
@@ -93,7 +82,7 @@ class TvSubtitleServer(
                         return@webSocket
                     }
                     if (auth.optString("kind") != PsLinkProtocol.KIND_AUTH) {
-                        rejectPairing("INVALID_AUTH_REQUEST", "نوع طلب الاقتران غير صالح؛ إعادة الاتصال")
+                        rejectPairing("INVALID_AUTH_REQUEST", "نوع طلب الاقتران غير صالح؛ أعد الاتصال")
                         return@webSocket
                     }
                     val suppliedCode = PairingCode.normalize(auth.optString("code"))
@@ -130,13 +119,9 @@ class TvSubtitleServer(
                                     }
                                     handleTextFrame(raw)
 
-                                    // PSLINK_MEDIA_CONFIG_ACK_V1 — only acknowledge media_config messages,
-                                    // not every text frame. Prevents spurious acks on captions/subtitles.
-                                    val ackJson = runCatching { org.json.JSONObject(raw) }.getOrNull()
-                                    if (ackJson != null && ackJson.optString("kind") == "media_config") {
-                                        mediaConfigAck(raw)?.let { acknowledgement ->
-                                            send(Frame.Text(acknowledgement))
-                                        }
+                                    // PSLINK_MEDIA_CONFIG_ACK_V1
+                                    mediaConfigAck(raw)?.let { acknowledgement ->
+                                        send(Frame.Text(acknowledgement))
                                     }
 
                                     val packet = runCatching { SubtitlePacket.fromJson(raw) }.getOrNull()
@@ -230,19 +215,6 @@ class TvSubtitleServer(
                 mutableLatestPacket.value = packet
             }
         }
-    }
-
-    /**
-     * Rotate the pairing code for the next connection cycle.
-     * Call this from the UI when the user requests a new code.
-     */
-    fun rotatePairingCode(): String {
-        val newCode = SecureRandom().nextInt(1_000_000).toString().padStart(6, '0')
-        pairingCode = newCode
-        // Note: the active WebSocket sessions keep using the old code until they reconnect.
-        // New connections will use the new code because this field is read at handshake time.
-        // The caller should persist the new code (e.g., SharedPreferences) across restarts.
-        return newCode
     }
 
     @Synchronized fun stop() {

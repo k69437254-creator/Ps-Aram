@@ -20,18 +20,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * LAN-only paired WebSocket: text control/captions plus bounded binary game media.
- *
- * Improvements over the baseline:
- * - Automatic reconnection with capped exponential backoff.
- * - Outbound message queue for transient disconnects.
- * - Explicit close/reconnect lifecycle instead of fire-and-forget.
- *
- * Note: Only ws:// is supported. wss:// requires SSL/TLS configuration
- * (certificates, hostname verification) that is not part of this local-network
- * protocol.
- */
+/** LAN-only paired WebSocket: text control/captions plus bounded binary game media. */
 class TvSubtitleClient(
     private val onStatus: (String, Boolean) -> Unit
 ) {
@@ -53,11 +42,8 @@ class TvSubtitleClient(
         private const val MAX_MEDIA_PACKET = 2 * 1024 * 1024
         private const val MAX_SOCKET_QUEUE_BYTES = 512L * 1024L
         private val MEDIA_CONFIG_SEQUENCE = AtomicLong(0L)
-
         private const val INITIAL_BACKOFF_MS = 2_000L
         private const val MAX_BACKOFF_MS = 30_000L
-        private const val HANDSHAKE_TIMEOUT_MS = 10_000L
-        private const val MAX_PENDING_MESSAGE_IDS = 64
     }
 
     private val client = OkHttpClient.Builder()
@@ -77,22 +63,19 @@ class TvSubtitleClient(
     private val handshakeLock = Any()
     @Volatile private var handshakeTimeoutSocket: WebSocket? = null
     private var handshakeTimeoutRunnable: Runnable? = null
-    private var awaitingKeyFrame = true
+    @Volatile private var awaitingKeyFrame = true
     private val pendingMessageIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val mediaQueue = ArrayBlockingQueue<QueuedMedia>(32)
-    private val outboundQueue = ArrayBlockingQueue<String>(128)
-
-    // Reconnection state
-    private val reconnectLock = Any()
-    // Orders media sends against transitions without holding mediaStateLock during send().
     private val mediaSendLock = Any()
     private val mediaStateLock = java.lang.Object()
     private var mediaGeneration = 0L
+    private val reconnectLock = Any()
+    private val reconnectHandler = Handler(Looper.getMainLooper())
+    private var reconnectGeneration = 0L
     @Volatile private var reconnectEnabled = false
-    @Volatile private var lastHost: String? = null
-    @Volatile private var lastPairingCode: String? = null
+    private var lastHost: String? = null
+    private var lastPairingCode: String? = null
     private var backoffMs = INITIAL_BACKOFF_MS
-    private var reconnectHandler: Handler? = null
     private var reconnectRunnable: Runnable? = null
 
     private val mediaWorker = Thread({
@@ -100,9 +83,7 @@ class TvSubtitleClient(
             val queued = takeMediaPacket() ?: break
             val current = queued.socket
             if (current.queueSize() > MAX_SOCKET_QUEUE_BYTES) {
-                if (resetMediaQueueIfCurrent(queued.generation)) {
-                    onStatus("ازدحام في اتصال التلفاز؛ أُسقطت حزم الوسائط حتى إطار الفيديو المفتاحي التالي", false)
-                }
+                resetMediaQueueIfCurrent(queued.generation)
                 continue
             }
             val sent = synchronized(mediaSendLock) {
@@ -118,20 +99,6 @@ class TvSubtitleClient(
             }
         }
     }, "PSLink-TV-Media-Sender").apply { isDaemon = true; start() }
-
-    private val outboundWorker = Thread({
-        while (!Thread.currentThread().isInterrupted) {
-            val text = try { outboundQueue.take() } catch (_: InterruptedException) { break }
-            val current = socket
-            if (current == null || !ready) continue
-            if (!current.send(text)) {
-                // Re-queue once; if still failing, drop to avoid unbounded growth.
-                if (!outboundQueue.offer(text)) {
-                    onStatus("تعذر إرسال رسالة؛ تم إسقاط الرسالة القديمة", false)
-                }
-            }
-        }
-    }, "PSLink-TV-Outbound-Sender").apply { isDaemon = true; start() }
 
     private fun takeMediaPacket(): QueuedMedia? = synchronized(mediaStateLock) {
         while (!Thread.currentThread().isInterrupted) {
@@ -186,7 +153,6 @@ class TvSubtitleClient(
             when {
                 socket !== current || generation != mediaGeneration || !ready || !mediaReady ->
                     MediaEnqueueResult.DROPPED
-                // Drop audio and dependent video until a keyframe can restore decoder and A/V sync.
                 awaitingKeyFrame && !keyFrame -> MediaEnqueueResult.DROPPED
                 !mediaQueue.offer(QueuedMedia(generation, current, packet)) -> {
                     resetMediaQueueLocked()
@@ -194,7 +160,6 @@ class TvSubtitleClient(
                         mediaQueue.offer(QueuedMedia(mediaGeneration, current, packet))
                         awaitingKeyFrame = false
                     }
-                    mediaStateLock.notifyAll()
                     MediaEnqueueResult.OVERFLOW
                 }
                 else -> {
@@ -203,6 +168,40 @@ class TvSubtitleClient(
                     MediaEnqueueResult.ENQUEUED
                 }
             }
+        }
+    }
+
+    private fun cancelReconnectLocked() {
+        reconnectRunnable?.let { reconnectHandler.removeCallbacks(it) }
+        reconnectRunnable = null
+    }
+
+    private fun scheduleReconnect(failedSocket: WebSocket? = null) {
+        synchronized(reconnectLock) {
+            if (!reconnectEnabled || (failedSocket != null && socket != null && socket !== failedSocket)) {
+                return
+            }
+            val generation = reconnectGeneration
+            val host = lastHost ?: return
+            val pairingCode = lastPairingCode ?: return
+            cancelReconnectLocked()
+            val delayMs = backoffMs
+            backoffMs = minOf(MAX_BACKOFF_MS, backoffMs * 2)
+            lateinit var retry: Runnable
+            retry = Runnable {
+                val stillCurrent = synchronized(reconnectLock) {
+                    if (reconnectRunnable === retry) reconnectRunnable = null
+                    reconnectEnabled &&
+                        reconnectGeneration == generation &&
+                        lastHost == host &&
+                        lastPairingCode == pairingCode
+                }
+                if (!stillCurrent) return@Runnable
+                onStatus("إعادة الاتصال بالتلفاز بعد ${delayMs / 1000} ثانية…", false)
+                connectInternal(host, pairingCode, manual = false, generation = generation)
+            }
+            reconnectRunnable = retry
+            reconnectHandler.postDelayed(retry, delayMs)
         }
     }
 
@@ -241,7 +240,8 @@ class TvSubtitleClient(
                 }
             }
             if (expired) {
-                onStatus("انتهت مهلة التحقق من رمز الاقتران؛ إعادة المحاولة تلقائياً", false)
+                onStatus("انتهت مهلة التحقق من رمز الاقتران؛ أعد المحاولة", false)
+                webSocket.cancel()
                 scheduleReconnect(webSocket)
             }
         }
@@ -253,43 +253,22 @@ class TvSubtitleClient(
                 }
                 handshakeTimeoutSocket = webSocket
                 handshakeTimeoutRunnable = timeout
-                handshakeHandler.postDelayed(timeout, HANDSHAKE_TIMEOUT_MS)
+                handshakeHandler.postDelayed(timeout, 10_000L)
             }
         }
-    }
-
-    private fun scheduleReconnect(failedSocket: WebSocket? = null) {
-        synchronized(reconnectLock) {
-            if (!reconnectEnabled) return
-            if (failedSocket != null && socket != null && socket !== failedSocket) return
-            cancelReconnectLocked()
-            backoffMs = minOf(MAX_BACKOFF_MS, backoffMs * 2)
-            val runnable = Runnable {
-                synchronized(reconnectLock) {
-                    reconnectRunnable = null
-                }
-                if (lastHost != null && lastPairingCode != null) {
-                    onStatus("إعادة الاتصال بالتلفاز بعد ${backoffMs / 1000} ثانية…", false)
-                    connect(lastHost!!, lastPairingCode!!)
-                }
-            }
-            synchronized(reconnectLock) {
-                reconnectRunnable = runnable
-            }
-            (reconnectHandler ?: Handler(Looper.getMainLooper())).also { reconnectHandler = it }
-                .postDelayed(runnable, backoffMs)
-        }
-    }
-
-    private fun cancelReconnectLocked() {
-        reconnectRunnable?.let {
-            (reconnectHandler ?: Handler(Looper.getMainLooper())).removeCallbacks(it)
-        }
-        reconnectRunnable = null
-        backoffMs = INITIAL_BACKOFF_MS
     }
 
     fun connect(hostInput: String, pairingCode: String) {
+        val generation = synchronized(reconnectLock) { ++reconnectGeneration }
+        connectInternal(hostInput, pairingCode, manual = true, generation = generation)
+    }
+
+    private fun connectInternal(
+        hostInput: String,
+        pairingCode: String,
+        manual: Boolean,
+        generation: Long
+    ) {
         val host = hostInput.trim().removePrefix("ws://").removePrefix("http://").trimEnd('/')
         val normalizedCode = PairingCode.normalize(pairingCode)
         if (host.isBlank() || host.contains('/') || host.contains(' ')) {
@@ -300,33 +279,50 @@ class TvSubtitleClient(
             onStatus("رمز الاقتران يجب أن يتكون من 6 أرقام", false)
             return
         }
-        disconnect()
-        terminalStatus = null
-
-        // Remember for reconnection
-        synchronized(reconnectLock) {
-            lastHost = host
-            lastPairingCode = pairingCode
-            reconnectEnabled = true
-            cancelReconnectLocked()
-            backoffMs = INITIAL_BACKOFF_MS
+        if (manual) {
+            if (!disconnectInternal(
+                    invalidateGeneration = false,
+                    expectedGeneration = generation
+                )
+            ) {
+                return
+            }
         }
 
-        val url = "ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}"
         val request = runCatching {
-            Request.Builder().url(url).build()
+            Request.Builder()
+                .url("ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}")
+                .build()
         }.getOrElse {
             onStatus("عنوان التلفاز غير صالح؛ أدخل عنوان IP أو اسم مضيف صحيحًا", false)
             return
         }
 
-        synchronized(mediaSendLock) {
+        synchronized(reconnectLock) {
+            if (manual) {
+                if (generation != reconnectGeneration) return
+                reconnectEnabled = true
+                lastHost = host
+                lastPairingCode = normalizedCode
+                backoffMs = INITIAL_BACKOFF_MS
+                cancelReconnectLocked()
+            } else if (!reconnectEnabled ||
+                generation != reconnectGeneration ||
+                lastHost != host ||
+                lastPairingCode != normalizedCode
+            ) {
+                return
+            }
+            // Preserve reconnectLock -> mediaSendLock while serializing validation and creation.
+            synchronized(mediaSendLock) {
             val newSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                val isCurrent = synchronized(mediaSendLock) {
-                    synchronized(mediaStateLock) { socket === webSocket }
+                if (synchronized(mediaSendLock) {
+                    synchronized(mediaStateLock) { socket !== webSocket }
+                }) {
+                    webSocket.close(1000, "Superseded connection")
+                    return
                 }
-                if (!isCurrent) { webSocket.close(1000, "Superseded connection"); return }
                 val sent = webSocket.send(PsLinkProtocol.auth(normalizedCode))
                 if (!sent) {
                     terminalStatus = "تعذر إرسال رمز الاقتران"
@@ -339,55 +335,45 @@ class TvSubtitleClient(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                val isCurrent = synchronized(mediaSendLock) {
-                    synchronized(mediaStateLock) { socket === webSocket }
-                }
-                if (!isCurrent) return
+                if (synchronized(mediaStateLock) { socket !== webSocket }) return
                 val json = runCatching { JSONObject(text) }.getOrNull() ?: return
+                if (json.optInt("v", -1) != PsLinkProtocol.VERSION) return
                 when (json.optString("kind")) {
                     PsLinkProtocol.KIND_READY -> {
-                        val (accepted, configSent) = synchronized(mediaSendLock) {
-                            val accepted = synchronized(handshakeLock) {
+                        val (accepted, config) = synchronized(mediaSendLock) {
+                            synchronized(handshakeLock) {
                                 if (socket !== webSocket) {
-                                    false
+                                    false to null
                                 } else {
                                     cancelHandshakeTimeoutLocked(webSocket)
-                                    synchronized(mediaStateLock) {
+                                    val currentConfig = synchronized(mediaStateLock) {
                                         ready = true
                                         mediaReady = false
                                         resetMediaQueueLocked()
+                                        mediaConfigJson
                                     }
-                                    true
+                                    true to currentConfig
                                 }
                             }
-                            val config = if (accepted) {
-                                synchronized(mediaStateLock) { mediaConfigJson }
-                            } else {
-                                null
-                            }
-                            accepted to (config == null || webSocket.send(config))
                         }
                         if (!accepted) return
-                        // Reset backoff on successful handshake
                         synchronized(reconnectLock) { backoffMs = INITIAL_BACKOFF_MS }
-                        if (!configSent) {
+                        if (config != null && !webSocket.send(config)) {
                             onStatus("تعذر إرسال إعدادات بث الوسائط إلى التلفاز", false)
                         }
                         onStatus("تم اقتران التلفاز؛ بانتظار تأكيد إعداد بث الوسائط", true)
                     }
                     "media_config_ack" -> {
                         val ackId = json.optString("requestId", "")
-                        val accepted = synchronized(mediaSendLock) {
-                            synchronized(mediaStateLock) {
-                                if (socket === webSocket &&
-                                    ackId.isNotBlank() &&
-                                    ackId == pendingMediaConfigId
-                                ) {
-                                    mediaReady = true
-                                    true
-                                } else {
-                                    false
-                                }
+                        val accepted = synchronized(mediaStateLock) {
+                            if (socket === webSocket &&
+                                ackId.isNotBlank() &&
+                                ackId == pendingMediaConfigId
+                            ) {
+                                mediaReady = true
+                                true
+                            } else {
+                                false
                             }
                         }
                         if (accepted) {
@@ -396,14 +382,10 @@ class TvSubtitleClient(
                     }
                     PsLinkProtocol.KIND_ACK -> {
                         val ackId = json.optString("id", "")
-                        val accepted = synchronized(mediaSendLock) {
+                        if (ackId.isNotBlank() &&
                             synchronized(mediaStateLock) {
-                                socket === webSocket &&
-                                    ackId.isNotBlank() &&
-                                    pendingMessageIds.remove(ackId)
-                            }
-                        }
-                        if (accepted) {
+                                socket === webSocket && pendingMessageIds.remove(ackId)
+                            }) {
                             onStatus("استلم التلفاز الترجمة", ready)
                         }
                     }
@@ -427,16 +409,15 @@ class TvSubtitleClient(
                         if (!accepted) return
                         pendingMessageIds.clear()
                         onStatus(terminalStatus!!, false)
-                        scheduleReconnect(webSocket)
                     }
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                val failureOutcome = synchronized(mediaSendLock) {
+                val shouldReportFailure = synchronized(mediaSendLock) {
                     synchronized(handshakeLock) {
                         if (socket !== webSocket) {
-                            false to false
+                            false
                         } else {
                             cancelHandshakeTimeoutLocked(webSocket)
                             synchronized(mediaStateLock) {
@@ -448,21 +429,21 @@ class TvSubtitleClient(
                             }
                             val finalStatus = terminalStatus
                             terminalStatus = null
-                            true to (finalStatus == null)
+                            finalStatus == null
                         }
                     }
                 }
-                if (failureOutcome.second) {
+                if (shouldReportFailure) {
                     onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
+                    scheduleReconnect(webSocket)
                 }
-                scheduleReconnect(webSocket)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                val disconnectOutcome = synchronized(mediaSendLock) {
+                val shouldReportDisconnect = synchronized(mediaSendLock) {
                     synchronized(handshakeLock) {
                         if (socket !== webSocket) {
-                            false to false
+                            false
                         } else {
                             cancelHandshakeTimeoutLocked(webSocket)
                             synchronized(mediaStateLock) {
@@ -474,11 +455,11 @@ class TvSubtitleClient(
                             }
                             val finalStatus = terminalStatus
                             terminalStatus = null
-                            true to (finalStatus == null)
+                            finalStatus == null
                         }
                     }
                 }
-                if (disconnectOutcome.second) {
+                if (shouldReportDisconnect) {
                     onStatus("انقطع اتصال التلفاز", false)
                     scheduleReconnect(webSocket)
                 }
@@ -489,6 +470,7 @@ class TvSubtitleClient(
                 ready = false
                 mediaReady = false
                 resetMediaQueueLocked()
+            }
             }
         }
     }
@@ -509,7 +491,7 @@ class TvSubtitleClient(
             .put("fps", fps)
             .toString()
 
-        val sendResult = synchronized(mediaSendLock) {
+        val sent = synchronized(mediaSendLock) {
             val current = synchronized(mediaStateLock) {
                 mediaConfigJson = config
                 pendingMediaConfigId = requestId
@@ -519,14 +501,12 @@ class TvSubtitleClient(
             }
             current?.send(config)
         }
-
-        if (sendResult == false) {
+        if (sent == false) {
             onStatus("تعذر إرسال إعدادات بث الوسائط؛ أعد المحاولة", false)
         }
     }
 
     fun sendVideoSample(data: ByteArray, ptsNs: Long, keyFrame: Boolean) {
-        if (!ready || !mediaReady) return
         if (data.isEmpty() || ptsNs <= 0L) return
         if (data.size > MAX_MEDIA_PACKET) {
             resetMediaQueue()
@@ -546,7 +526,7 @@ class TvSubtitleClient(
     }
 
     fun sendAudioSample(data: ByteArray, sampleRate: Int, channels: Int, ptsNs: Long) {
-        if (!ready || !mediaReady || data.isEmpty() || ptsNs <= 0L || data.size > 256 * 1024 || sampleRate !in 8000..192000 || channels !in 1..2) return
+        if (data.isEmpty() || ptsNs <= 0L || data.size > 256 * 1024 || sampleRate !in 8000..192000 || channels !in 1..2) return
         if (data.size % (channels * 2) != 0) return
         val connection = mediaConnection() ?: return
         val packet = mediaPacket(MEDIA_AUDIO_PCM16, 0, ptsNs, sampleRate, channels, data)
@@ -555,8 +535,8 @@ class TvSubtitleClient(
         }
     }
 
-    fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long, sessionId: String = ""): Boolean {
-        if (!ready || ptsNs <= 0L) return false
+    fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long, sessionId: String = "") {
+        if (ptsNs <= 0L) return
         val array = JSONArray()
         lines.take(3).forEach { line ->
             array.put(JSONObject()
@@ -573,26 +553,27 @@ class TvSubtitleClient(
             .put("sessionId", sessionId)
             .put("lines", array)
             .toString()
-        val current = socket
-        if (current == null || !ready) return false
-        return current.send(payload)
+        synchronized(mediaSendLock) {
+            val current = synchronized(mediaStateLock) { socket.takeIf { ready } }
+            current?.send(payload)
+        }
     }
 
     fun send(packet: SubtitlePacket): Boolean {
-        if (!ready) {
+        if (!synchronized(mediaStateLock) { ready }) {
             onStatus("اربط التلفاز أولًا", false)
             return false
         }
-        if (pendingMessageIds.size >= MAX_PENDING_MESSAGE_IDS) pendingMessageIds.clear()
-        pendingMessageIds.add(packet.messageId)
-        val json = packet.toJson()
-        val current = socket
-        if (current == null || !ready) {
-            pendingMessageIds.remove(packet.messageId)
-            onStatus("تعذر إرسال الترجمة", false)
-            return false
+        val sent = synchronized(mediaSendLock) {
+            val current = synchronized(mediaStateLock) {
+                if (!ready) null else {
+                    if (pendingMessageIds.size >= 64) pendingMessageIds.clear()
+                    pendingMessageIds.add(packet.messageId)
+                    socket
+                }
+            }
+            current?.send(packet.toJson()) == true
         }
-        val sent = current.send(json)
         if (!sent) {
             pendingMessageIds.remove(packet.messageId)
             onStatus("تعذر إرسال الترجمة", false)
@@ -615,41 +596,46 @@ class TvSubtitleClient(
     }
 
     fun disconnect() {
-        synchronized(reconnectLock) {
+        disconnectInternal(invalidateGeneration = true)
+    }
+
+    private fun disconnectInternal(
+        invalidateGeneration: Boolean,
+        expectedGeneration: Long? = null
+    ): Boolean {
+        val previousSocket = synchronized(reconnectLock) {
+            if (expectedGeneration != null && reconnectGeneration != expectedGeneration) {
+                return false
+            }
+            if (invalidateGeneration) reconnectGeneration++
             reconnectEnabled = false
             cancelReconnectLocked()
-        }
-        val previousSocket = synchronized(mediaSendLock) {
-            synchronized(handshakeLock) {
-                cancelHandshakeTimeoutLocked()
-                terminalStatus = null
-                synchronized(mediaStateLock) {
-                    ready = false
-                    mediaReady = false
-                    pendingMessageIds.clear()
-                    val previous = socket
-                    socket = null
-                    resetMediaQueueLocked()
-                    previous
+            lastHost = null
+            lastPairingCode = null
+            backoffMs = INITIAL_BACKOFF_MS
+            synchronized(mediaSendLock) {
+                synchronized(handshakeLock) {
+                    cancelHandshakeTimeoutLocked()
+                    synchronized(mediaStateLock) {
+                        ready = false
+                        mediaReady = false
+                        terminalStatus = null
+                        pendingMessageIds.clear()
+                        val previous = socket
+                        socket = null
+                        resetMediaQueueLocked()
+                        previous
+                    }
                 }
             }
         }
         previousSocket?.close(1000, "User disconnected")
+        return true
     }
-
-    fun enableReconnect(enabled: Boolean) {
-        synchronized(reconnectLock) {
-            reconnectEnabled = enabled
-            if (!enabled) cancelReconnectLocked()
-        }
-    }
-
-    fun isConnected(): Boolean = socket != null && ready
 
     fun close() {
         disconnect()
         mediaWorker.interrupt()
-        outboundWorker.interrupt()
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
     }

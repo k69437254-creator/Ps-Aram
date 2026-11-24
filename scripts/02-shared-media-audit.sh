@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 set -Eeuo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {

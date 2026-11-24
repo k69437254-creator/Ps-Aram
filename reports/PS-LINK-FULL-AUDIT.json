@@ -1,11 +1,12 @@
 {
-  "generated_utc": "2026-11-24T20:29:06.715448+00:00",
+  "generated_utc": "2026-11-24T22:35:15.548200+00:00",
   "branch": "feature/platform-completion-pack",
-  "head": "aa64202def8e680a9a351896c0d0584ff97b9163",
+  "head": "451feecc5162e8b2d7bbe66d6ae2c483464c5eef",
   "working_tree_dirty": true,
   "tracked_file_count": 190,
-  "text_file_count": 185,
-  "binary_file_count": 5,
+  "untracked_file_count": 7,
+  "text_file_count": 189,
+  "binary_file_count": 8,
   "missing_tracked_files": [],
   "platforms": {
     "android-mobile": {
@@ -123,16 +124,324 @@
   },
   "declared_target_states": {
     "android-mobile": "source-partial",
-    "android-tv": "existing",
+    "android-tv": "source-partial",
     "google-tv": "compatibility-pending",
     "fire-tv": "compatibility-pending",
-    "tizen": "hls-video-path-present",
-    "webos": "hls-video-path-present",
-    "roku": "prototype-generated",
+    "tizen": "source-partial",
+    "webos": "source-partial",
+    "roku": "prototype",
     "web": "source-partial",
-    "xbox-edge": "prototype-generated",
+    "xbox-edge": "browser-receiver-prototype",
     "playstation": "source-partial"
   },
+  "acceptance_matrix": {
+    "android-mobile": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "FAIL_BEFORE_GRADLE",
+      "unitTestsPassed": "NOT_RUN",
+      "integrationTestsPassed": "NOT_RUN",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "NOT_TESTED",
+      "videoPassed": "NOT_TESTED",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "android-tv": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "NOT_RUN",
+      "unitTestsPassed": "NOT_RUN",
+      "integrationTestsPassed": "NOT_RUN",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "NOT_TESTED",
+      "videoPassed": "NOT_TESTED",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "google-tv": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "NOT_RUN",
+      "unitTestsPassed": "NOT_RUN",
+      "integrationTestsPassed": "NOT_RUN",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "NOT_TESTED",
+      "videoPassed": "NOT_TESTED",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "fire-tv": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "NOT_RUN",
+      "unitTestsPassed": "NOT_RUN",
+      "integrationTestsPassed": "NOT_RUN",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "NOT_TESTED",
+      "videoPassed": "NOT_TESTED",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "tizen": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "NOT_BUILT",
+      "unitTestsPassed": "PASS_SIMULATED",
+      "integrationTestsPassed": "PASS_ADAPTER_SIMULATION",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "PASS_SIMULATED",
+      "videoPassed": "NOT_TESTED_ON_DEVICE",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "webos": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "NOT_BUILT",
+      "unitTestsPassed": "PASS_SIMULATED",
+      "integrationTestsPassed": "PASS_ADAPTER_SIMULATION",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "PASS_SIMULATED",
+      "videoPassed": "NOT_TESTED_ON_DEVICE",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "roku": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "NOT_BUILT",
+      "unitTestsPassed": "PASS_CONTRACT_ONLY",
+      "integrationTestsPassed": "NOT_TESTED",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "PASS_CONTRACT_ONLY",
+      "videoPassed": "NOT_TESTED_ON_DEVICE",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "web": {
+      "sourceComplete": "PARTIAL",
+      "buildPassed": "NOT_APPLICABLE",
+      "unitTestsPassed": "PASS_SIMULATED",
+      "integrationTestsPassed": "PASS_ADAPTER_SIMULATION",
+      "packageVerified": "NOT_APPLICABLE",
+      "installVerified": "NOT_TESTED_ON_BROWSER",
+      "pairingPassed": "PASS_SIMULATED",
+      "videoPassed": "NOT_TESTED_ON_DEVICE",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_END_TO_END_TLS",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "xbox-edge": {
+      "sourceComplete": "PARTIAL_BROWSER_RECEIVER",
+      "buildPassed": "NOT_APPLICABLE",
+      "unitTestsPassed": "PASS_SIMULATED",
+      "integrationTestsPassed": "PASS_ADAPTER_SIMULATION",
+      "packageVerified": "NOT_APPLICABLE",
+      "installVerified": "NOT_TESTED_ON_XBOX",
+      "pairingPassed": "PASS_SIMULATED",
+      "videoPassed": "NOT_TESTED_ON_DEVICE",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_END_TO_END_TLS",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    },
+    "playstation": {
+      "sourceComplete": "PARTIAL_ANDROID_CHIAKI_ROUTE",
+      "buildPassed": "FAIL_BEFORE_GRADLE",
+      "unitTestsPassed": "NOT_RUN",
+      "integrationTestsPassed": "NOT_RUN",
+      "packageVerified": "NOT_BUILT",
+      "installVerified": "NOT_TESTED",
+      "pairingPassed": "NOT_TESTED",
+      "videoPassed": "NOT_TESTED",
+      "audioPassed": "NOT_TESTED",
+      "avSyncPassed": "NOT_TESTED",
+      "longSessionStabilityPassed": "NOT_TESTED",
+      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "physicalDeviceEvidence": "NOT_TESTED"
+    }
+  },
+  "fully_accepted_platforms": 0,
+  "verified_platform_completion_percent": 0.0,
+  "findings": [
+    {
+      "id": "PSL-001",
+      "severity": "HIGH",
+      "state": "FIXED_IN_WORKTREE",
+      "path": "scripts/prepare_pslink_live_tv_streaming.py",
+      "needle": "def ensure_sample_timestamp",
+      "summary": "The overlay assumed fixed indentation and older caption-clear message shapes. Bootstrap failed first on the OCR timestamp and then on valid caption-clear calls carrying sessionId. The patch now accepts the current forms, preserves session IDs, and is idempotent.",
+      "evidence": "GitHub Actions run 45481552752 failed before Gradle. Full bootstrap now succeeds on repeated local runs; focused overlay regression tests pass.",
+      "line": 91
+    },
+    {
+      "id": "PSL-002",
+      "severity": "HIGH",
+      "state": "OPEN",
+      "path": "mobile/src/main/AndroidManifest.xml",
+      "needle": "android:usesCleartextTraffic=\"true\"",
+      "summary": "Mobile and TV endpoints use ws:// and HTTP on the LAN, bind to all interfaces, and have no enforced pairing-attempt limit. The six-digit code is persisted, sent in cleartext, and is not encryption; same-network observers or active peers can attack the session.",
+      "evidence": "Restrict use to a trusted LAN; do not expose port 8765. No end-to-end TLS/PAKE implementation is present.",
+      "line": 27
+    },
+    {
+      "id": "PSL-003",
+      "severity": "HIGH",
+      "state": "OPEN_LIMITATION",
+      "path": "mobile/src/main/java/com/pslink/mobile/capture/AacPlaybackCapture.kt",
+      "needle": "AudioPlaybackCaptureConfiguration.Builder(projection)",
+      "summary": "The HLS AAC source is Android Playback Capture and depends on Android 10+, permission, and source-app capture policy. It is not the native Chiaki decoded-game-audio callback. Synthetic AAC tests verify muxing, not PS5 audio capture; device evidence is absent.",
+      "evidence": "The separate Chiaki PCM WebSocket bridge is source-patched but Android CI did not reach compilation on this commit.",
+      "line": 46
+    },
+    {
+      "id": "PSL-004",
+      "severity": "MEDIUM",
+      "state": "PARTIALLY_TESTED",
+      "path": "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt",
+      "needle": "private fun ocrArabic",
+      "summary": "Arabic OCR now has three generated image samples covering font weight, size, background, and contrast. This is a narrow synthetic check, not game-scene accuracy or Android performance validation. Model provenance and redistribution terms still need confirmation.",
+      "evidence": "Local Tesseract 5.5.4 sample test passed; physical-device OCR remains NOT TESTED.",
+      "line": 535
+    },
+    {
+      "id": "PSL-005",
+      "severity": "MEDIUM",
+      "state": "OPEN_EXTERNAL_VALIDATION",
+      "path": "platforms/targets.json",
+      "needle": "\"acceptanceMatrixVersion\"",
+      "summary": "No platform has complete acceptance evidence: APK/WGT/IPK/Roku packaging, installation, real pairing, audio/video, A/V sync, long-session stability, security, and physical-device evidence remain incomplete.",
+      "evidence": "Acceptance matrix records 0/10 fully accepted platforms; browser and vendor receiver tests are simulated.",
+      "line": 176
+    },
+    {
+      "id": "PSL-006",
+      "severity": "MEDIUM",
+      "state": "INHERITED_PUBLIC_CLIENT_CREDENTIAL",
+      "path": "mobile/src/main/java/com/pslink/mobile/PsnAccountIdClient.kt",
+      "needle": "private const val CLIENT_SECRET",
+      "summary": "The upstream native OAuth client embeds a client credential in the APK. It is extractable and must not be treated as a server-side secret. User passwords and account tokens are not intended to be persisted or logged.",
+      "evidence": "Credential value intentionally omitted from the audit report.",
+      "line": 26
+    },
+    {
+      "id": "PSL-007",
+      "severity": "LOW",
+      "state": "FIXED_IN_WORKTREE",
+      "path": "scripts/verify-platform-completion-pack.sh",
+      "needle": "#!/usr/bin/env bash",
+      "summary": "Four shell scripts used a machine-specific Termux interpreter path and could not be launched directly on Linux. Their shebangs now use env bash.",
+      "evidence": "All tracked shell scripts pass bash -n.",
+      "line": 1
+    },
+    {
+      "id": "PSL-008",
+      "severity": "MEDIUM",
+      "state": "FIXED_IN_WORKTREE",
+      "path": "tv/app/src/main/java/com/pslink/tv/TvSubtitleServer.kt",
+      "needle": "PsLinkProtocol.KIND_HEARTBEAT_ACK",
+      "summary": "The Android TV receiver accepted v2 pairing but did not answer application-level heartbeat messages, causing compatible browser receivers to treat a live session as stalled. It now validates the protocol version and replies with HEARTBEAT_ACK.",
+      "evidence": "The cross-platform regression suite and v2 protocol source tests pass; Android compilation remains blocked by the missing SDK.",
+      "line": 116
+    },
+    {
+      "id": "PSL-009",
+      "severity": "HIGH",
+      "state": "FIXED_IN_WORKTREE",
+      "path": "mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt",
+      "needle": "private val mediaStateLock = java.lang.Object()",
+      "summary": "The media sender used an untagged queue and could send stale packets through a replacement WebSocket; it also lacked bounded retry after transient disconnects. Queue entries now carry socket/generation identity, transitions are synchronized, and capped reconnect stops on manual disconnect.",
+      "evidence": "Cross-platform regression tests and media-state source checks pass; Android/Kotlin compilation could not be run without an Android SDK.",
+      "line": 70
+    },
+    {
+      "id": "PSL-010",
+      "severity": "MEDIUM",
+      "state": "FIXED_IN_WORKTREE",
+      "path": "tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt",
+      "needle": "val inputIndex = codec.dequeueInputBuffer(10_000)",
+      "summary": "A temporarily unavailable MediaCodec input buffer incorrectly forced the decoder to wait for a new keyframe, potentially freezing video until the next IDR. The transient no-buffer path now drops only that sample; actual invalid-buffer handling still requests keyframe recovery.",
+      "evidence": "The focused regression contract passes; physical decoder behavior remains untested.",
+      "line": 253
+    }
+  ],
+  "github_actions_evidence": [
+    {
+      "run_id": "45481552752",
+      "result": "FAILURE",
+      "stage": "Bootstrap failed before Gradle compilation; APK build steps were skipped.",
+      "url": "https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552752"
+    },
+    {
+      "run_id": "45481552755",
+      "result": "PASS",
+      "stage": "Tizen/webOS simulated receiver checks.",
+      "url": "https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552755"
+    },
+    {
+      "run_id": "45481552764",
+      "result": "PASS",
+      "stage": "Cross-platform regression checks.",
+      "url": "https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552764"
+    },
+    {
+      "run_id": "45481552833",
+      "result": "PASS",
+      "stage": "Web receiver protocol and HLS adapter tests.",
+      "url": "https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552833"
+    }
+  ],
+  "local_test_evidence": [
+    {
+      "command": "bash scripts/check-platform-regressions.sh",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 -m unittest tests.test_pslink_audit_contracts tests.test_v2_protocol_source_contracts -v",
+      "result": "PASS (18 tests)"
+    },
+    {
+      "command": "python3 tests/test_arabic_ocr.py -v",
+      "result": "PASS (3 synthetic Arabic samples; Tesseract 5.5.4)"
+    },
+    {
+      "command": "Node YAML parse of .github/workflows/*.yml; bash -n; git diff --check",
+      "result": "PASS"
+    },
+    {
+      "command": "Gradle compilation and Android unit tests",
+      "result": "NOT_RUN (Android SDK unavailable locally; current CI stopped in bootstrap)"
+    },
+    {
+      "command": "bash scripts/verify-hls-ts.sh",
+      "result": "BLOCKED (integration playlists are generated by Android unit tests, which could not run without an Android SDK)"
+    }
+  ],
   "inventory_excluded_generated_reports": [
     "reports/PS-LINK-FULL-AUDIT.json",
     "reports/PS-LINK-FULL-AUDIT.md"
@@ -140,1132 +449,1369 @@
   "inventory": [
     {
       "path": ".github/workflows/android.yml",
-      "bytes": 7978,
-      "sha256": "37d87928c5ef458fd4afe0c3c821e6f52cc8849ec67de7688658193c3c2c9476",
+      "tracked": true,
+      "bytes": 8120,
+      "sha256": "747891a5031be5271aae14cbd2c4227abf43c6e946deada272127ba4730a8392",
       "kind": "text"
     },
     {
       "path": ".github/workflows/platform-regression.yml",
+      "tracked": true,
       "bytes": 755,
       "sha256": "22bad9d099ab58bbddf0e8d831917ebb42aad557d590450cd993a3a45d030611",
       "kind": "text"
     },
     {
       "path": ".github/workflows/tv-native-web-receivers.yml",
+      "tracked": true,
       "bytes": 2090,
       "sha256": "33a34dbb28c87a56f0c60dd7aebb9bc82fb306b4e4325c46e377779df9a8637d",
       "kind": "text"
     },
     {
       "path": ".github/workflows/tv-web-receiver.yml",
+      "tracked": true,
       "bytes": 1013,
       "sha256": "f0ea4b8dd80450ba6157cd11957c9f5368b4a48c686ffe46dffadd66cbc8205d",
       "kind": "text"
     },
     {
       "path": ".gitignore",
+      "tracked": true,
       "bytes": 371,
       "sha256": "485392d2d088b3c80f73c2752bced95f07dc0371cb75238e7ea805bdffb2092d",
       "kind": "text"
     },
     {
       "path": "LICENSE",
+      "tracked": true,
       "bytes": 678,
       "sha256": "4a8fa6cb250b83af2caed673eccbb5cf59de55080731ab5149b2e555786d29ae",
       "kind": "text"
     },
     {
       "path": "LICENSES/AGPL-3.0.txt",
+      "tracked": true,
       "bytes": 35069,
       "sha256": "fff3acb5eddbde97746cc1ad2082a1e95f50c2315a8748b26b8a81a499d8d216",
       "kind": "text"
     },
     {
       "path": "LICENSES_README.md",
+      "tracked": true,
       "bytes": 194,
       "sha256": "8df539a51af8bafb290109554519dd1a584841b2c38d92f1e19debcedef7a165",
       "kind": "text"
     },
     {
       "path": "PS5_UPDATE_NOTES_AR.md",
+      "tracked": true,
       "bytes": 3224,
       "sha256": "33bba6ff475a72e3f8b5c4c6b20d250cf4180f40490503d436b6f0409ec3b361",
       "kind": "text"
     },
     {
       "path": "README.md",
-      "bytes": 9364,
-      "sha256": "fdeaeb7841e5e0684023ae6cdde8ed279ce94b191bb708f83ec93542350ab3d5",
+      "tracked": true,
+      "bytes": 10161,
+      "sha256": "a7c79ab7b3430a18f8410acfe1eaffee33ef083757604735caf21a7a6ae6a9ea",
       "kind": "text"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
+      "tracked": true,
       "bytes": 2263,
       "sha256": "56662b51ca168db7313f71063073711f423af4b55f64a16baca9a417dd6b6134",
       "kind": "text"
     },
     {
       "path": "UPSTREAM_LOCK.txt",
+      "tracked": true,
       "bytes": 476,
       "sha256": "f0cfc7f6798ac6d2657cdaaea8772964596b7701cb1a351a5af4381ffa969cd2",
       "kind": "text"
     },
     {
       "path": "build.gradle.kts",
+      "tracked": true,
       "bytes": 264,
       "sha256": "a7ba2dc716df23efe03fcf4a04f3566ba03016b67a9a44eee4f9e8f761d616bf",
       "kind": "text"
     },
     {
       "path": "core/shared/build.gradle.kts",
+      "tracked": true,
       "bytes": 428,
       "sha256": "992faec8fc4bef1da39fbde2d7a219d1b7c2ea3b465d6abd3f00420632a8c841",
       "kind": "text"
     },
     {
       "path": "core/shared/src/main/java/com/pslink/core/PairingCode.kt",
+      "tracked": true,
       "bytes": 648,
       "sha256": "40eec4a344b1bbc401e00492a49925e1316991ead7a804bfd8a8cba135f28337",
       "kind": "text"
     },
     {
       "path": "core/shared/src/main/java/com/pslink/core/PsLinkProtocol.kt",
+      "tracked": true,
       "bytes": 2164,
       "sha256": "97cd779998785b16ed9e3ad87c0d31f8b1a3a8c54b4357dce50b5c87b96250f1",
       "kind": "text"
     },
     {
       "path": "core/shared/src/main/java/com/pslink/core/StableTextGate.kt",
+      "tracked": true,
       "bytes": 1301,
       "sha256": "4b8b2849853670a6deb11d55148f7ad2a04a63ad9c9ae393342dd53fe63772ba",
       "kind": "text"
     },
     {
       "path": "core/shared/src/test/java/com/pslink/core/PairingCodeTest.kt",
+      "tracked": true,
       "bytes": 779,
       "sha256": "c2eee4ce06e5a058f1b8dfc2c724f0ab517e94205bdd2aba8c6ee6fe0fe7d61c",
       "kind": "text"
     },
     {
       "path": "core/shared/src/test/java/com/pslink/core/StableTextGateTest.kt",
+      "tracked": true,
       "bytes": 1365,
       "sha256": "cf1230b65f4a4dc812f1bade8ec7de364be5b4022220e1004405f2c58b4b279d",
       "kind": "text"
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 1716,
-      "sha256": "ca1d29fe76e7d9ce8d1fbcda68d65809b2a13461da23d9beb35ea11c124bb3a9",
+      "tracked": true,
+      "bytes": 2979,
+      "sha256": "2747e7be9d753c053b6e748b94353c94229320de5c3e1f0ad71474b759bf1d21",
       "kind": "text"
     },
     {
       "path": "docs/PS5_CONNECTION_TEST_PLAN_AR.md",
+      "tracked": true,
       "bytes": 3801,
       "sha256": "a82be6e3f9aa4480ea52d86af686d42045e3310ba1409ff16e6c15b6c719e635",
       "kind": "text"
     },
     {
       "path": "docs/PS5_SETUP_AR.md",
+      "tracked": true,
       "bytes": 7502,
       "sha256": "8e7e3c6d570d7545d94b77a7d1f1347b5e10f91796db96100a36f2902cb9536b",
       "kind": "text"
     },
     {
       "path": "docs/PSN_OAUTH_UPDATE_AR.md",
+      "tracked": true,
       "bytes": 3872,
       "sha256": "442cd6c0a98f4e7eb9332af6296742218a50644aa9870893bd15ea2030abdd2c",
       "kind": "text"
     },
     {
       "path": "docs/REPAIR-BASELINE-2026-11-23.md",
+      "tracked": true,
       "bytes": 4154,
       "sha256": "d58288b4be347b0b107d8d1e9c1e440412e3a98fa0423a75de29e9c3a6540589",
       "kind": "text"
     },
     {
       "path": "gradle.properties",
+      "tracked": true,
       "bytes": 182,
       "sha256": "c10fac2d0111efe3e146a5e25baed23168a387c2b1edacd716177f3ba7e867c0",
       "kind": "text"
     },
     {
       "path": "gradle/libs.versions.toml",
+      "tracked": true,
       "bytes": 3253,
       "sha256": "707452af4621c7e22b5052938348ba0f83d9bbb0cc106a1089f92a0f4717475b",
       "kind": "text"
     },
     {
       "path": "gradle/wrapper/gradle-wrapper.jar",
+      "tracked": true,
       "bytes": 54329,
       "sha256": "381dff8aa434499aa93bc25572b049c8c586a67faff2c02f375e4f23e17e49de",
       "kind": "binary"
     },
     {
       "path": "gradle/wrapper/gradle-wrapper.properties",
+      "tracked": true,
       "bytes": 203,
       "sha256": "d971d89684bb2742457f87178f7155beeb512fab865e1ef8b337bc3a55fae181",
       "kind": "text"
     },
     {
       "path": "gradlew",
-      "bytes": 5288,
-      "sha256": "6dad4d93205c010a5111eaa41e2fdc2c555cc4809d3d38abface96e7c3a0a920",
+      "tracked": true,
+      "bytes": 5296,
+      "sha256": "8c4c04dd98db1f00d49456dd162418a39312c5cb13d6865d783deb483bd1ed22",
       "kind": "text"
     },
     {
       "path": "mobile/build.gradle.kts",
+      "tracked": true,
       "bytes": 5151,
       "sha256": "06b20314b3efd305694d790ca63a036b34fcdb12dd17fb657cd0a63095351457",
       "kind": "text"
     },
     {
       "path": "mobile/proguard-rules.pro",
+      "tracked": true,
       "bytes": 182,
       "sha256": "9ea497b2566413afe44f51b0ca931bec20f9d4efd9d7e96c6c9d997adde7afee",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/AndroidManifest.xml",
+      "tracked": true,
       "bytes": 4159,
       "sha256": "4ee4fd8e13176460402dd2d52506b095499da316949abf00a4e98620fb32f7b9",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/assets/tessdata/ara.traineddata",
+      "tracked": true,
       "bytes": 2494806,
       "sha256": "2005976778bbc14fc56a4ea8d43c6080847aeee72fcc2201488f240daca15c5b",
       "kind": "binary"
     },
     {
       "path": "mobile/src/main/java/com/metallic/chiaki/touchcontrols/ControlLayoutEditor.kt",
+      "tracked": true,
       "bytes": 14034,
       "sha256": "782dc8e46a189e226de2a84f9c11d3bdc509660e8b6cf43b8c28d40d09d4160d",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/LiveCaptionOverlayView.kt",
+      "tracked": true,
       "bytes": 5683,
       "sha256": "e769dd69e9d9579cf6c3b8035b7341d3bffee73bfa6aa8361264eb757449f56e",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt",
-      "bytes": 28798,
-      "sha256": "7e4d5a635f6c4dc09d066a8864f53ca8f7b9822420b40a07896087c2b88ccae9",
+      "tracked": true,
+      "bytes": 28917,
+      "sha256": "70854399dee23c06aa7f0f4948ccfd19acea4f64a473f4152f298f4f8e5dda25",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/PsLinkScreenshot.kt",
+      "tracked": true,
       "bytes": 4126,
       "sha256": "7dfa743d258c8a5aee0779995468a9f69bca4b2c789a799d7c70bc044ee1315f",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/PsnAccountIdClient.kt",
+      "tracked": true,
       "bytes": 8991,
       "sha256": "ca53219a6958c70dd4c03024218f0d306a25d2d060daeefb53c5d0ba7e34c752",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/TranslationActivity.kt",
+      "tracked": true,
       "bytes": 25623,
       "sha256": "42774ced4e8c49eeb54b607ae9de5bdc55d4f1ca95a5a8d4003e6381e495c3f2",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt",
-      "bytes": 28175,
-      "sha256": "dbba22476bc47b8993a8934d45f04c592f3f4b759c04d946aa463454d3275abd",
+      "tracked": true,
+      "bytes": 27225,
+      "sha256": "230c105097f27d032b1053074d7f9513e41a42a31a60d08868af71ecb023e29d",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/capture/AacPlaybackCapture.kt",
+      "tracked": true,
       "bytes": 10542,
       "sha256": "eefe463d8500a4c3ef3540dab3ad1316dd90d35354c32d07ce741d9052418131",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/capture/HlsTransportStreamPublisher.kt",
+      "tracked": true,
       "bytes": 14582,
       "sha256": "0c424535d784a335cb109157ff5d789d20cf5788f5c61cf0e37c9933923f7e2f",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/capture/PhoneReceiverServer.kt",
+      "tracked": true,
       "bytes": 17416,
       "sha256": "8f16dee00c8506aa564211f3367caf46ec6f2af3d844e15a9ee01d98f44e7a31",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/capture/ScreenRecordingService.kt",
+      "tracked": true,
       "bytes": 8489,
       "sha256": "d9c1acecba70712d2c9926d3d1d4b3926cff6e6b62f3616823d8336577f5e6fb",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/capture/TvScreenStreamService.kt",
+      "tracked": true,
       "bytes": 17864,
       "sha256": "d51756bae7621eada2bc8b3c80bdd09c2c9813ee777ebf44fe48919ed9566e08",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/java/com/pslink/mobile/capture/VideoEditorActivity.kt",
+      "tracked": true,
       "bytes": 10607,
       "sha256": "4b0f9b5eaa9d0b447308080716bc86746912ddef81e47054ed889cdf8959332d",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/drawable-nodpi/pslink_launcher_art.png",
+      "tracked": true,
       "bytes": 258248,
       "sha256": "37a0b72c2ab986f54cd0b6d7bbdc1ad8de54cbc812a17430bb8d88ef32efdded",
       "kind": "binary"
     },
     {
       "path": "mobile/src/main/res/drawable/ic_back.xml",
+      "tracked": true,
       "bytes": 301,
       "sha256": "9c71aca17ec622dbada7ea7eef18ed063848a77e5db3f24421aec59d7733d8b7",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/drawable/ic_image_text.xml",
+      "tracked": true,
       "bytes": 415,
       "sha256": "5e3af264713b88fb40a24c8d9fcac554681821217179951f10b8fad9bae98663",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/drawable/ic_pslink_launcher.xml",
+      "tracked": true,
       "bytes": 705,
       "sha256": "6edcf221bbf964825a14c726469eabb8cc89d2e72a9499c03d6f8b91f731c47d",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/drawable/ic_pslink_translate.xml",
+      "tracked": true,
       "bytes": 616,
       "sha256": "cf8bd21ac47095a8dd026ce9eb2e155671d13e0ed49b92dc989a9f1617cb8803",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/drawable/pslink_status_pill.xml",
+      "tracked": true,
       "bytes": 237,
       "sha256": "badc381f630ee7e635e280e7d02a4d9faab28f4222fe37589e076b707c606c6d",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/layout/activity_pslink_video_editor.xml",
+      "tracked": true,
       "bytes": 4170,
       "sha256": "bf1238442ddd65d63ed5dc42f6081650232323baa5f8d605d0376aede5316417",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/layout/activity_translation.xml",
+      "tracked": true,
       "bytes": 15065,
       "sha256": "400b2b0cceb00d71a89488695986f85043e88652f68c2aff314dfc44ff2f09f4",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/layout/pslink_main_layout.xml",
+      "tracked": true,
       "bytes": 11944,
       "sha256": "47d4f196ac5224b7b3fad0fcc0300157122a9c16e15a3c7e350fe758211a9c71",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/values-ar/strings.xml",
+      "tracked": true,
       "bytes": 7257,
       "sha256": "b2111f8c56c0fa09ab6612e2c2b5b3eea30ff4597672d7262985e393b5c3833c",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/values/pslink_extra_colors.xml",
+      "tracked": true,
       "bytes": 374,
       "sha256": "669a6bec16830fabfad8fc6e8bc533dd19c07b072fb94ecdfa4372206a67f802",
       "kind": "text"
     },
     {
       "path": "mobile/src/main/res/values/pslink_typography.xml",
+      "tracked": true,
       "bytes": 895,
       "sha256": "54a73db2d2dd7aaf0371b8e6390d88a0b6d6d14eb1b75d6c4deff6a3ca84fb78",
       "kind": "text"
     },
     {
       "path": "mobile/src/test/java/com/metallic/chiaki/touchcontrols/ControllerStateMergeTest.kt",
+      "tracked": true,
       "bytes": 1603,
       "sha256": "102693652bdb60e5cf5e252171b195a08e781c1ca28f53ecdb3926ee07f742cd",
       "kind": "text"
     },
     {
       "path": "mobile/src/test/java/com/pslink/mobile/capture/HlsTransportStreamPublisherTest.kt",
+      "tracked": true,
       "bytes": 10380,
       "sha256": "e16fcd107a13bd81c43e25bb2d124ec4860516bb187e8983011b5cf6b1b75339",
       "kind": "text"
     },
     {
       "path": "mobile/src/test/resources/fixtures/hls-single-idr.h264",
+      "tracked": true,
       "bytes": 664,
       "sha256": "6ab528d7bebe1a6002ddb3490feaf87ed3dc041169f587615a41b1b817ab424f",
       "kind": "binary"
     },
     {
       "path": "models/README.md",
-      "bytes": 982,
-      "sha256": "b2971c12cbc70786fc4fbc1f5f88908aaf517a697257c27f33d73de272dd6910",
+      "tracked": true,
+      "bytes": 1177,
+      "sha256": "6e7a1737e349c427e5cdb82641217b69980e5d152a094e045bd612a4c39dd68d",
       "kind": "text"
     },
     {
       "path": "platforms/80-readiness-plan-ar.md",
-      "bytes": 3142,
-      "sha256": "dea21db4648544c2a733a94e9b8b0d382a2afdf1a847463a54d53f38bcba0f3a",
+      "tracked": true,
+      "bytes": 5699,
+      "sha256": "a29c0eaf1342fb0927f2d68f57ad278dbb02299fe6a6708b8ae4a72a23aeb69d",
       "kind": "text"
     },
     {
       "path": "platforms/repair-pack-manifest.json",
+      "tracked": true,
       "bytes": 1042,
       "sha256": "bf7115553d575bdbbe6492a3c026d60e6d7b75b370460e9b6190a1c549a81dd0",
       "kind": "text"
     },
     {
       "path": "platforms/targets.json",
-      "bytes": 7094,
-      "sha256": "d52646a3d84457778ad433d3ebf743d18ebc38b6a8f14cb0b5d072daf12f1cd1",
+      "tracked": true,
+      "bytes": 13758,
+      "sha256": "0804fac3f61391c85f0dc406c071d6f0ba2f465b0f6490a9e3b3ad8183e690b6",
       "kind": "text"
     },
     {
       "path": "receivers/DEVICE-VALIDATION.md",
-      "bytes": 4305,
-      "sha256": "52398d3f54ce5c18a6fbfa4cf31b024f85a3033ec9575fc59fb262daec0aed5e",
+      "tracked": true,
+      "bytes": 5728,
+      "sha256": "b34934a51be6d689c8124a91bb510469748350a57376eaa27a397995e9c5547e",
       "kind": "text"
     },
     {
       "path": "receivers/README.md",
-      "bytes": 5824,
-      "sha256": "37626b868ae8f00d90b8814b953cc78ce418cbf35abcb60d6b8ce106b616a572",
+      "tracked": true,
+      "bytes": 6173,
+      "sha256": "1e72cc70a7067a5d26c450c7ed6ece42da1e74e0ba639ee3a9188511a1073e68",
       "kind": "text"
     },
     {
       "path": "receivers/platform-tests/platform-app.test.js",
+      "tracked": true,
       "bytes": 12419,
       "sha256": "7a8f636acb52562b635b560983df2becc46c552c1cef798a9c7912254f87ac26",
       "kind": "text"
     },
     {
       "path": "receivers/platform-tests/regression-tests/pairing-and-stream.test.js",
+      "tracked": true,
       "bytes": 16770,
       "sha256": "70fddeb6a104e2f85560ccb8a7cb15133787ce35402789a0dc45f021ae09cab9",
       "kind": "text"
     },
     {
       "path": "receivers/roku/manifest",
+      "tracked": true,
       "bytes": 66,
       "sha256": "74ff3bdde49468a9c918997af3f9d91ba78214f43d28aa42c1e15dfb2d9b1522",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/MainScene.brs",
+      "tracked": true,
       "bytes": 4367,
       "sha256": "1c2e2caa8efc806ffa68c2693487b91dfb6861c07f14f7ef98310a18b56da8cd",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/MainScene.xml",
+      "tracked": true,
       "bytes": 1004,
       "sha256": "9a47cd6d0b604ab8827e18c7f7d1ce7ece78e779e6006e70025bd94750dc59cf",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/components/PairingTask.brs",
+      "tracked": true,
       "bytes": 4595,
       "sha256": "ec27132a5c5d92c10f035a1443bd4309690e127e1b347e0be863825c4bd167b0",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/components/PairingTask.xml",
+      "tracked": true,
       "bytes": 340,
       "sha256": "24cf5756fe74dbf560fb72c535404e510830f204a5809b52c6d4dfcdfb96b17c",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/components/SubtitlePollTask.brs",
+      "tracked": true,
       "bytes": 1481,
       "sha256": "99aff56d3bfc5741297833614282767767c99526f36bd98d2dd3fc45b76d9cca",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/components/SubtitlePollTask.xml",
+      "tracked": true,
       "bytes": 316,
       "sha256": "5af9c2a2346b8cbadc825a643d72323f99ef0c4087add26bcf83d3f9b2904082",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/main.brs",
+      "tracked": true,
       "bytes": 709,
       "sha256": "90ab521ee220b1ccde8036bb8151dd619c5d6ebd5ef09b10590e3cf5c732c795",
       "kind": "text"
     },
     {
       "path": "receivers/roku/source/receiver-config.json",
+      "tracked": true,
       "bytes": 70,
       "sha256": "47e6db9928c3216dd0afdabd80f00697c2aac6bba4fe1017fd79d49fe22cbe15",
       "kind": "text"
     },
     {
       "path": "receivers/roku/tests/receiver_contract.test.py",
+      "tracked": true,
       "bytes": 1192,
       "sha256": "8d1e3bed6998f2375989eb056afe396522da9faf1850592922d43a4670828ac8",
       "kind": "text"
     },
     {
       "path": "receivers/shared/pslink-spatial-captions.js",
+      "tracked": true,
       "bytes": 4732,
       "sha256": "653907317a5095c4155f24851a847364790b6a7ef290770280ff6140b48d3d48",
       "kind": "text"
     },
     {
       "path": "receivers/shared/tests/spatial-captions.test.js",
+      "tracked": true,
       "bytes": 2746,
       "sha256": "fe9df38c2303af13685682fa6c34f11f187a5588501d8db6f68a99f04afdf415",
       "kind": "text"
     },
     {
       "path": "receivers/shared/tv-remote.js",
+      "tracked": true,
       "bytes": 2636,
       "sha256": "fc7449455ffdf7afadb927f945c5193de6b6c00abb423ba169f9cc6bcbf103b9",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/README.md",
+      "tracked": true,
       "bytes": 1936,
       "sha256": "4aefce1526f9838b97be611a6c1619bd3e9bfd09cae14b1c4a42c70ebd6b5c66",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/app.css",
+      "tracked": true,
       "bytes": 3169,
       "sha256": "15cbd1240527a7d5f1be110a4b62a90e7a601283ba070a6f2edc950f65cf69cf",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/app.js",
+      "tracked": true,
       "bytes": 5004,
       "sha256": "422d72c66f76aee1264f3cf34e94925df8215b48298e3e99790fbeaef189c9ab",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/config.xml",
+      "tracked": true,
       "bytes": 972,
       "sha256": "181a03e324b70dbc25a847390297a0ff2768e8ac96e3bd128a1df4afb678dce1",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/index.html",
+      "tracked": true,
       "bytes": 2490,
       "sha256": "a0e2901b440efbfd56f22ba073c29a8b849d9407d897c082d95270aa17eb79ff",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/media-player.js",
+      "tracked": true,
       "bytes": 5071,
       "sha256": "7e8ef8f94165c3ddec2036c1286602ccde7a7cacdcf0f3d182cb5f95d9eee8af",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/pslink-client.js",
+      "tracked": true,
       "bytes": 14024,
       "sha256": "558535a6d93d0c5e06d4cccc930ec6d0ab1ac4968226afa1a66b7e01f6e9e2bd",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/tests/receiver.test.js",
+      "tracked": true,
       "bytes": 2127,
       "sha256": "a979c936593dc6f31cc693e18262a392e0e72b3e05777eca70ba2c3b5dd8b46d",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/webrtc-diagnostic.html",
+      "tracked": true,
       "bytes": 754,
       "sha256": "fbbe17674f2bfae478d28abbb7cbf46209cb14a4cdf85346cedf3018326a0b98",
       "kind": "text"
     },
     {
       "path": "receivers/tizen/webrtc-diagnostic.js",
+      "tracked": true,
       "bytes": 5638,
       "sha256": "eb808d1ee271fdd94f1138bdedd8f6f004e457e37340daf7db4249a7611b87c5",
       "kind": "text"
     },
     {
       "path": "receivers/web/README.md",
+      "tracked": true,
       "bytes": 1213,
       "sha256": "9727ba34baf7c39fd2a8129b3cc917a29bcf89c3f981e52641d368045edb8c57",
       "kind": "text"
     },
     {
       "path": "receivers/web/app.css",
+      "tracked": true,
       "bytes": 1571,
       "sha256": "2dac743cce27061f033d00c126743603aa42445624dd6ca6b0d091c8a6b72dfc",
       "kind": "text"
     },
     {
       "path": "receivers/web/app.js",
+      "tracked": true,
       "bytes": 3998,
       "sha256": "fb5604c9feba1c57714ac36ad2ce3015225a8a08427ee87ac35a113ebbd0cf48",
       "kind": "text"
     },
     {
       "path": "receivers/web/index.html",
+      "tracked": true,
       "bytes": 2433,
       "sha256": "877b21c720ca4fd7ab709df5f2575e10badd6f5407d6593993f8db2997371cd7",
       "kind": "text"
     },
     {
       "path": "receivers/web/media-player.js",
+      "tracked": true,
       "bytes": 4240,
       "sha256": "dd6cc0864ebacad2756d2499ba52275dd5b058e79b097cfbc852f572c616d8ad",
       "kind": "text"
     },
     {
       "path": "receivers/web/pslink-client.js",
+      "tracked": true,
       "bytes": 12577,
       "sha256": "4029efbe5ccef6e935071a4840f659e3db64cb534071d00f3c49d27b40f69a9d",
       "kind": "text"
     },
     {
       "path": "receivers/web/tests/hls-integration.test.js",
+      "tracked": true,
       "bytes": 3091,
       "sha256": "bee0f758becd360b973fd29cd142947e576d6c973d784de35fde3b445173d708",
       "kind": "text"
     },
     {
       "path": "receivers/web/tests/protocol.test.js",
+      "tracked": true,
       "bytes": 1684,
       "sha256": "bef04a086c6a3b6ec10bb79d7f589b026f927c9e3bb3f035f7260fade6bebfd3",
       "kind": "text"
     },
     {
       "path": "receivers/web/tests/receiver.test.js",
+      "tracked": true,
       "bytes": 8338,
       "sha256": "c4368207c02cb672d8153e9adcccbbe3eb71d1b32268083f8d03d9302df41f82",
       "kind": "text"
     },
     {
       "path": "receivers/web/vendor/hls.min.js",
+      "tracked": true,
       "bytes": 413181,
       "sha256": "e5753b10fc65eae35f21883e684d22c43ce66de968d35166792585b9b8a3f1a2",
       "kind": "text"
     },
     {
       "path": "receivers/webos/README.md",
+      "tracked": true,
       "bytes": 1903,
       "sha256": "32a2d842f7cf42cb091317d9a264d1e899ee10c8f1935fa031b4d29a68a87035",
       "kind": "text"
     },
     {
       "path": "receivers/webos/app.css",
+      "tracked": true,
       "bytes": 3169,
       "sha256": "15cbd1240527a7d5f1be110a4b62a90e7a601283ba070a6f2edc950f65cf69cf",
       "kind": "text"
     },
     {
       "path": "receivers/webos/app.js",
+      "tracked": true,
       "bytes": 5008,
       "sha256": "a2f9d05c1fbbca1356c31500231b7ce8590e41adde5ed05eeaf63fefa51266fa",
       "kind": "text"
     },
     {
       "path": "receivers/webos/appinfo.json",
+      "tracked": true,
       "bytes": 200,
       "sha256": "d40e690ffe8257b614f5e6ef88b6aca5e31b486902305ba08b7f1b13b62b5e4f",
       "kind": "text"
     },
     {
       "path": "receivers/webos/index.html",
+      "tracked": true,
       "bytes": 2366,
       "sha256": "f7d451b2a95919c0e266a8417e1aab7e97511cb720be28b89c4aed2532a37018",
       "kind": "text"
     },
     {
       "path": "receivers/webos/media-player.js",
+      "tracked": true,
       "bytes": 5071,
       "sha256": "7e8ef8f94165c3ddec2036c1286602ccde7a7cacdcf0f3d182cb5f95d9eee8af",
       "kind": "text"
     },
     {
       "path": "receivers/webos/pslink-client.js",
+      "tracked": true,
       "bytes": 14024,
       "sha256": "4c840238b17e36bcf55271bb5c59621896e50041775e5f06cb4f9be53c4304b3",
       "kind": "text"
     },
     {
       "path": "receivers/webos/tests/receiver.test.js",
+      "tracked": true,
       "bytes": 2127,
       "sha256": "a979c936593dc6f31cc693e18262a392e0e72b3e05777eca70ba2c3b5dd8b46d",
       "kind": "text"
     },
     {
       "path": "receivers/webos/webrtc-diagnostic.html",
+      "tracked": true,
       "bytes": 749,
       "sha256": "ad3f9d21e17722dd274718167f28829927ece53850b6aca7a25f6cb545242e0b",
       "kind": "text"
     },
     {
       "path": "receivers/webos/webrtc-diagnostic.js",
+      "tracked": true,
       "bytes": 5638,
       "sha256": "eb808d1ee271fdd94f1138bdedd8f6f004e457e37340daf7db4249a7611b87c5",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/README.md",
-      "bytes": 2569,
-      "sha256": "d910cdb978f26e5352c36b39b3c60461d3f26f2b671fa6a4cbbc8558ac419c50",
+      "tracked": true,
+      "bytes": 2706,
+      "sha256": "f2f83827302fd5a2418a9c8486f111a43115ead44bae4dae1d68e635ce0a2ae7",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/app.css",
+      "tracked": true,
       "bytes": 618,
       "sha256": "5b23dee098852886eefe9bad1e2bab6ac41d0772b52467c9dbecda518f964300",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/app.js",
+      "tracked": true,
       "bytes": 3140,
       "sha256": "ec855f8a8895a8d3e540547cce49fb4892606a80a4f4473101327191a42162ed",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/deploy/Caddyfile.example",
+      "tracked": true,
       "bytes": 442,
       "sha256": "a00d581ebe415df4b905a641fc48309f4b0b45d057a54b5eeb49af0cd5313a81",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/deploy/env.example",
+      "tracked": true,
       "bytes": 151,
       "sha256": "93cbc9fd282071760927f32aca3d2092d5b8ee50e4d68bd228e726c6fd0c7427",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/index.html",
+      "tracked": true,
       "bytes": 1452,
       "sha256": "1d1f39087395ed7267f694d6bcdd83df33966367a2946afc68220dd7ad190d42",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/pslink-client.js",
+      "tracked": true,
       "bytes": 14028,
       "sha256": "3c048f67cd1a56219e0243f887b990476773c07d388badbe56d159db7a4ac12a",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/tests/lifecycle.test.js",
+      "tracked": true,
       "bytes": 2988,
       "sha256": "9e44095815533028778b8e80701db7aa8365cff435134415e8a9aab036e3be5d",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/tests/receiver.test.js",
+      "tracked": true,
       "bytes": 2127,
       "sha256": "a979c936593dc6f31cc693e18262a392e0e72b3e05777eca70ba2c3b5dd8b46d",
       "kind": "text"
     },
     {
       "path": "receivers/xbox-edge/vendor/hls.min.js",
+      "tracked": true,
       "bytes": 413181,
       "sha256": "e5753b10fc65eae35f21883e684d22c43ce66de968d35166792585b9b8a3f1a2",
       "kind": "text"
     },
     {
       "path": "scripts-04-media-callpath-audit.sh",
-      "bytes": 15429,
-      "sha256": "418cbab0b0565df4f16cb633ebaa83d1f3df47503d299ae24a37395a86f82f29",
+      "tracked": true,
+      "bytes": 15406,
+      "sha256": "9099c2dca7c411b24cc9e0b0603aac69e4fd308556803161f40fce259b447310",
       "kind": "text"
     },
     {
       "path": "scripts/01-master-audit.sh",
+      "tracked": true,
       "bytes": 8306,
       "sha256": "4a7bebc84923d951782686254936168b4267bc3a87baa561200ee7f003c71e85",
       "kind": "text"
     },
     {
       "path": "scripts/02-shared-media-audit.sh",
-      "bytes": 6462,
-      "sha256": "a64773f97d4fd611804007e7905508d0a0fb0b7d7f2f99aa96866b852f3b03a8",
+      "tracked": true,
+      "bytes": 6439,
+      "sha256": "4f6c3d23573f58ca1d899922da43cd815134b8c78d8dfecc501f12f5bec6cb0c",
       "kind": "text"
     },
     {
       "path": "scripts/03-audio-pipeline-audit.sh",
-      "bytes": 8065,
-      "sha256": "d33bbd02fad6bd9845b47eea87017fbcf6c397f5d4c582b4e8099a70fdfe86f9",
+      "tracked": true,
+      "bytes": 8042,
+      "sha256": "3ab2110609a7d0bc2d019be2c851ae73c0708f3f5f2c3bf4a2e2044e83d90103",
       "kind": "text"
     },
     {
       "path": "scripts/05-platform-readiness-audit.sh",
+      "tracked": true,
       "bytes": 3420,
       "sha256": "11a377229bc167b20282ca9fbd936d692db9e502002231252d841f912bead671",
       "kind": "text"
     },
     {
       "path": "scripts/06-protocol-captions-audit.sh",
+      "tracked": true,
       "bytes": 2661,
       "sha256": "e59fce75fc6c949eb04a360241705ccf804cfdfce90a92814f803c5637f8783c",
       "kind": "text"
     },
     {
       "path": "scripts/07-roku-package-audit.sh",
+      "tracked": true,
       "bytes": 2466,
       "sha256": "9bfac279d3bd2c5f0f28ce20dfca8ffc0e7b658f57948ade4d47e2e2272af8e7",
       "kind": "text"
     },
     {
       "path": "scripts/08-hls-audio-pipeline-audit.sh",
+      "tracked": true,
       "bytes": 3777,
       "sha256": "c46661baa7fa02cde7835a4895add711ea402f895c3f16c1c0a798995c295e3a",
       "kind": "text"
     },
     {
       "path": "scripts/09-github-workflow-audit.sh",
+      "tracked": true,
       "bytes": 2488,
       "sha256": "7a9908422da09a53bf4615e3ebfb0b503027f5b87536abb0cc0a2832c66e6343",
       "kind": "text"
     },
     {
       "path": "scripts/10-final-audit-runner.sh",
+      "tracked": true,
       "bytes": 3370,
       "sha256": "e42c3f678de85718223d3788373c225abef5916400e6de65870fd83275a0a3a2",
       "kind": "text"
     },
     {
       "path": "scripts/10-final-repair-gate.sh",
+      "tracked": true,
       "bytes": 2582,
       "sha256": "c2930e06a32af2e272fae6f66481c9ddce8d11ef1626ae6b8e116cecdba353a6",
       "kind": "text"
     },
     {
       "path": "scripts/apply_decoder_lifecycle_fix.py",
+      "tracked": true,
       "bytes": 11675,
       "sha256": "1368bab7914f0052e4646265a4f186b3615e05ba2320c26a9cb12909aacf4ca2",
       "kind": "text"
     },
     {
       "path": "scripts/bootstrap.sh",
-      "bytes": 1894,
-      "sha256": "7786a1548a3e0bf21183bc5a6756c561e69767e5347e279bcc3ddaefa5d45661",
+      "tracked": true,
+      "bytes": 1892,
+      "sha256": "db9a19d3c6b4246ffb2c21156aacdfa16214999466723c4bbe29057c40718432",
       "kind": "text"
     },
     {
       "path": "scripts/build.sh",
+      "tracked": true,
       "bytes": 609,
       "sha256": "98eeed037173890435c16627c84cf12feaf85c3a63029577a997205a50ca13b1",
       "kind": "text"
     },
     {
       "path": "scripts/check-platform-regressions.sh",
+      "tracked": true,
       "bytes": 3540,
       "sha256": "9ad62fb5eeb5d402bb0d3b634ff5746f049e51333884f3c8e9f4e96bcbbd2fb7",
       "kind": "text"
     },
     {
       "path": "scripts/check-ps5-wiring.sh",
+      "tracked": true,
       "bytes": 8554,
       "sha256": "91858b465de83b707ad046d3b919389d0bdebcbe465e881936ca2638b7c89e7d",
       "kind": "text"
     },
     {
       "path": "scripts/check-pslink-features.sh",
+      "tracked": true,
       "bytes": 9644,
       "sha256": "4fe0cb621445566c6a04303e3f5019c114f5c1bac383632c414ea017b93c2a29",
       "kind": "text"
     },
     {
       "path": "scripts/check-source.sh",
+      "tracked": true,
       "bytes": 1454,
       "sha256": "267816ded9915fb5cc3ddb644456d6782f900cec30d82444acab2029c3da862f",
       "kind": "text"
     },
     {
       "path": "scripts/fix_decoder_shutdown_order.py",
+      "tracked": true,
       "bytes": 4414,
       "sha256": "bef3d234ee06ffe8241e91f405d29955d6c9d19aa2c5a476573b53c0e82f12e1",
       "kind": "text"
     },
     {
       "path": "scripts/prepare_pslink_audio_recording.py",
+      "tracked": true,
       "bytes": 33859,
       "sha256": "68948a8fa1db7fd160a6f775cf378ab36f4183704d8fb30e9af70134274cab60",
       "kind": "text"
     },
     {
       "path": "scripts/prepare_pslink_complete_fix.py",
+      "tracked": true,
       "bytes": 43540,
       "sha256": "d9b37f39dd2808d29d273e1c183603ecaeb1c66cc55feef636d70094dabcbb66",
       "kind": "text"
     },
     {
       "path": "scripts/prepare_pslink_live_tv_streaming.py",
-      "bytes": 96735,
-      "sha256": "0439e5e1e002ccb343feb92a810907e2a04ab399e2f060b074a6e11b836d1e56",
+      "tracked": true,
+      "bytes": 98934,
+      "sha256": "4338daf09e66f752bae1f791a631f1444c236bd688de05f03562a314c7cc7845",
       "kind": "text"
     },
     {
       "path": "scripts/prepare_pslink_stream_recording.py",
+      "tracked": true,
       "bytes": 40094,
       "sha256": "8329979c613bb918bbf5243828b54f1861aae1292f8ce95cbed2b96681e4d1d5",
       "kind": "text"
     },
     {
       "path": "scripts/prepare_pslink_upstream.py",
+      "tracked": true,
       "bytes": 22519,
       "sha256": "23a17d70ba440aa635244ec3f6fa1c0f26a93d7d47c286d5499ae2faf51e9102",
       "kind": "text"
     },
     {
       "path": "scripts/prepare_upstream.py",
+      "tracked": true,
       "bytes": 15683,
       "sha256": "90bf31580f278a53aa88b6700b13de3fc81e5fafb291a6a7552fb9d8f2da1cc9",
       "kind": "text"
     },
     {
       "path": "scripts/pslink_full_audit.py",
-      "bytes": 10020,
-      "sha256": "68aaa0071d44a808b076194fd8d9c478a88faa133fa122a22ffa909023911d90",
+      "tracked": true,
+      "bytes": 20786,
+      "sha256": "e72a03f9dd2805f97a2f99f8704a9d74aaa542c4e835797b7f60445adb335f6b",
       "kind": "text"
     },
     {
       "path": "scripts/push-github.sh",
+      "tracked": true,
       "bytes": 898,
       "sha256": "096a072bcfe77d4d8240f3be62d5e11ad3c460533e4407bbc5a759fd686ee702",
       "kind": "text"
     },
     {
       "path": "scripts/roku_hls_url_hardening.py",
+      "tracked": true,
       "bytes": 3147,
       "sha256": "afe0d58b0930805e6dd91e592e9a51a0235e919a8fb69377f834d3f9d5de4a5a",
       "kind": "text"
     },
     {
       "path": "scripts/test_pslink_backup_storage.py",
+      "tracked": true,
       "bytes": 2041,
       "sha256": "a1f50b2b208350d8331910b77f7a29055417d031017b1eb477654570d84242e2",
       "kind": "text"
     },
     {
       "path": "scripts/validate_package.py",
+      "tracked": true,
       "bytes": 7044,
       "sha256": "2cded677f9dccdbee76cde774b6398d64c3c85a0d7914c9176418db163d9e937",
       "kind": "text"
     },
     {
       "path": "scripts/validate_platform_resources.py",
+      "tracked": true,
       "bytes": 976,
       "sha256": "01ced80c57de019bcd48981374246ed43cef5bad24c093f1ffb4bde4711c224b",
       "kind": "text"
     },
     {
       "path": "scripts/verify-apk.sh",
+      "tracked": true,
       "bytes": 1356,
       "sha256": "5423f4573ab5dcb5bc9f0bb66ef08cf7e4cda3c9c780ec658cfc3bfbc75221c7",
       "kind": "text"
     },
     {
       "path": "scripts/verify-hls-ts.sh",
+      "tracked": true,
       "bytes": 5179,
       "sha256": "d62c066f918c04cb01839a1da746a03fa2bf01988648aead18951b1ff8db3f33",
       "kind": "text"
     },
     {
       "path": "scripts/verify-platform-completion-pack.sh",
-      "bytes": 1608,
-      "sha256": "e666e563862942c90737d8bbd57a8018a8b9c2b3f562b1d1acccbc253091339d",
+      "tracked": true,
+      "bytes": 1585,
+      "sha256": "55d7c3b401924c58a2f245c0f5f19ad8fd649c3a5c987b39aae9a627ed741189",
       "kind": "text"
     },
     {
       "path": "settings.gradle.kts",
+      "tracked": true,
       "bytes": 391,
       "sha256": "013eb27b4af0567f858073a060841ac38ba82f7802d9da8234ce9fa40fda0521",
       "kind": "text"
     },
     {
       "path": "tests/test_pslink_audit_contracts.py",
-      "bytes": 6202,
-      "sha256": "285fbc7828dab8d78ecf40782aa6489f5739a85fca6995680744d560311aaedf",
+      "tracked": true,
+      "bytes": 10475,
+      "sha256": "a03288a201fb38eff828f47cb8999f168e22658cdd4eee6722e684ea587610fc",
       "kind": "text"
     },
     {
       "path": "tests/test_v2_protocol_source_contracts.py",
-      "bytes": 2284,
-      "sha256": "702ab6bb3285af9dfb45a7f6504ed56bd190c4ed77c25ff8b1afb2ae08b8400c",
+      "tracked": true,
+      "bytes": 2369,
+      "sha256": "a367254c1873fdde1cab2fd6bc9daaeafffef7d5edb8d11a79db55e0f7c51d10",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/build.gradle.kts",
+      "tracked": true,
       "bytes": 968,
       "sha256": "efd594bef2d072544200180010f21df2568d5c4ba4fc17715a15bdf113961432",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/AndroidManifest.xml",
+      "tracked": true,
       "bytes": 1307,
       "sha256": "83d842e635319f8810399c99b494985ab75f6ea62a924e4a66f284e15a1a6eb3",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/java/com/pslink/tvfire/TvCaptionOverlayView.kt",
+      "tracked": true,
       "bytes": 3393,
       "sha256": "25fefb0ec94fa8a9e31d42610e24875defedd84fdfbaa50828ced0ac8d31e850",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/java/com/pslink/tvfire/TvMediaPlayer.kt",
+      "tracked": true,
       "bytes": 16207,
       "sha256": "893748c94b8c1e31a5814e241a9a77a363cbd3425858136fb3bfbef5f0cdc330",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/java/com/pslink/tvfire/TvReceiverActivity.kt",
+      "tracked": true,
       "bytes": 8483,
       "sha256": "22a7586ee420e640658385372452496c79feee5788bf96718cee311e4e817215",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/java/com/pslink/tvfire/TvSubtitleServer.kt",
+      "tracked": true,
       "bytes": 12621,
       "sha256": "253e834df02408046cfbc96e71d123d405d08f9006b549422324f70d0ab0e169",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/res/layout/activity_tv_receiver.xml",
+      "tracked": true,
       "bytes": 1392,
       "sha256": "65de1249775c7d2a5e0baf6f0cdf96843a6968359996371d51b143ec5a8cf0be",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/res/layout/caption_overlay.xml",
+      "tracked": true,
       "bytes": 292,
       "sha256": "2c17b33de3d2aa1db266684ee8ab3cae84a615d80ba578d57c2954757b981d8a",
       "kind": "text"
     },
     {
       "path": "tv-fire/app/src/main/res/values/styles.xml",
+      "tracked": true,
       "bytes": 252,
       "sha256": "e0d4035043bc5ab705b05ae75f4832e9d184143b01ab042701a9fdac630ec0d0",
       "kind": "text"
     },
     {
       "path": "tv-google/app/build.gradle.kts",
+      "tracked": true,
       "bytes": 972,
       "sha256": "f7ac01ed2984567dffed7a9bf727a5b902eb997d6c5909e2ff9db3483e530b35",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/AndroidManifest.xml",
+      "tracked": true,
       "bytes": 1354,
       "sha256": "d550a888fb34568e02f9e06fe2ae46e4821d254f3cd8115c0446d4ed77905a2d",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/java/com/pslink/tvgoogle/TvCaptionOverlayView.kt",
+      "tracked": true,
       "bytes": 3395,
       "sha256": "e6349e5c980a041ec9d40ce20c4e26316a95ff5f47d2ce69fa1ad9ca7e0cf16e",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/java/com/pslink/tvgoogle/TvMediaPlayer.kt",
+      "tracked": true,
       "bytes": 16209,
       "sha256": "856d88a626c3466eecb05bea5f7de8c49590ee29d3166de203526ec98adbcd5a",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/java/com/pslink/tvgoogle/TvReceiverActivity.kt",
+      "tracked": true,
       "bytes": 7422,
       "sha256": "dee2fbe8acd1d650edba5447e4fa2e81b6a307cb7c3b524820fc1916c4c2badb",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/java/com/pslink/tvgoogle/TvSubtitleServer.kt",
+      "tracked": true,
       "bytes": 12623,
       "sha256": "33cc5ba86c51e51b8937a3d96718081a4ca36521bc4c8d282c8d067d376d9eac",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/res/layout/activity_tv_receiver.xml",
+      "tracked": true,
       "bytes": 1392,
       "sha256": "65de1249775c7d2a5e0baf6f0cdf96843a6968359996371d51b143ec5a8cf0be",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/res/layout/caption_overlay.xml",
+      "tracked": true,
       "bytes": 294,
       "sha256": "58b77cb011567d27fe12de8503ba8e9dd2ff97980107d87be13a040fe08cfebb",
       "kind": "text"
     },
     {
       "path": "tv-google/app/src/main/res/values/styles.xml",
+      "tracked": true,
       "bytes": 239,
       "sha256": "c46d592eb75db9d7d037b47df58a1dd256cfa2ec39d4003e643322f8b4e2d94f",
       "kind": "text"
     },
     {
       "path": "tv/app/build.gradle.kts",
+      "tracked": true,
       "bytes": 926,
       "sha256": "d8ef5289e0ecc57095eee8fcd74c323dca6aeb688579e496c9ce8c159fbc4902",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/AndroidManifest.xml",
+      "tracked": true,
       "bytes": 1347,
       "sha256": "1960b167c2cbf474d3399edd05158c28ec900bb0bbd1391e11bd05976e9802d2",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/java/com/pslink/tv/TvCaptionOverlayView.kt",
+      "tracked": true,
       "bytes": 3389,
       "sha256": "93663d581e4ac089f0f387e702a10cac57a96eeed1a042b93d254611143cfe10",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt",
-      "bytes": 16203,
-      "sha256": "67ee1a63a617da3d184f0687a29480367c78ac923a54e7f231a435d7f884bfe1",
+      "tracked": true,
+      "bytes": 15888,
+      "sha256": "5f73b1023734a1fb260324322b16fdfd4073bbf0145bf4db781f24b41dd8ec7a",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/java/com/pslink/tv/TvReceiverActivity.kt",
+      "tracked": true,
       "bytes": 6924,
       "sha256": "28008c09f1bc726de078e89b375279738b8d1bd5b2f583627fd9d0cd375ece04",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/java/com/pslink/tv/TvSubtitleServer.kt",
-      "bytes": 12617,
-      "sha256": "1f64ac929f3ce37fcf63bdd4ad1f5f86d2c73707dfbaad68d0ca2ac9e2907dc4",
+      "tracked": true,
+      "bytes": 11152,
+      "sha256": "f5244464bda5877d632b519831ef22685e0e8bfa319cf12c48dd0fd6993b2422",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/res/drawable-nodpi/pslink_launcher_art.png",
+      "tracked": true,
       "bytes": 258248,
       "sha256": "37a0b72c2ab986f54cd0b6d7bbdc1ad8de54cbc812a17430bb8d88ef32efdded",
       "kind": "binary"
     },
     {
       "path": "tv/app/src/main/res/drawable/ic_pslink_launcher.xml",
+      "tracked": true,
       "bytes": 705,
       "sha256": "6edcf221bbf964825a14c726469eabb8cc89d2e72a9499c03d6f8b91f731c47d",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/res/drawable/tv_banner.xml",
+      "tracked": true,
       "bytes": 230,
       "sha256": "39ba4b1253a093840a3a9a71e071867d843345d59bdf5c725bd0a7db94a044bd",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/res/layout/activity_tv_receiver.xml",
+      "tracked": true,
       "bytes": 5187,
       "sha256": "ac6d1d51a7c157c78f31b26e259ee9837834c83bbe2e74a52227682ea2584a40",
       "kind": "text"
     },
     {
       "path": "tv/app/src/main/res/values/styles.xml",
+      "tracked": true,
       "bytes": 511,
       "sha256": "6056cde55d22a560731545a4b4409a6a1a4ca139fa6b74c68b11b10fd4d8ff5b",
       "kind": "text"
+    },
+    {
+      "path": ".pslink-decoder-update-backups/shutdown-order-20261124-235459/video-decoder.c",
+      "tracked": false,
+      "bytes": 9158,
+      "sha256": "a6df3922b5e4945b1b8d7f2c2e1ae3854330737e9b8df3ef0377e641a1e201ca",
+      "kind": "text"
+    },
+    {
+      "path": ".pslink-decoder-update-backups/video-decoder.c.20261124-235459.bak",
+      "tracked": false,
+      "bytes": 6537,
+      "sha256": "1506279c90e563268e85b74be9b1f4ccb7e275a7b0a1c64f6ca2ef3b73ec37b8",
+      "kind": "text"
+    },
+    {
+      "path": ".pslink-decoder-update-backups/video-decoder.h.20261124-235459.bak",
+      "tracked": false,
+      "bytes": 1102,
+      "sha256": "416820d332933f37518eb31bb2916f1dd373a3457294e57977747f9f3be6df97",
+      "kind": "text"
+    },
+    {
+      "path": "mobile/src/test/resources/fixtures/arabic-ocr/bold-dark-background.png",
+      "tracked": false,
+      "bytes": 10496,
+      "sha256": "55097f501eb9cc1a3b61a86fc7837d08ee1e5edcb3c5ed02aee1d9ab60d2b28d",
+      "kind": "binary"
+    },
+    {
+      "path": "mobile/src/test/resources/fixtures/arabic-ocr/clear-large.png",
+      "tracked": false,
+      "bytes": 11362,
+      "sha256": "ab1445b7ebedceee107771dd7b772df479cc9cf51f7a35ad77f00b97560c49ee",
+      "kind": "binary"
+    },
+    {
+      "path": "mobile/src/test/resources/fixtures/arabic-ocr/small-low-contrast.png",
+      "tracked": false,
+      "bytes": 6897,
+      "sha256": "d5cd37e054c40cf5d682ab7fd4b513531a411040ad3a1412b437e9762c19bc58",
+      "kind": "binary"
+    },
+    {
+      "path": "tests/test_arabic_ocr.py",
+      "tracked": false,
+      "bytes": 1823,
+      "sha256": "57f70a14a7aba075356e62bbb1e203194a858ef59d010a622fb4f7a1b92bb111",
+      "kind": "text"
     }
   ],
-  "scope_note": "Source inventory/evidence audit only; inventory reflects the working tree and is not vendor-device certification or a 100% completion claim."
+  "scope_note": "The inventory records existence, type, size, and SHA-256 for tracked and non-ignored untracked worktree files. It is not a per-file functional review or vendor-device certification; review findings and test evidence are separately recorded, and no 100% completion claim is made."
 }

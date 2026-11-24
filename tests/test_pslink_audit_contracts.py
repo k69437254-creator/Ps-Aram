@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, unittest
+import json, runpy, unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 EXPECTED={
@@ -7,11 +7,93 @@ EXPECTED={
     "webos","roku","web","xbox-edge","playstation",
 }
 class Contracts(unittest.TestCase):
+    def test_live_overlay_adds_ocr_timestamp_idempotently_at_any_indent(self):
+        overlay = runpy.run_path(str(ROOT / "scripts/prepare_pslink_live_tv_streaming.py"))
+        ensure_timestamp = overlay["ensure_sample_timestamp"]
+        source = (
+            "                        val sampleStartedAt = SystemClock.elapsedRealtime()\n"
+            "                        val bitmap = captureFrame()\n"
+        )
+        expected = (
+            "                        val sampleStartedAt = SystemClock.elapsedRealtime()\n"
+            "                        val samplePtsNs = System.nanoTime()\n"
+            "                        val bitmap = captureFrame()\n"
+        )
+        self.assertEqual(expected, ensure_timestamp(source))
+        self.assertEqual(expected, ensure_timestamp(expected))
+
+    def test_live_overlay_rejects_ambiguous_ocr_sample_timestamps(self):
+        overlay = runpy.run_path(str(ROOT / "scripts/prepare_pslink_live_tv_streaming.py"))
+        source = (
+            "val samplePtsNs = System.nanoTime()\n"
+            "val samplePtsNs = System.nanoTime()\n"
+        )
+        with self.assertRaisesRegex(SystemExit, "found 2"):
+            overlay["ensure_sample_timestamp"](source)
+
+    def test_live_overlay_rejects_ambiguous_timestamp_anchors(self):
+        overlay = runpy.run_path(str(ROOT / "scripts/prepare_pslink_live_tv_streaming.py"))
+        source = (
+            "val sampleStartedAt = SystemClock.elapsedRealtime()\n"
+            "val bitmap = captureFrame()\n"
+            "val sampleStartedAt = SystemClock.elapsedRealtime()\n"
+            "val bitmap = captureFrame()\n"
+        )
+        with self.assertRaisesRegex(SystemExit, "found 2"):
+            overlay["ensure_sample_timestamp"](source)
+
+    def test_caption_geometry_signature_is_precise_and_indent_independent(self):
+        overlay = runpy.run_path(str(ROOT / "scripts/prepare_pslink_live_tv_streaming.py"))
+        ensure_signature = overlay["ensure_caption_geometry_signature"]
+        source = (
+            "        val signature = detected.joinToString(\"|\") {\n"
+            "            \"${it.source}@${(it.left * 100).toInt()},${(it.top * 100).toInt()}\"\n"
+            "        }\n"
+        )
+        expected = (
+            "        val signature = detected.joinToString(\"|\") {\n"
+            "            \"${it.source}@${(it.left * 1000).toInt()},"
+            "${(it.top * 1000).toInt()},${(it.right * 1000).toInt()},"
+            "${(it.bottom * 1000).toInt()}\"\n"
+            "        }\n"
+        )
+        self.assertEqual(expected, ensure_signature(source))
+        self.assertEqual(expected, ensure_signature(expected))
+
+    def test_live_overlay_accepts_existing_session_scoped_caption_clears(self):
+        overlay = runpy.run_path(str(ROOT / "scripts/prepare_pslink_live_tv_streaming.py"))
+        source = (
+            ROOT / "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
+        ).read_text(encoding="utf-8")
+        ensure_clears = overlay["ensure_caption_clear_paths"]
+        self.assertEqual(source, ensure_clears(source))
+        self.assertEqual(source, ensure_clears(ensure_clears(source)))
+
+    def test_caption_geometry_overlay_is_idempotent_on_current_translator(self):
+        overlay = runpy.run_path(str(ROOT / "scripts/prepare_pslink_live_tv_streaming.py"))
+        source = (
+            ROOT / "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
+        ).read_text(encoding="utf-8")
+        ensure_signature = overlay["ensure_caption_geometry_signature"]
+        self.assertEqual(source, ensure_signature(source))
+        self.assertEqual(source, ensure_signature(ensure_signature(source)))
+
     def test_exact_ten_targets(self):
         data=json.loads((ROOT/"platforms/targets.json").read_text(encoding="utf-8"))
         ids=[x["id"] for x in data["targets"]]
         self.assertEqual(set(ids),EXPECTED)
         self.assertEqual(len(ids),10)
+
+    def test_acceptance_matrix_has_every_target_and_gate(self):
+        data=json.loads((ROOT/"platforms/targets.json").read_text(encoding="utf-8"))
+        matrix=data["acceptanceMatrix"]
+        self.assertEqual(set(matrix),EXPECTED)
+        criteria=set(data["acceptanceCriteria"])
+        self.assertEqual(len(criteria),13)
+        for target, result in matrix.items():
+            with self.subTest(target=target):
+                self.assertEqual(set(result),criteria)
+                self.assertTrue(all(isinstance(value,str) and value for value in result.values()))
     def test_core_platform_sources_exist(self):
         for rel in [
           "mobile/src/main/java/com/pslink/mobile/capture/TvScreenStreamService.kt",

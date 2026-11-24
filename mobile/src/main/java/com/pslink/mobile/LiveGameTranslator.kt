@@ -75,6 +75,7 @@ class LiveGameTranslator(
         private const val SAMPLE_INTERVAL_MS = 650L
         private const val MAX_OCR_CHARS = 160
         private const val MAX_CAPTURE_WIDTH = 960
+        private const val TESSERACT_PSM_SPARSE_TEXT = 11
     }
 
     data class CaptionLine(
@@ -532,6 +533,7 @@ class LiveGameTranslator(
     }
 
     private fun ocrArabic(tessBaseApi: TessBaseAPI, bitmap: Bitmap): String? {
+        tessBaseApi.setPageSegMode(TESSERACT_PSM_SPARSE_TEXT)
         tessBaseApi.setImage(bitmap)
         return tessBaseApi.getUTF8Text()?.trim()
     }

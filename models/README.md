@@ -10,7 +10,10 @@ copies it into the app cache and initializes Tesseract with the `ara` language. 
 OCR output is displayed as-is; it does not require an Arabic-to-Arabic translation model.
 Latin, Japanese, Chinese and Korean OCR recognizers are supplied by ML Kit dependencies.
 
-The source provenance and redistribution terms for the bundled Tesseract model must be
-confirmed and included in release notices before distribution. The repository test checks
-that the asset is present and non-empty; it does not measure OCR accuracy or validate the
-model on a physical device.
+The bundled model's precise source provenance and redistribution terms must be
+confirmed and included in release notices before distribution. A local Tesseract
+5.5.4 smoke test now exercises three generated Arabic samples with different size,
+weight, and contrast; this is a narrow synthetic accuracy check, not an assessment
+of game screenshots or Android-device performance. The Android OCR path uses
+sparse-text page segmentation to better handle dialogue embedded in a full game
+frame.
