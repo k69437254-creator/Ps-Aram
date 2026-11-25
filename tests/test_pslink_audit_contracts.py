@@ -166,9 +166,13 @@ class Contracts(unittest.TestCase):
     def test_roku_pairing_uses_websocket_not_http_post(self):
         s = (ROOT / "receivers/roku/source/components/PairingTask.brs").read_text(encoding="utf-8")
         self.assertNotIn("SetRequest(\"POST\")", s)
+        self.assertNotIn('ws.SetUrl("ws://" + host + ":8765/subtitle")', s)
         for token in (
             'CreateObject("roWebSocket")',
-            'ws.SetUrl("ws://" + host + ":8765/subtitle")',
+            'wsUrl = "wss://" + authority + "/subtitle"',
+            'wsUrl = "ws://" + host + ":8765/subtitle"',
+            'ws.SetCertificatesFile("common:/certs/ca-bundle.crt")',
+            "ws.SetUrl(wsUrl)",
             "ws.Open(10000)",
             "ws.Send(authMsg)",
             'type(msg) = "roWebSocketEvent"',

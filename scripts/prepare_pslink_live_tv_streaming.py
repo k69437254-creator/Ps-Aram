@@ -992,13 +992,49 @@ def patch_phone_translation() -> None:
 
     translator_path = MOBILE / "LiveGameTranslator.kt"
     src = read(translator_path)
-    src = replace_once(src, "private const val SAMPLE_INTERVAL_MS = 1_150L", "private const val SAMPLE_INTERVAL_MS = 650L", "live OCR sampling interval")
-    src = replace_once(
-        src,
-        "private const val SAMPLE_INTERVAL_MS = 650L",
-        "private const val SAMPLE_INTERVAL_MS = 650L\n        private const val MAX_OCR_CHARS = 160",
-        "bound OCR text length",
+    interval_pattern = re.compile(
+        r"(?m)^(?P<indent>[ \t]*)private const val SAMPLE_INTERVAL_MS = "
+        r"(?P<value>1_150|650|350)L$"
     )
+    interval_matches = list(interval_pattern.finditer(src))
+    if len(interval_matches) != 1:
+        raise SystemExit(
+            "Expected exactly one supported OCR sampling interval, "
+            f"found {len(interval_matches)}"
+        )
+
+    interval_match = interval_matches[0]
+    interval_indent = interval_match.group("indent")
+    if interval_match.group("value") != "350":
+        src = (
+            src[:interval_match.start()]
+            + f"{interval_indent}private const val SAMPLE_INTERVAL_MS = 350L"
+            + src[interval_match.end():]
+        )
+
+    max_chars_pattern = re.compile(
+        r"(?m)^(?P<indent>[ \t]*)private const val MAX_OCR_CHARS = (?P<value>\d+)$"
+    )
+    max_chars_matches = list(max_chars_pattern.finditer(src))
+    if len(max_chars_matches) > 1:
+        raise SystemExit("Duplicate MAX_OCR_CHARS declarations")
+    if max_chars_matches:
+        if max_chars_matches[0].group("value") != "160":
+            raise SystemExit("Unexpected MAX_OCR_CHARS value; refusing to overwrite")
+    else:
+        interval_line = re.search(
+            r"(?m)^(?P<indent>[ \t]*)private const val SAMPLE_INTERVAL_MS = 350L$",
+            src,
+        )
+        if not interval_line:
+            raise SystemExit("Could not locate the normalized OCR sampling interval")
+        insert_at = interval_line.end()
+        indent = interval_line.group("indent")
+        src = (
+            src[:insert_at]
+            + f"\n{indent}private const val MAX_OCR_CHARS = 160"
+            + src[insert_at:]
+        )
     # PSLINK_OCR_FILTER_IDEMPOTENT_V1
     dialogue_filter_is_current = (
         "sourceText.length > MAX_OCR_CHARS" in src
