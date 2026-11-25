@@ -1,84 +1,98 @@
-/* PSLINK_XBOX_AUTOMATED_TESTS_V1 */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 "use strict";
 
 const assert = require("node:assert/strict");
-const Receiver = require("../pslink-client.js");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
 
-function test(name, fn) {
-  fn();
-  console.log("PASS:", name);
+const events = [];
+const calls = [];
+let avPlayer;
+let prepareSuccess;
+let prepareFailure;
+
+const avplay = {
+  setListener(listener) { this.listener = listener; },
+  open(url) { calls.push(["open", url]); },
+  setDisplayRect(...args) { calls.push(["rect", ...args]); },
+  setDisplayMethod(mode) { calls.push(["display", mode]); },
+  prepareAsync(success, failure) {
+    prepareSuccess = success;
+    prepareFailure = failure;
+  },
+  play() { calls.push(["play"]); },
+  stop() { calls.push(["stop"]); },
+  close() { calls.push(["close"]); }
+};
+
+const stage = {
+  appendChild(node) {
+    avPlayer = node;
+  }
+};
+const document = {
+  body: { getAttribute: () => "tizen" },
+  getElementById(id) {
+    if (id === "av-player") return avPlayer || null;
+    if (id === "video-stage") return stage;
+    return null;
+  },
+  createElement() {
+    return {};
+  }
+};
+const window = {
+  webapis: { avplay },
+  innerWidth: 1920,
+  innerHeight: 1080,
+  dispatchEvent(event) { events.push(event); }
+};
+class CustomEvent {
+  constructor(type, options) {
+    this.type = type;
+    this.detail = options.detail;
+  }
 }
 
-test("Arabic and Persian pairing digits", () => {
-  assert.equal(Receiver.normalizePairingCode("١٢٣٤٥٦"), "123456");
-  assert.equal(Receiver.normalizePairingCode("۱۲۳۴۵۶"), "123456");
-  assert.equal(Receiver.normalizePairingCode("123-456"), "123456");
-});
+const context = { window, document, URL, CustomEvent };
+vm.createContext(context);
+vm.runInContext(
+  fs.readFileSync(path.join(__dirname, "../media-player.js"), "utf8"),
+  context,
+  { filename: "tizen/media-player.js" }
+);
 
-test("Invalid pairing codes", () => {
-  assert.equal(Receiver.normalizePairingCode("12345"), null);
-  assert.equal(Receiver.normalizePairingCode("12AB56"), null);
-});
+const player = window.PSLinkMediaPlayer();
+assert.throws(() => player.start("javascript:alert(1)"), /غير صالح/);
+player.start("http://phone.local/hls/index.m3u8");
+assert.deepEqual(calls.filter(([name]) =>
+  ["open", "rect", "display"].includes(name)), [
+  ["open", "http://phone.local/hls/index.m3u8"],
+  ["rect", 0, 0, 1920, 1080],
+  ["display", "PLAYER_DISPLAY_MODE_LETTER_BOX"]
+]);
+assert.equal(typeof prepareSuccess, "function");
+prepareSuccess();
+assert.equal(player.active, true);
+assert.deepEqual(calls[calls.length - 1], ["play"]);
 
-test("HTTPS hostname resolves to WSS", () => {
-  assert.equal(
-    Receiver.resolveSocketUrl("tv.example.test", {protocol:"https:"}),
-    "wss://tv.example.test/subtitle"
-  );
-});
+player.stop();
+assert.equal(player.active, false);
+assert(calls.some(([name]) => name === "stop"));
+assert(calls.some(([name]) => name === "close"));
 
-test("HTTP local host resolves to WS port 8765", () => {
-  assert.equal(
-    Receiver.resolveSocketUrl("192.168.1.20", {protocol:"http:"}),
-    "ws://192.168.1.20:8765/subtitle"
-  );
-});
+player.start("https://phone.local/stream.m3u8");
+const stalePrepareSuccess = prepareSuccess;
+player.stop();
+stalePrepareSuccess();
+assert.equal(calls.filter(([name]) => name === "play").length, 1);
 
-test("HTTPS rejects insecure WS", () => {
-  assert.throws(
-    () => Receiver.resolveSocketUrl(
-      "ws://tv.example.test/subtitle",
-      {protocol:"https:"}
-    ),
-    /HTTPS/
-  );
-});
+player.start("https://phone.local/stream.m3u8");
+prepareFailure("prepare failed");
+assert(events.some(event => event.type === "pslink-media-error" &&
+  event.detail === "prepare failed"));
 
-test("Explicit WSS endpoint is preserved", () => {
-  assert.equal(
-    Receiver.resolveSocketUrl(
-      "wss://tv.example.test/subtitle",
-      {protocol:"https:"}
-    ),
-    "wss://tv.example.test/subtitle"
-  );
-});
-
-test("HTTPS HLS URL uses same-origin proxy", () => {
-  assert.equal(
-    Receiver.normalizeStreamUrl(
-      "http://192.168.1.20:8765/hls/index.m3u8",
-      {protocol:"https:",origin:"https://tv.example.test"}
-    ),
-    "https://tv.example.test/hls/index.m3u8"
-  );
-});
-
-test("HTTPS rejects insecure non-HLS URL", () => {
-  assert.equal(
-    Receiver.normalizeStreamUrl(
-      "http://example.test/private",
-      {protocol:"https:",origin:"https://tv.example.test"}
-    ),
-    null
-  );
-});
-
-test("Unsupported stream protocol is rejected", () => {
-  assert.equal(
-    Receiver.normalizeStreamUrl("javascript:alert(1)", null),
-    null
-  );
-});
-
-console.log("Xbox URL and pairing tests passed.");
+delete window.webapis;
+assert.throws(() => player.start("https://phone.local/stream.m3u8"), /AVPlay/);
+console.log("Tizen AVPlay lifecycle tests passed.");

@@ -182,9 +182,10 @@ async function run() {
     assert.strictEqual(auth.kind, "auth");
     assert.strictEqual(auth.code, "123456");
     assert.strictEqual(auth.client, "PS Link Tizen");
+    assert.ok(auth.sessionId);
 
     // Simulate server accepting and sending ready
-    socket.message(JSON.stringify({ v: 2, kind: "ready" }));
+    socket.message(JSON.stringify({ v: 2, kind: "ready", sessionId: receiver.sessionId }));
     assert.strictEqual(observed.ready.length >= 1, true, "onReady must be emitted at least once");
   });
 
@@ -206,7 +207,7 @@ async function run() {
     receiver.connect("192.168.1.5", "123456");
     const socket = harness.sockets[0];
     socket.open();
-    socket.message(JSON.stringify({ v: 2, kind: "ready" }));
+    socket.message(JSON.stringify({ v: 2, kind: "ready", sessionId: receiver.sessionId }));
 
     // Simulate sending media_config from receiver side
     receiver.configureMedia(1920, 1080, 0, 30);
@@ -222,6 +223,7 @@ async function run() {
     assert.strictEqual(parsed.kind, "media_config");
     assert.strictEqual(parsed.width, 1920);
     assert.strictEqual(parsed.height, 1080);
+    assert.strictEqual(parsed.sessionId, receiver.sessionId);
   });
 
   // =====================================================================
@@ -243,11 +245,12 @@ async function run() {
     receiver.connect("192.168.1.5", "123456");
     const socket = harness.sockets[0];
     socket.open();
-    socket.message(JSON.stringify({ v: 2, kind: "ready" }));
+    socket.message(JSON.stringify({ v: 2, kind: "ready", sessionId: receiver.sessionId }));
 
     socket.message(JSON.stringify({
       v: 2,
       kind: "stream_url",
+      sessionId: receiver.sessionId,
       url: "http://192.168.1.5/hls/index.m3u8",
     }));
     assert.strictEqual(observed.streams.length, 1);
@@ -273,12 +276,13 @@ async function run() {
     receiver.connect("192.168.1.5", "123456");
     const socket = harness.sockets[0];
     socket.open();
-    socket.message(JSON.stringify({ v: 2, kind: "ready" }));
+    socket.message(JSON.stringify({ v: 2, kind: "ready", sessionId: receiver.sessionId }));
 
     socket.message(
       JSON.stringify({
         v: 2,
         kind: "subtitle",
+        sessionId: receiver.sessionId,
         id: "cap-1",
         source: "Hello",
         translation: "مرحباً",
@@ -298,6 +302,7 @@ async function run() {
     const ack = JSON.parse(ackMsg);
     assert.strictEqual(ack.kind, "ack");
     assert.strictEqual(ack.id, "cap-1");
+    assert.strictEqual(ack.sessionId, receiver.sessionId);
   });
 
   // =====================================================================

@@ -16,6 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -24,6 +25,9 @@ import java.util.concurrent.atomic.AtomicLong
 class TvSubtitleClient(
     private val onStatus: (String, Boolean) -> Unit
 ) {
+    @Volatile var sessionId: String = UUID.randomUUID().toString()
+        private set
+
     private data class QueuedMedia(
         val generation: Long,
         val socket: WebSocket,
@@ -142,6 +146,12 @@ class TvSubtitleClient(
         val current = socket
         if (ready && mediaReady && current != null) current to mediaGeneration else null
     }
+
+    private fun rebindMediaConfig(raw: String?, connectionSessionId: String): String? =
+        raw?.let { value ->
+            runCatching { JSONObject(value).put("sessionId", connectionSessionId).toString() }
+                .getOrNull()
+        }
 
     private fun enqueueMediaPacket(
         connection: Pair<WebSocket, Long>,
@@ -269,16 +279,19 @@ class TvSubtitleClient(
         manual: Boolean,
         generation: Long
     ) {
-        val host = hostInput.trim().removePrefix("ws://").removePrefix("http://").trimEnd('/')
+        val host = hostInput.trim()
+        val socketUrl = PsLinkProtocol.socketUrl(host)
         val normalizedCode = PairingCode.normalize(pairingCode)
-        if (host.isBlank() || host.contains('/') || host.contains(' ')) {
-            onStatus("أدخل عنوان IP صحيحًا للتلفاز", false)
+        if (socketUrl == null) {
+            onStatus("أدخل عنوان IP أو نقطة اتصال WS/WSS موثوقة بمسار /subtitle", false)
             return
         }
         if (normalizedCode == null) {
             onStatus("رمز الاقتران يجب أن يتكون من 6 أرقام", false)
             return
         }
+        sessionId = UUID.randomUUID().toString()
+        val connectionSessionId = sessionId
         if (manual) {
             if (!disconnectInternal(
                     invalidateGeneration = false,
@@ -291,10 +304,10 @@ class TvSubtitleClient(
 
         val request = runCatching {
             Request.Builder()
-                .url("ws://$host:${PsLinkProtocol.PORT}${PsLinkProtocol.PATH}")
+                .url(socketUrl)
                 .build()
         }.getOrElse {
-            onStatus("عنوان التلفاز غير صالح؛ أدخل عنوان IP أو اسم مضيف صحيحًا", false)
+            onStatus("عنوان التلفاز غير صالح؛ تحقق من اسم المضيف وشهادة TLS إن كنت تستخدم WSS", false)
             return
         }
 
@@ -323,7 +336,7 @@ class TvSubtitleClient(
                     webSocket.close(1000, "Superseded connection")
                     return
                 }
-                val sent = webSocket.send(PsLinkProtocol.auth(normalizedCode))
+                val sent = webSocket.send(PsLinkProtocol.auth(normalizedCode, connectionSessionId))
                 if (!sent) {
                     terminalStatus = "تعذر إرسال رمز الاقتران"
                     onStatus(terminalStatus!!, false)
@@ -340,6 +353,7 @@ class TvSubtitleClient(
                 if (json.optInt("v", -1) != PsLinkProtocol.VERSION) return
                 when (json.optString("kind")) {
                     PsLinkProtocol.KIND_READY -> {
+                        if (json.optString("sessionId", "") != connectionSessionId) return
                         val (accepted, config) = synchronized(mediaSendLock) {
                             synchronized(handshakeLock) {
                                 if (socket !== webSocket) {
@@ -350,7 +364,7 @@ class TvSubtitleClient(
                                         ready = true
                                         mediaReady = false
                                         resetMediaQueueLocked()
-                                        mediaConfigJson
+                                        rebindMediaConfig(mediaConfigJson, connectionSessionId)
                                     }
                                     true to currentConfig
                                 }
@@ -364,6 +378,7 @@ class TvSubtitleClient(
                         onStatus("تم اقتران التلفاز؛ بانتظار تأكيد إعداد بث الوسائط", true)
                     }
                     "media_config_ack" -> {
+                        if (json.optString("sessionId", "") != connectionSessionId) return
                         val ackId = json.optString("requestId", "")
                         val accepted = synchronized(mediaStateLock) {
                             if (socket === webSocket &&
@@ -381,6 +396,7 @@ class TvSubtitleClient(
                         }
                     }
                     PsLinkProtocol.KIND_ACK -> {
+                        if (json.optString("sessionId", "") != connectionSessionId) return
                         val ackId = json.optString("id", "")
                         if (ackId.isNotBlank() &&
                             synchronized(mediaStateLock) {
@@ -484,6 +500,7 @@ class TvSubtitleClient(
         val config = JSONObject()
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "media_config")
+            .put("sessionId", sessionId)
             .put("requestId", requestId)
             .put("width", width)
             .put("height", height)
@@ -537,6 +554,7 @@ class TvSubtitleClient(
 
     fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long, sessionId: String = "") {
         if (ptsNs <= 0L) return
+        val effectiveSessionId = sessionId.takeIf { it == this.sessionId } ?: this.sessionId
         val array = JSONArray()
         lines.take(3).forEach { line ->
             array.put(JSONObject()
@@ -550,7 +568,7 @@ class TvSubtitleClient(
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "captions")
             .put("timestampNs", ptsNs)
-            .put("sessionId", sessionId)
+            .put("sessionId", effectiveSessionId)
             .put("lines", array)
             .toString()
         synchronized(mediaSendLock) {
@@ -564,18 +582,19 @@ class TvSubtitleClient(
             onStatus("اربط التلفاز أولًا", false)
             return false
         }
+        val effectivePacket = packet.copy(sessionId = sessionId)
         val sent = synchronized(mediaSendLock) {
             val current = synchronized(mediaStateLock) {
                 if (!ready) null else {
                     if (pendingMessageIds.size >= 64) pendingMessageIds.clear()
-                    pendingMessageIds.add(packet.messageId)
+                    pendingMessageIds.add(effectivePacket.messageId)
                     socket
                 }
             }
-            current?.send(packet.toJson()) == true
+            current?.send(effectivePacket.toJson()) == true
         }
         if (!sent) {
-            pendingMessageIds.remove(packet.messageId)
+            pendingMessageIds.remove(effectivePacket.messageId)
             onStatus("تعذر إرسال الترجمة", false)
         }
         return sent

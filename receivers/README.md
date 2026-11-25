@@ -21,16 +21,19 @@ Existing transport contract
 
 The Android receiver currently uses:
 
-- WebSocket: "ws://<tv-ip>:8765/subtitle"
+- WebSocket: `ws://<tv-ip>:8765/subtitle` on trusted LAN; clients also accept
+  explicit `wss://<trusted-host>/subtitle` and validate TLS using the platform
+  trust store when connecting through a trusted TLS endpoint.
 - Protocol version: "2"
-- Authentication: "{v:2, kind:"auth", code:"123456", client:"..."}"
+- Authentication: `{"v":2,"kind":"auth","code":"123456","client":"...",` plus
+  a connection-specific `sessionId` for Android TV/Google TV/Fire TV.
 - Success response: "{v:2, kind:"ready"}"
 - Subtitle messages: "kind:"subtitle"" with "game", "source",
   "translation", "timestamp", and "id"
 - Caption overlay messages: "kind:"captions"" with "timestampNs" and
-  normalized "lines"
+  normalized "lines" and the authenticated `sessionId`
 - Media configuration: "kind:"media_config"" with "width", "height",
-  "codec", and "fps"
+  "codec", "fps", and the authenticated `sessionId`
 - Binary media: custom "PSLM" v1 packets with a 28-byte big-endian header,
   followed by a compressed video access unit or PCM16 audio payload.
 
@@ -51,6 +54,37 @@ physical devices before declaring any target fully supported.
 
 Do not advertise a platform as fully supported until its application builds
 and its complete media path passes device testing.
+
+For browser deployments, build Android apps with
+`-Ppslink.allowedOrigins=https://receiver.example`; the exact Origin allowlist
+is empty by default and rejects requests carrying an unconfigured Origin.
+Native clients that omit Origin remain accepted. Local `ws://` and `http://`
+paths remain unencrypted and must not be exposed outside a trusted LAN.
+
+A TLS reverse proxy must forward `/subtitle` and `/hls/*` to the phone server
+without dropping WebSocket upgrade headers. Point web clients to
+`wss://receiver.example/subtitle`; the secure-page HLS adapter maps the phone's
+`/hls/*` URL onto the same TLS origin. The proxy certificate must be trusted by
+each receiver platform; do not disable certificate validation.
+
+Example Caddy site (replace the hostname and phone address):
+
+```caddyfile
+receiver.example {
+    @websocket path /subtitle
+    reverse_proxy @websocket 192.168.1.20:8765
+
+    @hls path /hls/*
+    reverse_proxy @hls 192.168.1.20:8765
+}
+```
+
+Caddy provisions HTTPS only when the hostname is publicly resolvable and its
+certificate challenge can complete. Build the Android apps with that page
+Origin explicitly allowed, for example
+`-Ppslink.allowedOrigins=https://receiver.example`. This secures browser-to-
+proxy traffic; Caddy-to-phone traffic is still cleartext HTTP/WS on the LAN.
+Keep that segment trusted and do not expose port 8765 publicly.
 ## Phone HLS receiver (Tizen / webOS)
 
 The phone-side receiver endpoint uses the PS Link v2 WebSocket pairing route on port `8765`. After the first complete H.264 IDR-aligned MPEG-TS segment is published, it sends an authenticated `stream_url` message pointing to `/hls/index.m3u8`. TV receiver clients retry temporary network failures with capped exponential backoff and stop retrying after an authentication rejection or a manual disconnect. This path is separate from the existing Android TV binary-media receiver.

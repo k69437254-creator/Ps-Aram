@@ -24,6 +24,42 @@
     return /^[0-9]{6}$/.test(digits) ? digits : null;
   }
 
+  function createSessionId() {
+    var cryptoApi = root.crypto;
+    if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+      return cryptoApi.randomUUID();
+    }
+    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+  }
+
+  function resolveSocketUrl(value, pageLocation) {
+    var input = String(value || "").trim();
+    if (!input) throw new Error("عنوان الهاتف أو نطاق الاتصال مطلوب");
+    var loc = pageLocation ||
+      (typeof location !== "undefined" ? location : null);
+    var securePage = !!(loc && loc.protocol === "https:");
+    if (/^wss?:\/\//i.test(input)) {
+      var explicit;
+      try { explicit = new URL(input); } catch (error) {
+        throw new Error("عنوان WebSocket غير صالح");
+      }
+      if ((explicit.protocol !== "ws:" && explicit.protocol !== "wss:") ||
+          explicit.username || explicit.password || explicit.search ||
+          explicit.hash || explicit.pathname !== PATH) {
+        throw new Error("عنوان WebSocket يجب أن ينتهي بالمسار /subtitle");
+      }
+      if (securePage && explicit.protocol !== "wss:") {
+        throw new Error("صفحة HTTPS تتطلب اتصال WSS آمنًا");
+      }
+      return explicit.href;
+    }
+    if (/[\s/?#@]/.test(input)) {
+      throw new Error("أدخل اسم المضيف أو عنوان IP فقط");
+    }
+    return (securePage ? "wss://" : "ws://") + input +
+      (securePage ? "" : ":" + PORT) + PATH;
+  }
+
   function normalizeStreamUrl(value, pageLocation) {
     var input = String(value || "").trim();
     var loc = pageLocation ||
@@ -56,11 +92,19 @@
 
     var securePage = !!(loc && loc.protocol === "https:");
 
-    // On HTTPS pages, only HTTPS HLS playlists are safe. HTTP HLS is
-    // rejected (no proxy is implemented in this transport). On HTTP pages,
-    // both HTTP and HTTPS URLs pass through unchanged.
+    // HTTPS pages proxy phone HLS paths through their own TLS origin.
     if (securePage && parsed.protocol === "http:") {
-      return null;
+      var lowerPath = parsed.pathname.toLowerCase();
+      var isHlsPlaylist =
+        (lowerPath.endsWith(".m3u8") || lowerPath.endsWith(".m3u")) &&
+        lowerPath.indexOf("/hls/") !== -1;
+      if (!isHlsPlaylist) return null;
+      try {
+        var pageOrigin = new URL(loc.origin || loc.href).origin;
+        return pageOrigin + parsed.pathname + (parsed.search || "");
+      } catch (error) {
+        return null;
+      }
     }
 
     return parsed.href;
@@ -142,6 +186,7 @@
     this.maxReconnectDelay = 30000;
     this.heartbeatTimer = null;
     this.lastHeartbeatAt = 0;
+    this.sessionId = "";
   }
 
   PsLinkReceiver.prototype._emit = function (name, value) {
@@ -160,6 +205,16 @@
 
   PsLinkReceiver.prototype.isReady = function () {
     return this.getConnectionState() === "ready";
+  };
+
+  PsLinkReceiver.prototype._sendMediaConfig = function (socket) {
+    if (!this.lastConfig || socket.readyState !== 1) return;
+    try {
+      var config = JSON.parse(this.lastConfig);
+      config.sessionId = this.sessionId;
+      this.lastConfig = JSON.stringify(config);
+      socket.send(this.lastConfig);
+    } catch (ignore) {}
   };
 
   PsLinkReceiver.prototype._stopHeartbeat = function () {
@@ -186,7 +241,8 @@
       try {
         socket.send(JSON.stringify({
           v: PROTOCOL_VERSION,
-          kind: "heartbeat"
+          kind: "heartbeat",
+          sessionId: self.sessionId
         }));
       } catch (error) {
         try { socket.close(); } catch (ignore) {}
@@ -214,8 +270,9 @@
     if (this.closedByUser || this.authRejected || !this.host || !this.code) return;
     var self = this;
     var socket;
+    this.sessionId = createSessionId();
     try {
-      socket = new WebSocket("ws://" + this.host + ":" + PORT + PATH);
+      socket = new WebSocket(this.socketUrl);
     } catch (error) {
       this._emit("onStatus", "تعذر فتح الاتصال؛ ستتم إعادة المحاولة.");
       this._scheduleReconnect();
@@ -232,7 +289,8 @@
           v: PROTOCOL_VERSION,
           kind: "auth",
           code: self.code,
-          client: "PS Link TV Web"
+          client: "PS Link TV Web",
+          sessionId: self.sessionId
         }));
         self._emit("onStatus", "تم الاتصال؛ جارٍ التحقق من رمز الاقتران.");
       } catch (error) {
@@ -253,13 +311,12 @@
       if (message.v !== PROTOCOL_VERSION) return;
 
       if (message.kind === "ready") {
+        if (message.sessionId !== self.sessionId) return;
         self.ready = true;
         self.authRejected = false;
         self.reconnectDelay = 1000;
         self._startHeartbeat(socket);
-        if (self.lastConfig && socket.readyState === 1) {
-          try { socket.send(self.lastConfig); } catch (ignore) {}
-        }
+        self._sendMediaConfig(socket);
         self._emit("onReady", true);
         self._emit("onStatus", "تم الاقتران؛ استقبال التلفاز جاهز.");
 
@@ -273,9 +330,10 @@
         try { socket.close(1008, "Pairing rejected"); } catch (ignore) {}
 
       } else if (message.kind === "heartbeat_ack") {
-        if (self.isReady()) self.lastHeartbeatAt = Date.now();
+        if (self.isReady() && message.sessionId === self.sessionId) self.lastHeartbeatAt = Date.now();
 
       } else if (message.kind === "subtitle") {
+        if (message.sessionId !== self.sessionId) return;
         if (typeof message.id !== "string" || !message.id) return;
         self._emit("onSubtitle", {
           id: message.id,
@@ -285,11 +343,14 @@
           timestamp: Number(message.timestamp) || 0
         });
         try {
-          socket.send(JSON.stringify({ v: PROTOCOL_VERSION, kind: "ack", id: message.id }));
+          socket.send(JSON.stringify({
+            v: PROTOCOL_VERSION, kind: "ack", id: message.id,
+            sessionId: self.sessionId
+          }));
         } catch (ignore) {}
 
       } else if (message.kind === "stream_url") {
-        if (!self.isReady()) return;
+        if (!self.isReady() || message.sessionId !== self.sessionId) return;
         var streamUrl = normalizeStreamUrl(
           message.url,
           typeof location !== "undefined" ? location : null
@@ -304,7 +365,7 @@
         }
 
       } else if (message.kind === "captions") {
-        self._emit("onCaptions", message);
+        if (message.sessionId === self.sessionId) self._emit("onCaptions", message);
       }
     };
 
@@ -325,13 +386,17 @@
   PsLinkReceiver.prototype.connect = function (host, code) {
     var normalized = normalizePairingCode(code);
     if (!normalized) throw new Error("رمز الاقتران يجب أن يتكون من 6 أرقام");
-    host = String(host || "").trim().replace(/^wss?:\/\//i, "").replace(/\/$/, "");
-    if (!host || /[\s/]/.test(host)) throw new Error("عنوان الهاتف غير صالح");
+    host = String(host || "").trim();
+    var socketUrl = resolveSocketUrl(
+      host,
+      typeof location !== "undefined" ? location : null
+    );
 
     this.disconnect();
     this.closedByUser = false;
     this.authRejected = false;
     this.host = host;
+    this.socketUrl = socketUrl;
     this.code = normalized;
     this.reconnectDelay = 1000;
     this._openSocket();
@@ -353,7 +418,8 @@
       width: width,
       height: height,
       codec: codec,
-      fps: fps
+      fps: fps,
+      sessionId: this.sessionId
     });
 
     if (this.isReady()) {
@@ -386,6 +452,7 @@
   PsLinkReceiver.normalizePairingCode = normalizePairingCode;
   PsLinkReceiver.PROTOCOL_VERSION = PROTOCOL_VERSION;
   PsLinkReceiver.normalizeStreamUrl = normalizeStreamUrl;
+  PsLinkReceiver.resolveSocketUrl = resolveSocketUrl;
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = PsLinkReceiver;

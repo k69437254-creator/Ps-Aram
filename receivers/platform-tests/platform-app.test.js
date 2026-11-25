@@ -169,8 +169,17 @@ function verifyTransportBehavior(name) {
   assert.strictEqual(auth.v, Receiver.PROTOCOL_VERSION);
   assert.strictEqual(auth.kind, "auth");
   assert.strictEqual(auth.code, "123456");
+  assert.strictEqual(auth.sessionId, receiver.sessionId);
 
-  socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "ready" }));
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "ready", sessionId: "stale-session"
+  }));
+  assert.strictEqual(receiver.isReady(), false,
+    "ready from a different session must be ignored");
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "ready",
+    sessionId: receiver.sessionId
+  }));
   assert.strictEqual(observed.ready[observed.ready.length - 1], true);
   assert.strictEqual(receiver.getConnectionState(), "ready");
   assert.strictEqual(receiver.isReady(), true);
@@ -182,9 +191,14 @@ function verifyTransportBehavior(name) {
   assert(socket.sent.some(function (item) {
     return typeof item === "string" && JSON.parse(item).kind === "heartbeat";
   }), "heartbeat must be sent over the active socket");
+  assert(socket.sent.some(function (item) {
+    var message = typeof item === "string" ? JSON.parse(item) : {};
+    return message.kind === "heartbeat" && message.sessionId === receiver.sessionId;
+  }), "heartbeat must carry the active session ID");
   socket.message(JSON.stringify({
     v: Receiver.PROTOCOL_VERSION,
-    kind: "heartbeat_ack"
+    kind: "heartbeat_ack",
+    sessionId: receiver.sessionId
   }));
   assert.strictEqual(receiver.isReady(), true);
   assert(socket.sent.some(function (item) {
@@ -194,6 +208,7 @@ function verifyTransportBehavior(name) {
   socket.message(JSON.stringify({
     v: Receiver.PROTOCOL_VERSION,
     kind: "subtitle",
+    sessionId: receiver.sessionId,
     id: "caption-1",
     source: "Hello",
     translation: "مرحباً"
@@ -201,12 +216,23 @@ function verifyTransportBehavior(name) {
   assert.strictEqual(observed.subtitles.length, 1);
   assert.strictEqual(observed.subtitles[0].translation, "مرحباً");
   assert(socket.sent.some(function (item) {
-    return typeof item === "string" && JSON.parse(item).kind === "ack";
+    if (typeof item !== "string") return false;
+    var message = JSON.parse(item);
+    return message.kind === "ack" && message.sessionId === receiver.sessionId;
   }), "subtitle receipt must be acknowledged");
 
   socket.message(JSON.stringify({
     v: Receiver.PROTOCOL_VERSION,
     kind: "stream_url",
+    sessionId: "stale-session",
+    url: "http://192.168.1.5/hls/stale.m3u8"
+  }));
+  assert.strictEqual(observed.streams.length, 0,
+    "stream URLs from a different session must be ignored");
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION,
+    kind: "stream_url",
+    sessionId: receiver.sessionId,
     url: "http://192.168.1.5/hls/index.m3u8"
   }));
   assert.strictEqual(observed.streams.length, 1);
@@ -249,7 +275,8 @@ function verifyHeartbeatTimeout(name) {
   socket.open();
   socket.message(JSON.stringify({
     v: receiver.constructor.PROTOCOL_VERSION,
-    kind: "ready"
+    kind: "ready",
+    sessionId: receiver.sessionId
   }));
 
   var heartbeatTimer = harness.timers.find(function (timer) {

@@ -14,7 +14,7 @@ Endpoint: `ws://<tv-ip>:8765/subtitle`
 First client message:
 
 ```json
-{"v":2,"kind":"auth","code":"123456","client":"PS Link Mobile"}
+{"v":2,"kind":"auth","code":"123456","client":"PS Link Mobile","sessionId":"<connection-id>"}
 ```
 
 Server response after successful pairing:
@@ -29,16 +29,26 @@ these messages after a successful pairing handshake. The transport is local
 network WebSocket (`ws://`) unless an external trusted TLS proxy is configured.
 
 The server rejects invalid codes before accepting subtitle or media messages.
-The six-digit pairing code is generated with `SecureRandom` and persisted in
-TV preferences. It currently has no expiry or enforced attempt limit and is
-sent over cleartext WebSocket. It is not transport encryption or strong device
-identity; restrict this prototype to a trusted local network and never expose
-port 8765 directly to the Internet.
+Authenticated sessions use a connection-specific `sessionId` on text control
+messages, including captions, subtitles, and `media_config`. The six-digit
+pairing code is generated with `SecureRandom` and persisted in TV preferences.
+Pairing endpoints limit failed attempts to five per remote source per rolling
+60 seconds. The code is still sent over cleartext WebSocket; throttling does not
+provide transport encryption or strong device identity. Restrict this prototype
+to a trusted local network and never expose port 8765 directly to the Internet.
 
 Browser receivers hosted over HTTPS need a trusted WSS/HTTPS reverse proxy.
 That protects the browser-to-proxy hop only; the proxy-to-phone hop is still
-cleartext unless separately secured. No end-to-end TLS identity or protection
-against a local-network man-in-the-middle is implemented.
+cleartext unless separately secured. The Origin allowlist is enforced but is
+empty by default, so browser Origins are rejected until configured. Android
+builds accept a comma-separated exact allowlist through
+`-Ppslink.allowedOrigins=https://receiver.example`; unlisted browser Origins
+are rejected. Origin-less native clients remain supported and still rely on
+the pairing code. Android Mobile can connect to an explicit
+`wss://host/subtitle` endpoint using the system trust store; it does not bypass
+certificate verification. A reverse proxy must also provide trusted HTTPS for
+HLS playlist and segment requests. Do not treat the optional proxy as
+end-to-end encryption if its upstream hop remains cleartext.
 
 ## Media paths and audio limits
 

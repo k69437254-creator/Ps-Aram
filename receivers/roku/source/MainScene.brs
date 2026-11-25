@@ -23,8 +23,8 @@ sub startPairing()
     code = m.top.pairingCode
 
     if host = invalid or code = invalid then return
-    if host = "" or host = "CHANGE_TO_PHONE_IP" then
-        m.status.text = "عدّل عنوان IP الهاتف في receiver-config.json"
+    if host = "" then
+        m.status.text = "أدخل عنوان IP الهاتف في receiver-config.json"
         return
     end if
     if not isSixDigitCode(code) then

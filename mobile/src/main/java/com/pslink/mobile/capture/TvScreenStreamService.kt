@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.pslink.mobile.capture
 
+import com.metallic.chiaki.BuildConfig
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -179,7 +180,11 @@ class TvScreenStreamService : Service() {
 
             if (phonePairingCode != null) {
                 val hlsDirectory = File(cacheDir, "pslink-hls")
-                val receiver = PhoneReceiverServer(phonePairingCode, hlsDirectory)
+                val receiver = PhoneReceiverServer(
+                    phonePairingCode,
+                    hlsDirectory,
+                    BuildConfig.PSLINK_ALLOWED_ORIGINS
+                )
                 phoneReceiverServer = receiver
                 val publisher = HlsTransportStreamPublisher(hlsDirectory) {
                     receiver.notifyStreamAvailable()

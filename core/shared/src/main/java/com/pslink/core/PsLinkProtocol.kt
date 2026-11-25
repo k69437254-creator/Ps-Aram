@@ -3,6 +3,7 @@ package com.pslink.core
 
 import org.json.JSONException
 import org.json.JSONObject
+import java.net.URI
 import java.util.UUID
 
 object PsLinkProtocol {
@@ -16,11 +17,45 @@ object PsLinkProtocol {
     const val KIND_SUBTITLE = "subtitle"
     const val KIND_ACK = "ack"
 
-    fun auth(code: String): String = JSONObject()
+    fun socketUrl(input: String): String? {
+        val value = input.trim()
+        if (value.isEmpty() || value.any(Char::isWhitespace)) return null
+
+        val withScheme = if ("://" in value) {
+            value
+        } else {
+            "//$value"
+        }
+        val uri = runCatching { URI(withScheme) }.getOrNull() ?: return null
+        val explicitScheme = uri.scheme?.lowercase()
+        val scheme = when (explicitScheme) {
+            null -> "ws"
+            "ws", "wss" -> explicitScheme
+            "http" -> "ws"
+            "https" -> "wss"
+            else -> return null
+        }
+        if (uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null)
+            return null
+        val host = uri.host ?: return null
+        val port = uri.port
+        if (port !in -1..65535 || port == 0) return null
+        val path = uri.rawPath.orEmpty()
+        if (path.isNotEmpty() && path != "/" && path != PATH) return null
+        val effectivePort = when {
+            port != -1 -> ":$port"
+            scheme == "ws" -> ":$PORT"
+            else -> ""
+        }
+        return "$scheme://$host$effectivePort$PATH"
+    }
+
+    fun auth(code: String, sessionId: String = ""): String = JSONObject()
         .put("v", VERSION)
         .put("kind", KIND_AUTH)
         .put("code", code.trim())
         .put("client", "PS Link Mobile")
+        .put("sessionId", sessionId.take(80))
         .toString()
 }
 
@@ -29,7 +64,8 @@ data class SubtitlePacket(
     val sourceText: String,
     val translatedText: String,
     val timestampMs: Long = System.currentTimeMillis(),
-    val messageId: String = UUID.randomUUID().toString()
+    val messageId: String = UUID.randomUUID().toString(),
+    val sessionId: String = ""
 ) {
     fun toJson(): String = JSONObject()
         .put("v", PsLinkProtocol.VERSION)
@@ -39,6 +75,7 @@ data class SubtitlePacket(
         .put("translation", translatedText.take(4000))
         .put("timestamp", timestampMs)
         .put("id", messageId)
+        .put("sessionId", sessionId.take(80))
         .toString()
 
     companion object {
@@ -54,7 +91,8 @@ data class SubtitlePacket(
                 sourceText = json.optString("source", "").take(4000),
                 translatedText = json.optString("translation", "").take(4000),
                 timestampMs = json.optLong("timestamp", System.currentTimeMillis()),
-                messageId = id
+                messageId = id,
+                sessionId = json.optString("sessionId", "").take(80)
             )
         }
     }

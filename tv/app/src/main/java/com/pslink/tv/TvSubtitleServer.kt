@@ -3,12 +3,15 @@ package com.pslink.tv
 
 import com.pslink.core.PsLinkProtocol
 import com.pslink.core.PairingCode
+import com.pslink.core.PairingAttemptLimiter
+import com.pslink.core.OriginAllowlist
 import com.pslink.core.SubtitlePacket
 import io.ktor.server.application.install
 import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.cio.CIO
 import io.ktor.server.routing.routing
+import io.ktor.server.request.origin
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
@@ -33,10 +36,15 @@ class TvSubtitleServer(
     private val pairingCode: String,
     private val onMediaConfig: (TvMediaConfig) -> Unit,
     private val onMediaPacket: (ByteArray) -> Unit,
-    private val onMediaStop: () -> Unit
+    private val onMediaStop: () -> Unit,
+    allowedOrigins: String = ""
 ) {
     private var engine: ApplicationEngine? = null
     private val activeSession = AtomicReference<Job?>(null)
+    private val activeSessionId = AtomicReference<String?>(null)
+    private val sessionLock = Any()
+    private val pairingAttempts = PairingAttemptLimiter()
+    private val originAllowlist = OriginAllowlist(allowedOrigins)
     private val mutableLatestPacket = MutableStateFlow<SubtitlePacket?>(null)
     val latestPacket: StateFlow<SubtitlePacket?> = mutableLatestPacket.asStateFlow()
     private val mutableCaptions = MutableStateFlow<TvCaptionFrame?>(null)
@@ -48,7 +56,11 @@ class TvSubtitleServer(
             install(WebSockets)
             routing {
                 webSocket(PsLinkProtocol.PATH) {
+                    val pairingSource = call.request.origin.remoteHost
                     suspend fun rejectPairing(errorCode: String, message: String) {
+                        if (errorCode != "PAIRING_RATE_LIMITED") {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
+                        }
                         send(Frame.Text(JSONObject()
                             .put("v", PsLinkProtocol.VERSION)
                             .put("kind", "error")
@@ -58,6 +70,14 @@ class TvSubtitleServer(
                         close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, errorCode))
                     }
 
+                    if (!originAllowlist.allows(call.request.headers["Origin"])) {
+                        rejectPairing("ORIGIN_NOT_ALLOWED", "مصدر اتصال الويب غير مصرح به")
+                        return@webSocket
+                    }
+                    if (!pairingAttempts.isAllowed(pairingSource, monotonicMillis())) {
+                        rejectPairing("PAIRING_RATE_LIMITED", "محاولات كثيرة؛ انتظر دقيقة ثم أعد المحاولة")
+                        return@webSocket
+                    }
                     val authFrame = try {
                         withTimeoutOrNull(6_000L) { incoming.receive() }
                     } catch (_: ClosedReceiveChannelException) {
@@ -91,55 +111,88 @@ class TvSubtitleServer(
                         rejectPairing("INVALID_PAIRING_CODE", "رمز الاقتران غير صحيح أو لا يخص هذا التلفاز")
                         return@webSocket
                     }
+                    val authenticatedSessionId = auth.optString("sessionId", "").take(80)
+                    if (authenticatedSessionId.isBlank()) {
+                        rejectPairing("INVALID_SESSION_ID", "معرّف الجلسة مطلوب؛ حدّث تطبيق الهاتف")
+                        return@webSocket
+                    }
+                    pairingAttempts.recordSuccess(pairingSource)
                     val sessionJob = coroutineContext[Job]
                         ?: throw IllegalStateException("Authenticated WebSocket session has no Job")
-                    val previousSession = activeSession.getAndSet(sessionJob)
+                    val previousSession = synchronized(sessionLock) {
+                        activeSession.getAndSet(sessionJob).also {
+                            activeSessionId.set(authenticatedSessionId)
+                        }
+                    }
                     if (previousSession != null && previousSession !== sessionJob) {
                         // The new authenticated session replaces the old one.
                         previousSession.cancel()
                     }
                     try {
-                        send(Frame.Text(JSONObject().put("v", PsLinkProtocol.VERSION).put("kind", PsLinkProtocol.KIND_READY).toString()))
+                        send(Frame.Text(JSONObject()
+                            .put("v", PsLinkProtocol.VERSION)
+                            .put("kind", PsLinkProtocol.KIND_READY)
+                            .put("sessionId", authenticatedSessionId)
+                            .toString()))
                         for (frame in incoming) {
+                            if (!synchronized(sessionLock) { activeSession.get() === sessionJob }) break
                             when (frame) {
                                 is Frame.Binary -> {
-                                    if (frame.data.size in 29..(2 * 1024 * 1024 + 28))
-                                        onMediaPacket(frame.data)
+                                    if (frame.data.size in 29..(2 * 1024 * 1024 + 28)) {
+                                        synchronized(sessionLock) {
+                                            if (activeSession.get() === sessionJob)
+                                                onMediaPacket(frame.data)
+                                        }
+                                    }
                                 }
                                 is Frame.Text -> {
                                     val raw = frame.readText()
                                     val message = runCatching { JSONObject(raw) }.getOrNull()
+                                    if (message == null ||
+                                        message.optString("sessionId", "") != authenticatedSessionId) continue
                                     if (message?.optInt("v", -1) == PsLinkProtocol.VERSION &&
                                         message.optString("kind") == PsLinkProtocol.KIND_HEARTBEAT) {
                                         send(Frame.Text(JSONObject()
                                             .put("v", PsLinkProtocol.VERSION)
                                             .put("kind", PsLinkProtocol.KIND_HEARTBEAT_ACK)
+                                            .put("sessionId", authenticatedSessionId)
                                             .toString()))
                                         continue
                                     }
-                                    handleTextFrame(raw)
-
-                                    // PSLINK_MEDIA_CONFIG_ACK_V1
-                                    mediaConfigAck(raw)?.let { acknowledgement ->
-                                        send(Frame.Text(acknowledgement))
+                                    val acknowledgements = synchronized(sessionLock) {
+                                        if (activeSession.get() !== sessionJob ||
+                                            activeSessionId.get() != authenticatedSessionId) {
+                                            emptyList()
+                                        } else {
+                                            handleTextFrame(raw)
+                                            val configAck = mediaConfigAck(raw)
+                                            val packet = if (message.optString("kind") == PsLinkProtocol.KIND_SUBTITLE) {
+                                                runCatching { SubtitlePacket.fromJson(raw) }.getOrNull()
+                                            } else {
+                                                null
+                                            }
+                                            listOfNotNull(configAck, packet?.let {
+                                                JSONObject()
+                                                    .put("v", PsLinkProtocol.VERSION)
+                                                    .put("kind", PsLinkProtocol.KIND_ACK)
+                                                    .put("id", it.messageId)
+                                                    .put("sessionId", authenticatedSessionId)
+                                                    .toString()
+                                            })
+                                        }
                                     }
-
-                                    val packet = runCatching { SubtitlePacket.fromJson(raw) }.getOrNull()
-                                    if (packet != null) {
-                                        send(Frame.Text(JSONObject()
-                                            .put("v", PsLinkProtocol.VERSION)
-                                            .put("kind", PsLinkProtocol.KIND_ACK)
-                                            .put("id", packet.messageId)
-                                            .toString()))
-                                    }
+                                    acknowledgements.forEach { send(Frame.Text(it)) }
                                 }
                                 else -> Unit
                             }
                         }
                     } finally {
-                        if (activeSession.compareAndSet(sessionJob, null)) {
-                            mutableCaptions.value = TvCaptionFrame(0L, emptyList())
-                            onMediaStop()
+                        synchronized(sessionLock) {
+                            if (activeSession.compareAndSet(sessionJob, null)) {
+                                activeSessionId.set(null)
+                                mutableCaptions.value = TvCaptionFrame(0L, emptyList())
+                                onMediaStop()
+                            }
                         }
                     }
                 }
@@ -154,7 +207,8 @@ class TvSubtitleServer(
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
 
         if (json.optInt("v", -1) != PsLinkProtocol.VERSION ||
-            json.optString("kind") != "media_config") {
+            json.optString("kind") != "media_config" ||
+            json.optString("sessionId", "").take(80) != activeSessionId.get()) {
             return null
         }
 
@@ -176,12 +230,15 @@ class TvSubtitleServer(
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "media_config_ack")
             .put("requestId", requestId)
+            .put("sessionId", json.optString("sessionId").take(80))
             .toString()
     }
 
     private fun handleTextFrame(raw: String) {
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return
         if (json.optInt("v", -1) != PsLinkProtocol.VERSION) return
+        val sessionId = json.optString("sessionId", "").take(80)
+        if (sessionId.isBlank() || sessionId != activeSessionId.get()) return
         when (json.optString("kind")) {
             "captions" -> {
                 val array = json.optJSONArray("lines") ?: JSONArray()
@@ -219,6 +276,14 @@ class TvSubtitleServer(
 
     @Synchronized fun stop() {
         engine?.stop(gracePeriodMillis = 500L, timeoutMillis = 2_000L)
+        synchronized(sessionLock) {
+            activeSession.getAndSet(null)?.cancel()
+            activeSessionId.set(null)
+            mutableCaptions.value = TvCaptionFrame(0L, emptyList())
+            onMediaStop()
+        }
         engine = null
     }
+
+    private fun monotonicMillis(): Long = System.nanoTime() / 1_000_000L
 }

@@ -7,6 +7,8 @@ plugins {
 
 val chiakiRoot = layout.projectDirectory.dir("../third_party/chiaki-ng")
 val chiakiAndroidApp = chiakiRoot.dir("android/app")
+val configuredOrigins = providers.gradleProperty("pslink.allowedOrigins").orElse("").get()
+val escapedOrigins = configuredOrigins.replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.metallic.chiaki" // Keep upstream R/package references stable.
@@ -19,6 +21,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0"
+        buildConfigField("String", "PSLINK_ALLOWED_ORIGINS", "\"$escapedOrigins\"")
         externalNativeBuild {
             cmake {
                 arguments += listOf(
@@ -46,6 +49,7 @@ android {
     buildFeatures {
         viewBinding = true
         prefab = true
+        buildConfig = true
     }
 
     sourceSets.getByName("main") {

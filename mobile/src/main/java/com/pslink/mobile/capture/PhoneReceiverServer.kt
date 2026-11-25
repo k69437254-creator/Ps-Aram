@@ -2,12 +2,16 @@
 package com.pslink.mobile.capture
 
 import com.pslink.core.PairingCode
+import com.pslink.core.PairingAttemptLimiter
+import com.pslink.core.OriginAllowlist
 import com.pslink.core.SubtitlePacket
 import com.pslink.core.PsLinkProtocol
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.request.origin
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.post
@@ -50,11 +54,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class PhoneReceiverServer(
     pairingCode: String,
-    private val hlsDirectory: File
+    private val hlsDirectory: File,
+    allowedOrigins: String = ""
 ) {
     private val normalizedCode = requireNotNull(PairingCode.normalize(pairingCode)) {
         "Phone receiver pairing code must contain exactly six digits"
     }
+    private val pairingAttempts = PairingAttemptLimiter()
+    private val originAllowlist = OriginAllowlist(allowedOrigins)
     // Bearer token for HLS GET requests; the pairing code is never placed in media URLs.
     private val streamToken: String = run {
         val alphabet = "0123456789abcdef"
@@ -68,7 +75,7 @@ class PhoneReceiverServer(
             }
         }
     }
-    private val sessions = ConcurrentHashMap.newKeySet<DefaultWebSocketServerSession>()
+    private val sessions = ConcurrentHashMap<DefaultWebSocketServerSession, String>()
     private val streamAvailable = AtomicBoolean(false)
     private val subtitleHistoryLock = Any()
     private val subtitleHistory = mutableListOf<Pair<Long, String>>()
@@ -85,11 +92,22 @@ class PhoneReceiverServer(
                 install(WebSockets)
                 routing {
                     post("/receiver/roku/stream-url") {
+                        val pairingSource = call.request.origin.remoteHost
+                        if (!originAllowlist.allows(call.request.headers["Origin"])) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
+                            call.respond(HttpStatusCode.Forbidden)
+                            return@post
+                        }
+                        if (!pairingAttempts.isAllowed(pairingSource, monotonicMillis())) {
+                            call.respond(HttpStatusCode.TooManyRequests)
+                            return@post
+                        }
                         val request = runCatching {
                             JSONObject(call.receiveText())
                         }.getOrNull()
 
                         if (request == null) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.BadRequest)
                             return@post
                         }
@@ -99,9 +117,11 @@ class PhoneReceiverServer(
                         )
 
                         if (suppliedCode == null || suppliedCode != normalizedCode) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.Unauthorized)
                             return@post
                         }
+                        pairingAttempts.recordSuccess(pairingSource)
 
                         if (!streamAvailable.get()) {
                             call.respond(HttpStatusCode.ServiceUnavailable)
@@ -121,11 +141,22 @@ class PhoneReceiverServer(
                     }
 
                     post("/receiver/roku/subtitle") {
+                        val pairingSource = call.request.origin.remoteHost
+                        if (!originAllowlist.allows(call.request.headers["Origin"])) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
+                            call.respond(HttpStatusCode.Forbidden)
+                            return@post
+                        }
+                        if (!pairingAttempts.isAllowed(pairingSource, monotonicMillis())) {
+                            call.respond(HttpStatusCode.TooManyRequests)
+                            return@post
+                        }
                         val request = runCatching {
                             JSONObject(call.receiveText())
                         }.getOrNull()
 
                         if (request == null) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.BadRequest)
                             return@post
                         }
@@ -135,9 +166,11 @@ class PhoneReceiverServer(
                         )
 
                         if (suppliedCode == null || suppliedCode != normalizedCode) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.Unauthorized)
                             return@post
                         }
+                        pairingAttempts.recordSuccess(pairingSource)
 
                         val after = request.optLong("after", 0L).coerceAtLeast(0L)
 
@@ -178,6 +211,10 @@ class PhoneReceiverServer(
                     }
 
                     get("/hls/{token}/index.m3u8") {
+                        if (!originAllowlist.allows(call.request.headers["Origin"])) {
+                            call.respond(HttpStatusCode.Forbidden)
+                            return@get
+                        }
                         if (!isValidStreamToken(call.parameters["token"])) {
                             call.respond(HttpStatusCode.NotFound)
                             return@get
@@ -197,6 +234,10 @@ class PhoneReceiverServer(
                         }
                     }
                     get("/hls/{token}/{name}") {
+                        if (!originAllowlist.allows(call.request.headers["Origin"])) {
+                            call.respond(HttpStatusCode.Forbidden)
+                            return@get
+                        }
                         if (!isValidStreamToken(call.parameters["token"])) {
                             call.respond(HttpStatusCode.NotFound)
                             return@get
@@ -216,6 +257,15 @@ class PhoneReceiverServer(
                         }
                     }
                     webSocket(PsLinkProtocol.PATH) {
+                        val pairingSource = call.request.origin.remoteHost
+                        if (!originAllowlist.allows(call.request.headers["Origin"])) {
+                            reject("ORIGIN_NOT_ALLOWED", "مصدر اتصال الويب غير مصرح به")
+                            return@webSocket
+                        }
+                        if (!pairingAttempts.isAllowed(pairingSource, monotonicMillis())) {
+                            reject("PAIRING_RATE_LIMITED", "محاولات كثيرة؛ انتظر دقيقة ثم أعد المحاولة", false)
+                            return@webSocket
+                        }
                         val authFrame = try {
                             withTimeoutOrNull(6_000L) { incoming.receive() }
                         } catch (_: ClosedReceiveChannelException) {
@@ -239,14 +289,21 @@ class PhoneReceiverServer(
                             reject("INVALID_PAIRING_CODE", "رمز اقتران الهاتف غير صحيح")
                             return@webSocket
                         }
+                        val authenticatedSessionId = auth.optString("sessionId", "").take(80)
+                        if (authenticatedSessionId.isBlank()) {
+                            reject("INVALID_SESSION_ID", "معرّف الجلسة مطلوب؛ حدّث المستقبل")
+                            return@webSocket
+                        }
+                        pairingAttempts.recordSuccess(pairingSource)
 
-                        sessions.add(this)
+                        sessions[this] = authenticatedSessionId
                         try {
                             send(Frame.Text(JSONObject()
                                 .put("v", PsLinkProtocol.VERSION)
                                 .put("kind", PsLinkProtocol.KIND_READY)
+                                .put("sessionId", authenticatedSessionId)
                                 .toString()))
-                            if (streamAvailable.get()) sendStreamUrl(this)
+                            if (streamAvailable.get()) sendStreamUrl(this, authenticatedSessionId)
                             for (frame in incoming) {
                                 when (frame) {
                                     is Frame.Close -> break
@@ -255,10 +312,12 @@ class PhoneReceiverServer(
                                             JSONObject(frame.readText())
                                         }.getOrNull()
                                         if (message?.optInt("v", -1) == PsLinkProtocol.VERSION &&
+                                            message.optString("sessionId", "") == authenticatedSessionId &&
                                             message.optString("kind") == PsLinkProtocol.KIND_HEARTBEAT) {
                                             send(Frame.Text(JSONObject()
                                                 .put("v", PsLinkProtocol.VERSION)
                                                 .put("kind", PsLinkProtocol.KIND_HEARTBEAT_ACK)
+                                                .put("sessionId", authenticatedSessionId)
                                                 .toString()))
                                         }
                                     }
@@ -266,7 +325,7 @@ class PhoneReceiverServer(
                                 }
                             }
                         } finally {
-                            sessions.remove(this)
+                            sessions.remove(this, authenticatedSessionId)
                         }
                     }
                 }
@@ -280,7 +339,14 @@ class PhoneReceiverServer(
         }
     }
 
-    private suspend fun DefaultWebSocketServerSession.reject(code: String, message: String) {
+    private suspend fun DefaultWebSocketServerSession.reject(
+        code: String,
+        message: String,
+        recordFailure: Boolean = true
+    ) {
+        if (recordFailure) {
+            pairingAttempts.recordFailure(call.request.origin.remoteHost, monotonicMillis())
+        }
         runCatching {
             send(Frame.Text(JSONObject()
                 .put("v", PsLinkProtocol.VERSION)
@@ -291,6 +357,8 @@ class PhoneReceiverServer(
             close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, code))
         }
     }
+
+    private fun monotonicMillis(): Long = System.nanoTime() / 1_000_000L
 
     /**
      * Broadcast one translated subtitle packet to all authenticated TV receivers.
@@ -312,13 +380,16 @@ class PhoneReceiverServer(
         }
 
         // WebSocket receivers receive the same packet immediately.
-        val targets = sessions.toList()
+        val targets = sessions.entries.toList()
 
         if (targets.isNotEmpty()) {
             scope.launch {
-                targets.forEach { session ->
+                targets.forEach { (session, sessionId) ->
                     runCatching {
-                        session.send(Frame.Text(payload))
+                        val boundPayload = JSONObject(payload)
+                            .put("sessionId", sessionId)
+                            .toString()
+                        session.send(Frame.Text(boundPayload))
                     }
                 }
             }
@@ -333,15 +404,15 @@ class PhoneReceiverServer(
         streamAvailable.set(true)
         val scope = serverScope ?: return
         scope.launch {
-            val messageReady = streamUrlMessage() ?: return@launch
-            sessions.toList().forEach { session ->
+            sessions.entries.toList().forEach { (session, sessionId) ->
+                val messageReady = streamUrlMessage(sessionId) ?: return@forEach
                 runCatching { session.send(Frame.Text(messageReady)) }
             }
         }
     }
 
-    private suspend fun sendStreamUrl(session: DefaultWebSocketServerSession) {
-        val message = streamUrlMessage() ?: return
+    private suspend fun sendStreamUrl(session: DefaultWebSocketServerSession, sessionId: String) {
+        val message = streamUrlMessage(sessionId) ?: return
         session.send(Frame.Text(message))
     }
 
@@ -353,13 +424,14 @@ class PhoneReceiverServer(
         )
     }
 
-    private fun streamUrlMessage(): String? {
+    private fun streamUrlMessage(sessionId: String? = null): String? {
         val address = localIpv4Address() ?: return null
-        return JSONObject()
+        val message = JSONObject()
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "stream_url")
             .put("url", "http://$address:${PsLinkProtocol.PORT}/hls/$streamToken/index.m3u8")
-            .toString()
+        sessionId?.let { message.put("sessionId", it) }
+        return message.toString()
     }
 
     @Synchronized fun stop() {

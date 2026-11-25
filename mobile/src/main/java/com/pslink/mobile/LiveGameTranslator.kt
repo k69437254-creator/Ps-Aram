@@ -385,7 +385,7 @@ class LiveGameTranslator(
                     if (!continuation.isActive) {
                         releaseBitmap()
                     } else if (result == PixelCopy.SUCCESS) {
-                        continuation.resume(bitmap) { _, _, _ -> releaseBitmap() }
+                        continuation.resume(bitmap) { _ -> releaseBitmap() }
                     } else {
                         releaseBitmap()
                         continuation.resume(null)

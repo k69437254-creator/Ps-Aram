@@ -3,11 +3,17 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+val configuredOrigins = providers.gradleProperty("pslink.allowedOrigins").orElse("").get()
+val escapedOrigins = configuredOrigins.replace("\\", "\\\\").replace("\"", "\\\"")
+
 android {
     namespace = "com.pslink.tvfire"
     compileSdk = 35
 
-    buildFeatures { viewBinding = true }
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "com.pslink.tvfire"
@@ -15,6 +21,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0"
+        buildConfigField("String", "PSLINK_ALLOWED_ORIGINS", "\"$escapedOrigins\"")
     }
 
     compileOptions {

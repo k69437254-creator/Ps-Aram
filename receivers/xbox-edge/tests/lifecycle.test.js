@@ -46,13 +46,14 @@ async function main() {
   const auth = JSON.parse(socket.sent[0]);
   assert.equal(auth.kind, "auth");
   assert.equal(auth.code, "123456");
+  assert.equal(auth.sessionId, receiver.sessionId);
 
-  message(socket, {v:2, kind:"ready"});
+  message(socket, {v:2, kind:"ready", sessionId:receiver.sessionId});
   assert.equal(receiver.ready, true);
   assert.deepEqual(events.at(-1), ["ready", true]);
 
   message(socket, {
-    v:2, kind:"subtitle", id:"sub-1",
+    v:2, kind:"subtitle", sessionId:receiver.sessionId, id:"sub-1",
     game:"Game", source:"Hello", translation:"مرحبا",
     timestamp:123
   });
@@ -63,9 +64,10 @@ async function main() {
   const ack = JSON.parse(socket.sent.at(-1));
   assert.equal(ack.kind, "ack");
   assert.equal(ack.id, "sub-1");
+  assert.equal(ack.sessionId, receiver.sessionId);
 
   message(socket, {
-    v:2, kind:"stream_url",
+    v:2, kind:"stream_url", sessionId:receiver.sessionId,
     url:"http://192.168.1.20:8765/hls/index.m3u8"
   });
 

@@ -41,11 +41,14 @@ sub run()
             continue
         end if
 
+        deviceInfo = CreateObject("roDeviceInfo")
+        receiverSessionId = "roku-" + deviceInfo.GetChannelClientId()
         authMsg = FormatJson({
             v: 2,
             kind: "auth",
             code: code,
-            client: "PS Link Roku"
+            client: "PS Link Roku",
+            sessionId: receiverSessionId
         })
         ws.Send(authMsg)
 

@@ -173,7 +173,7 @@
       }
     }
   ],
-  "acceptanceMatrixVersion": 1,
+  "acceptanceMatrixVersion": 2,
   "acceptanceCriteria": [
     "sourceComplete",
     "buildPassed",
@@ -192,7 +192,7 @@
   "acceptanceMatrix": {
     "android-mobile": {
       "sourceComplete": "PARTIAL",
-      "buildPassed": "FAIL_BEFORE_GRADLE",
+      "buildPassed": "NOT_VERIFIED_AFTER_WORKTREE_CHANGES_PREVIOUS_HEAD_FAILED_KOTLIN_COMPILE",
       "unitTestsPassed": "NOT_RUN",
       "integrationTestsPassed": "NOT_RUN",
       "packageVerified": "NOT_BUILT",
@@ -202,7 +202,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_ORIGIN_AND_RATE_LIMITING_NO_TLS_LISTENER",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "android-tv": {
@@ -217,7 +217,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_ORIGIN_AND_RATE_LIMITING_NO_TLS_LISTENER",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "google-tv": {
@@ -232,7 +232,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_ORIGIN_AND_RATE_LIMITING_NO_TLS_LISTENER",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "fire-tv": {
@@ -247,7 +247,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_ORIGIN_AND_RATE_LIMITING_NO_TLS_LISTENER",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "tizen": {
@@ -262,7 +262,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_ORIGIN_AND_RATE_LIMITING_NO_TLS_LISTENER",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "webos": {
@@ -277,7 +277,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_WSS_PROXY_NOT_END_TO_END_TLS",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "roku": {
@@ -292,7 +292,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_WSS_PROXY_NOT_END_TO_END_TLS",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "web": {
@@ -307,7 +307,7 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_END_TO_END_TLS",
+      "securityReviewPassed": "PARTIAL_WSS_PROXY_NOT_END_TO_END_TLS",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "xbox-edge": {
@@ -322,12 +322,12 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_END_TO_END_TLS",
+      "securityReviewPassed": "PARTIAL_WSS_PROXY_NOT_END_TO_END_TLS",
       "physicalDeviceEvidence": "NOT_TESTED"
     },
     "playstation": {
       "sourceComplete": "PARTIAL_ANDROID_CHIAKI_ROUTE",
-      "buildPassed": "FAIL_BEFORE_GRADLE",
+      "buildPassed": "NOT_VERIFIED_AFTER_WORKTREE_CHANGES_PREVIOUS_HEAD_FAILED_KOTLIN_COMPILE",
       "unitTestsPassed": "NOT_RUN",
       "integrationTestsPassed": "NOT_RUN",
       "packageVerified": "NOT_BUILT",
@@ -337,20 +337,20 @@
       "audioPassed": "NOT_TESTED",
       "avSyncPassed": "NOT_TESTED",
       "longSessionStabilityPassed": "NOT_TESTED",
-      "securityReviewPassed": "NOT_PASSED_CLEAR_TEXT",
+      "securityReviewPassed": "PARTIAL_ORIGIN_AND_RATE_LIMITING_NO_TLS_LISTENER",
       "physicalDeviceEvidence": "NOT_TESTED"
     }
   },
   "evidenceSummary": {
-    "headCommit": "451feecc5162e8b2d7bbe66d6ae2c483464c5eef",
-    "androidWorkflowRun": "45481552752",
-    "androidWorkflowResult": "FAILURE_DURING_BOOTSTRAP_GRADLE_NOT_REACHED",
+    "headCommit": "e6e988e3a93c9eaa03be40ea6243940fae964a9d",
+    "androidWorkflowRun": "45504723970",
+    "androidWorkflowResult": "FAILURE_DURING_KOTLIN_COMPILE_BEFORE_APK; NO_WORKFLOW_FOR_UNPUSHED_WORKTREE_CHANGES",
     "receiverWorkflowRuns": [
-      "45481552755",
-      "45481552764",
-      "45481552833"
+      "45504723896",
+      "45504723947",
+      "45504723980"
     ],
-    "receiverWorkflowResult": "PASS_AUTOMATED_TESTS_ONLY",
+    "receiverWorkflowResult": "PASS_AUTOMATED_TESTS_ONLY_ON_PREVIOUS_HEAD; CURRENT_WORKTREE_TESTS_PASS_LOCALLY",
     "fullyAcceptedPlatforms": 0,
     "verifiedPlatformCompletionPercent": 0,
     "calculation": "Fully accepted targets / 10; requires all applicable acceptance criteria including physical-device evidence."

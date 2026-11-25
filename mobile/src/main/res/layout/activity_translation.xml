@@ -185,7 +185,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:hint="عنوان IP للتلفاز (مثل 192.168.1.20)"
+                    android:hint="IP التلفاز أو WSS موثوق (wss://host/subtitle)"
                     app:boxBackgroundColor="#0B1220"
                     app:boxBackgroundMode="filled">
                     <com.google.android.material.textfield.TextInputEditText

@@ -76,7 +76,8 @@ class TvReceiverActivity : AppCompatActivity() {
                     findViewById<View>(R.id.pairingPanel).visibility = View.VISIBLE
                     findViewById<android.widget.TextView>(R.id.serverStatusText).text = "انقطع اتصال الهاتف؛ استخدم الرمز نفسه لإعادة الاقتران"
                 }
-            }
+            },
+            allowedOrigins = BuildConfig.PSLINK_ALLOWED_ORIGINS
         )
         runCatching { receiver.start() }
             .onSuccess {

@@ -31,9 +31,13 @@ assert.equal(
   Receiver.normalizeStreamUrl("https://phone.local/hls/index.m3u8", httpsPage),
   "https://phone.local/hls/index.m3u8"
 );
-// HTTPS page + HTTP stream -> reject
+// HTTPS page + HTTP HLS stream -> same-origin TLS proxy
 assert.equal(
   Receiver.normalizeStreamUrl("http://phone.local/hls/index.m3u8", httpsPage),
+  "https://receiver.local/hls/index.m3u8"
+);
+assert.equal(
+  Receiver.normalizeStreamUrl("http://phone.local/private/file.mp4", httpsPage),
   null
 );
 
@@ -148,22 +152,37 @@ function makeReceiver(pageLocation) {
   receiver.connect("192.168.1.5", "123456");
   const socket = sockets[0];
   socket.open();
-  socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "ready" }));
+  const auth = JSON.parse(socket.sent[0]);
+  assert.ok(auth.sessionId);
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "ready",
+    sessionId: receiver.sessionId
+  }));
   assert.equal(observed.ready[observed.ready.length - 1], true);
   // stream_url accepted
-  socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "stream_url", url: "http://phone.local/hls/index.m3u8" }));
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "stream_url",
+    sessionId: receiver.sessionId, url: "http://phone.local/hls/index.m3u8"
+  }));
   assert.equal(observed.streams.length, 1);
   assert.equal(observed.streams[0].url, "http://phone.local/hls/index.m3u8");
   assert.equal(observed.errors.length, 0);
   // WebSocket still open
   assert.equal(socket.readyState, 1);
   // subtitle still works
-  socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "subtitle", id: "s1", game: "g", source: "src", translation: "tr", timestamp: 123 }));
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "subtitle",
+    sessionId: receiver.sessionId, id: "s1", game: "g",
+    source: "src", translation: "tr", timestamp: 123
+  }));
   assert.equal(observed.subtitles.length, 1);
   // captions
   let captionsReceived = false;
   receiver.options.onCaptions = () => { captionsReceived = true; };
-  socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "captions", lines: ["a"] }));
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "captions",
+    sessionId: receiver.sessionId, lines: ["a"]
+  }));
   assert.equal(captionsReceived, true);
   // disconnect
   receiver.disconnect();
@@ -171,7 +190,7 @@ function makeReceiver(pageLocation) {
   global.WebSocket = origWS;
 }
 
-// Reject case: HTTPS page, HTTP stream -> onError, no onStreamUrl, socket stays open
+// HTTPS page proxies its phone HLS path through the same trusted TLS origin.
 {
   global.location = httpsPage;
   const { receiver, observed } = makeReceiver(httpsPage);
@@ -185,12 +204,18 @@ function makeReceiver(pageLocation) {
   receiver.connect("192.168.1.5", "123456");
   const socket = sockets[0];
   socket.open();
-  socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "ready" }));
-  const streamsBefore = observed.streams.length;
-  const errorsBefore = observed.errors.length;
-  socket.message(JSON.stringify({ v: Receiver.PROTOCOL_VERSION, kind: "stream_url", url: "http://phone.local/hls/index.m3u8" }));
-  assert.equal(observed.streams.length, streamsBefore); // not emitted
-  assert.equal(observed.errors.length, errorsBefore + 1); // onError emitted
+  assert.match(socket.url, /^wss:\/\//);
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "ready",
+    sessionId: receiver.sessionId
+  }));
+  socket.message(JSON.stringify({
+    v: Receiver.PROTOCOL_VERSION, kind: "stream_url",
+    sessionId: receiver.sessionId, url: "http://phone.local/hls/index.m3u8"
+  }));
+  assert.equal(observed.streams.length, 1);
+  assert.equal(observed.streams[0].url, "https://receiver.local/hls/index.m3u8");
+  assert.equal(observed.errors.length, 0);
   assert.equal(socket.readyState, 1); // socket still open
   receiver.disconnect();
   global.WebSocket = undefined;

@@ -38,6 +38,7 @@ import com.metallic.chiaki.databinding.ActivityTranslationBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 /**
  * Practical first translation workflow:
@@ -65,6 +66,7 @@ class TranslationActivity : AppCompatActivity() {
     // Ignore ML Kit callbacks belonging to an old language or destroyed screen.
     private var translatorGeneration = 0
     private var ocrGeneration = 0
+    private var currentSessionId = UUID.randomUUID().toString()
 
     private val openScreenshot = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) runOcr(uri)
@@ -437,6 +439,8 @@ class TranslationActivity : AppCompatActivity() {
         binding.tvHostInput.setText(host)
         binding.tvPairCodeInput.setText(code)
         tvClient?.connect(host, code)
+        currentSessionId = tvClient?.sessionId?.takeIf { it.isNotBlank() }
+            ?: UUID.randomUUID().toString()
     }
 
     private fun sendToTv() {

@@ -24,6 +24,12 @@
     return /^[0-9]{6}$/.test(digits) ? digits : null;
   }
 
+  function createSessionId() {
+    var cryptoApi = root.crypto;
+    if (cryptoApi && typeof cryptoApi.randomUUID === "function") return cryptoApi.randomUUID();
+    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+  }
+
   // PSLINK_XBOX_SECURE_ENDPOINT_V1
   // HTTPS pages must use WSS. Local HTTP pages may use WS.
   function resolveSocketUrl(value, pageLocation) {
@@ -97,7 +103,7 @@
     // so the browser does not block mixed content. Non-HLS http URLs are
     // rejected entirely on secure pages.
     if (securePage && parsed.protocol === "http:") {
-      if (isHlsPlaylist && lowerPath.indexOf("hls") !== -1) {
+      if (isHlsPlaylist && lowerPath.indexOf("/hls/") !== -1) {
         var origin;
         try {
           origin = new URL(loc.origin || loc.href).origin;
@@ -186,6 +192,7 @@
     this.maxReconnectDelay = 30000;
     this.heartbeatTimer = null;
     this.lastHeartbeatAt = 0;
+    this.sessionId = "";
   }
 
   PsLinkReceiver.prototype._emit = function (name, value) {
@@ -204,6 +211,16 @@
 
   PsLinkReceiver.prototype.isReady = function () {
     return this.getConnectionState() === "ready";
+  };
+
+  PsLinkReceiver.prototype._sendMediaConfig = function (socket) {
+    if (!this.lastConfig || socket.readyState !== 1) return;
+    try {
+      var config = JSON.parse(this.lastConfig);
+      config.sessionId = this.sessionId;
+      this.lastConfig = JSON.stringify(config);
+      socket.send(this.lastConfig);
+    } catch (ignore) {}
   };
 
   PsLinkReceiver.prototype._stopHeartbeat = function () {
@@ -230,7 +247,8 @@
       try {
         socket.send(JSON.stringify({
           v: PROTOCOL_VERSION,
-          kind: "heartbeat"
+          kind: "heartbeat",
+          sessionId: self.sessionId
         }));
       } catch (error) {
         try { socket.close(); } catch (ignore) {}
@@ -258,6 +276,7 @@
     if (this.closedByUser || this.authRejected || !this.host || !this.code) return;
     var self = this;
     var socket;
+    this.sessionId = createSessionId();
     try {
       socket = new WebSocket(this.socketUrl);
     } catch (error) {
@@ -276,7 +295,8 @@
           v: PROTOCOL_VERSION,
           kind: "auth",
           code: self.code,
-          client: "PS Link Tizen"
+          client: "PS Link Tizen",
+          sessionId: self.sessionId
         }));
         self._emit("onStatus", "تم الاتصال؛ جارٍ التحقق من رمز الاقتران.");
       } catch (error) {
@@ -297,13 +317,12 @@
       if (message.v !== PROTOCOL_VERSION) return;
 
       if (message.kind === "ready") {
+        if (message.sessionId !== self.sessionId) return;
         self.ready = true;
         self.authRejected = false;
         self.reconnectDelay = 1000;
         self._startHeartbeat(socket);
-        if (self.lastConfig && socket.readyState === 1) {
-          try { socket.send(self.lastConfig); } catch (ignore) {}
-        }
+        self._sendMediaConfig(socket);
         self._emit("onReady", true);
         self._emit("onStatus", "تم الاقتران؛ استقبال التلفاز جاهز.");
 
@@ -317,9 +336,10 @@
         try { socket.close(1008, "Pairing rejected"); } catch (ignore) {}
 
       } else if (message.kind === "heartbeat_ack") {
-        if (self.isReady()) self.lastHeartbeatAt = Date.now();
+        if (self.isReady() && message.sessionId === self.sessionId) self.lastHeartbeatAt = Date.now();
 
       } else if (message.kind === "subtitle") {
+        if (message.sessionId !== self.sessionId) return;
         if (typeof message.id !== "string" || !message.id) return;
         self._emit("onSubtitle", {
           id: message.id,
@@ -329,11 +349,14 @@
           timestamp: Number(message.timestamp) || 0
         });
         try {
-          socket.send(JSON.stringify({ v: PROTOCOL_VERSION, kind: "ack", id: message.id }));
+          socket.send(JSON.stringify({
+            v: PROTOCOL_VERSION, kind: "ack", id: message.id,
+            sessionId: self.sessionId
+          }));
         } catch (ignore) {}
 
       } else if (message.kind === "stream_url") {
-        if (!self.isReady()) return;
+        if (!self.isReady() || message.sessionId !== self.sessionId) return;
         var streamUrl = normalizeStreamUrl(
           message.url,
           typeof location !== "undefined" ? location : null
@@ -348,7 +371,7 @@
         }
 
       } else if (message.kind === "captions") {
-        self._emit("onCaptions", message);
+        if (message.sessionId === self.sessionId) self._emit("onCaptions", message);
       }
     };
 
@@ -401,7 +424,8 @@
       width: width,
       height: height,
       codec: codec,
-      fps: fps
+      fps: fps,
+      sessionId: this.sessionId
     });
 
     if (this.isReady()) {
