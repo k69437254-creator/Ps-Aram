@@ -16,8 +16,10 @@ class V2ProtocolSourceContracts(unittest.TestCase):
         self.assertIn('const val VERSION = 2', protocol)
         self.assertIn('const val KIND_HEARTBEAT = "heartbeat"', protocol)
         self.assertIn('const val KIND_HEARTBEAT_ACK = "heartbeat_ack"', protocol)
-        self.assertIn('val sessionId: String = ""', protocol)
-        self.assertIn('.put("sessionId", sessionId.take(80))', protocol)
+        self.assertIn('val sessionId: String', protocol)
+        self.assertIn('SessionIds.validate(sessionId)', protocol)
+        self.assertIn('.put("sessionId", sessionId)', protocol)
+        self.assertNotIn('.put("sessionId", sessionId.take(80))', protocol)
         server_paths = (
             "tv/app/src/main/java/com/pslink/tv/TvSubtitleServer.kt",
             "tv-google/app/src/main/java/com/pslink/tvgoogle/TvSubtitleServer.kt",
@@ -193,6 +195,24 @@ class V2ProtocolSourceContracts(unittest.TestCase):
                 self.assertIn("config.sessionId = this.sessionId", client)
                 self.assertIn('message.kind === "heartbeat_ack"', client)
 
+
+    def test_tv_decoder_recreates_after_stream_and_surface_generation_changes(self):
+        tv_players = (
+            "tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt",
+            "tv-google/app/src/main/java/com/pslink/tvgoogle/TvMediaPlayer.kt",
+            "tv-fire/app/src/main/java/com/pslink/tvfire/TvMediaPlayer.kt",
+        )
+        for path in tv_players:
+            with self.subTest(player=path):
+                player = (ROOT / path).read_text(encoding="utf-8")
+                self.assertIn("private val decoderEpoch = AtomicLong(0L)", player)
+                self.assertGreaterEqual(player.count("advanceDecoderEpoch()"), 6)
+                self.assertIn("var observedDecoderEpoch = -1L", player)
+                self.assertIn("currentDecoderEpoch != observedDecoderEpoch", player)
+                self.assertIn("decoderEpoch.get() != currentDecoderEpoch", player)
+                self.assertIn("decoderEpoch.get() == currentDecoderEpoch", player)
+                self.assertIn("codec.releaseOutputBuffer(outputIndex, false)", player)
+                self.assertIn("!outputSurface.isValid || wanted == null) releaseDecoder()", player)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -49,6 +49,8 @@ class TvMediaPlayer(
     private data class QueuedCaption(val frame: TvCaptionFrame, val generation: Long)
 
     private val running = AtomicBoolean(true)
+    private val decoderEpoch = AtomicLong(0L)
+    private val decoderEpochLock = Any()
     private val videoQueue = BoundedMediaQueue<VideoFrame>(
         VIDEO_QUEUE_CAPACITY,
         VIDEO_QUEUE_BYTE_BUDGET,
@@ -89,6 +91,7 @@ class TvMediaPlayer(
         onCaptions(emptyList())
         senderOriginNs = 0L
         localRenderOriginNs = 0L
+        advanceDecoderEpoch()
     }
 
     fun configure(next: TvMediaConfig) {
@@ -100,6 +103,7 @@ class TvMediaPlayer(
         onCaptions(emptyList())
         senderOriginNs = 0L
         localRenderOriginNs = 0L
+        advanceDecoderEpoch()
         onStatus("وصل إعداد بث اللعبة: ${next.width}×${next.height}، ${next.fps} إطار/ث")
     }
 
@@ -187,15 +191,26 @@ class TvMediaPlayer(
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         surface = holder.surface
+        videoQueue.awaitKeyFrame()
+        advanceDecoderEpoch()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         surface = holder.surface
+        videoQueue.awaitKeyFrame()
+        advanceDecoderEpoch()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         surface = null
         videoQueue.awaitKeyFrame()
+        advanceDecoderEpoch()
+    }
+
+    private fun advanceDecoderEpoch() {
+        synchronized(decoderEpochLock) {
+            decoderEpoch.incrementAndGet()
+        }
     }
 
     private fun establishClock(ptsNs: Long) {
@@ -227,12 +242,20 @@ class TvMediaPlayer(
 
     private fun videoLoop() {
         val info = MediaCodec.BufferInfo()
+        var observedDecoderEpoch = -1L
         try {
             while (running.get()) {
+                val currentDecoderEpoch = synchronized(decoderEpochLock) {
+                    decoderEpoch.get()
+                }
+                if (currentDecoderEpoch != observedDecoderEpoch) {
+                    releaseDecoder()
+                    observedDecoderEpoch = currentDecoderEpoch
+                }
                 val wanted = config
                 val outputSurface = surface
                 if (wanted == null || outputSurface == null || !outputSurface.isValid) {
-                    if (outputSurface == null || wanted == null) releaseDecoder()
+                    if (outputSurface == null || !outputSurface.isValid || wanted == null) releaseDecoder()
                     Thread.sleep(8)
                     continue
                 }
@@ -272,7 +295,17 @@ class TvMediaPlayer(
                         inputBuffer.clear()
                         inputBuffer.put(frame.data)
                         val submitted = videoQueue.runIfCurrent(queuedFrame) {
-                            codec.queueInputBuffer(inputIndex, 0, frame.data.size, relativeUs, 0)
+                            val acceptedByCurrentDecoder = synchronized(decoderEpochLock) {
+                                if (decoderEpoch.get() == currentDecoderEpoch) {
+                                    codec.queueInputBuffer(inputIndex, 0, frame.data.size, relativeUs, 0)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            if (!acceptedByCurrentDecoder) {
+                                codec.queueInputBuffer(inputIndex, 0, 0, relativeUs, 0)
+                            }
                         }
                         if (!submitted) {
                             codec.queueInputBuffer(inputIndex, 0, 0, relativeUs, 0)
@@ -283,8 +316,18 @@ class TvMediaPlayer(
                 while (true) {
                     val outputIndex = codec.dequeueOutputBuffer(info, 0)
                     if (outputIndex >= 0) {
-                        val renderAtNs = localRenderOriginNs + info.presentationTimeUs.coerceAtLeast(0L) * 1000L
-                        codec.releaseOutputBuffer(outputIndex, maxOf(renderAtNs, System.nanoTime()))
+                        val rendered = synchronized(decoderEpochLock) {
+                            if (decoderEpoch.get() != currentDecoderEpoch) {
+                                codec.releaseOutputBuffer(outputIndex, false)
+                                false
+                            } else {
+                                val renderAtNs = localRenderOriginNs +
+                                    info.presentationTimeUs.coerceAtLeast(0L) * 1000L
+                                codec.releaseOutputBuffer(outputIndex, maxOf(renderAtNs, System.nanoTime()))
+                                true
+                            }
+                        }
+                        if (!rendered) break
                     } else {
                         break
                     }

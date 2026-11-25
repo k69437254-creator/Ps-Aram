@@ -117,7 +117,7 @@ class BoundedMediaQueueTest {
 
     @Test
     fun byteAccountingDoesNotOverflowAtIntegerLimit() {
-        val queue = BoundedMediaQueue(2, Int.MAX_VALUE, { it })
+        val queue = BoundedMediaQueue<Int>(2, Int.MAX_VALUE, { it })
         queue.offer(Int.MAX_VALUE - 1)
 
         assertEquals(

@@ -78,8 +78,9 @@ class PairingAttemptLimiter(
     }
 
     private fun discardExpired(failures: ArrayDeque<Long>, nowMillis: Long) {
-        while (failures.isNotEmpty() &&
-            hasWindowElapsed(failures.peekFirst(), nowMillis)) {
+        while (failures.isNotEmpty()) {
+            val oldestFailure: Long = failures.peekFirst() ?: break
+            if (!hasWindowElapsed(oldestFailure, nowMillis)) break
             failures.removeFirst()
         }
     }
