@@ -72,7 +72,8 @@ class LiveGameTranslator(
             Language("الكورية", TranslateLanguage.KOREAN, Script.KOREAN),
             Language("العربية", TranslateLanguage.ARABIC, Script.ARABIC)
         )
-        private const val SAMPLE_INTERVAL_MS = 650L
+        // PSLINK_REMAINING_REPAIRS_V3_SAMPLING
+        private const val SAMPLE_INTERVAL_MS = 350L
         private const val MAX_OCR_CHARS = 160
         private const val MAX_CAPTURE_WIDTH = 960
         private const val TESSERACT_PSM_SPARSE_TEXT = 11
@@ -175,8 +176,8 @@ class LiveGameTranslator(
                     while (isActive && enabled) {
                         currentCoroutineContext().ensureActive()
                         val sampleStartedAt = SystemClock.elapsedRealtime()
-                        val samplePtsNs = System.nanoTime()
                         val bitmap = captureFrame()
+                        val samplePtsNs = System.nanoTime()
                         if (bitmap == null) {
                             consecutiveCaptureFailures++
                             if (consecutiveCaptureFailures == 5) {

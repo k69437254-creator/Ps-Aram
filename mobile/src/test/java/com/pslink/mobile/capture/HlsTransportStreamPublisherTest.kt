@@ -279,4 +279,36 @@ class HlsTransportStreamPublisherTest {
         }
     }
 
+    @Test
+    fun audioTimestampAheadDoesNotInflateVideoSegmentDuration() {
+        val fixture = javaClass.classLoader!!
+            .getResourceAsStream("fixtures/hls-single-idr.h264")!!
+            .use { it.readBytes() }
+        val output = File(
+            requireNotNull(System.getProperty("pslink.hls.test.outputDir")),
+            "audio-ahead-duration"
+        )
+        output.deleteRecursively()
+        assertTrue(output.mkdirs() || output.isDirectory)
+
+        val publisher = HlsTransportStreamPublisher(output)
+        publisher.start()
+        publisher.writeAccessUnit(fixture, ptsUs = 0L, keyFrame = true)
+
+        // Audio callbacks may be delivered ahead of the latest video callback.
+        // They must not extend the duration of a video-keyframe-bounded segment.
+        publisher.writeAudioAccessUnit(
+            byteArrayOf(0x21, 0x10, 0x56, 0xE5.toByte(), 0x00, 0x00, 0x00, 0x00),
+            ptsUs = 1_000_000L
+        )
+        publisher.stop()
+
+        val playlist = File(output, "index.m3u8")
+        assertTrue("HLS playlist must exist", playlist.isFile)
+        assertTrue(
+            "Audio PTS must not inflate the video segment duration",
+            playlist.readText().contains("#EXTINF:0.200,")
+        )
+    }
+
 }

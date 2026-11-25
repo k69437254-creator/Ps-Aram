@@ -140,41 +140,44 @@ class HlsTransportStreamPublisher(
      * Writes one raw AAC-LC access unit.
      * The publisher adds an ADTS header before placing it in MPEG-TS.
      */
-    @Synchronized fun writeAudioAccessUnit(accessUnit: ByteArray, ptsUs: Long) {
+    @Synchronized fun writeAudioAccessUnit(
+        accessUnit: ByteArray,
+        ptsUs: Long,
+        sampleRate: Int = 48000,
+        channels: Int = 2
+    ) {
         check(!closed) { "Publisher is closed" }
         require(accessUnit.isNotEmpty()) { "Empty AAC access unit" }
         require(ptsUs >= 0L) { "Negative AAC timestamp" }
 
         val stream = output ?: return
-        val adts = addAacAdtsHeader(accessUnit)
+        val adts = addAacAdtsHeader(accessUnit, sampleRate, channels)
         val pts90k = (ptsUs * 9L) / 100L
         writeAudioPes(stream, adts, pts90k)
-        lastPtsUs = maxOf(lastPtsUs, ptsUs)
     }
 
-    private fun addAacAdtsHeader(raw: ByteArray): ByteArray {
-        // AAC-LC, 48 kHz, stereo.
-        val profile = 1
-        val frequencyIndex = 3
-        val channels = 2
-        val frameLength = raw.size + 7
-
-        require(frameLength <= 0x1FFF) {
-            "AAC frame exceeds ADTS frame length"
+    // PSLINK_REMAINING_REPAIRS_V3_DYNAMIC_AAC
+    private fun addAacAdtsHeader(raw: ByteArray, sampleRate: Int, channels: Int): ByteArray {
+        val frequencyIndex = when (sampleRate) {
+            96000 -> 0; 88200 -> 1; 64000 -> 2; 48000 -> 3
+            44100 -> 4; 32000 -> 5; 24000 -> 6; 22050 -> 7
+            16000 -> 8; 12000 -> 9; 11025 -> 10; 8000 -> 11
+            7350 -> 12
+            else -> throw IllegalArgumentException("AAC ADTS does not support sample rate $sampleRate")
         }
+        require(channels in 1..2) { "AAC ADTS supports mono or stereo only" }
+        val profile = 1 // AAC-LC
+        val frameLength = raw.size + 7
+        require(frameLength <= 0x1FFF) { "AAC frame exceeds ADTS frame length" }
 
         val header = ByteArray(7)
         header[0] = 0xFF.toByte()
         header[1] = 0xF1.toByte()
-        header[2] = ((profile shl 6) or
-            (frequencyIndex shl 2) or
-            (channels shr 2)).toByte()
-        header[3] = (((channels and 3) shl 6) or
-            (frameLength shr 11)).toByte()
+        header[2] = ((profile shl 6) or (frequencyIndex shl 2) or (channels shr 2)).toByte()
+        header[3] = (((channels and 3) shl 6) or (frameLength shr 11)).toByte()
         header[4] = ((frameLength shr 3) and 0xFF).toByte()
         header[5] = (((frameLength and 7) shl 5) or 0x1F).toByte()
         header[6] = 0xFC.toByte()
-
         return header + raw
     }
 

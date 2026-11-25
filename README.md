@@ -1,5 +1,9 @@
 # PS Link — تطبيق الهاتف وAndroid TV
 
+> **تحديث الحالة — 25 نوفمبر 2026:** الفقرة التاريخية أدناه وروابط Actions فيها تصف commit `451feecc...` فقط، ولا تصف الفرع الحالي. خط الأساس الذي بُنيت عليه حزم الإصلاح هو `feature/platform-completion-pack` عند `79fe9bd3d22d4f1405e400def670f91cca5b7910`. لا توجد نتيجة CI للتغييرات الموجودة في حزم الإصلاح قبل رفعها وتشغيل GitHub Actions. راجع `docs/PS-LINK-REMAINING-REPAIRS-79fe9bd.md` وحواجز الإصدار قبل اعتبار أي مسار مكتمل.
+
+<!-- PSLINK_REMAINING_REPAIRS_V3_STATUS -->
+
 **الحالة: Debug Alpha، غير معتمد للإصدار.** عند `451feecc5162e8b2d7bbe66d6ae2c483464c5eef` نجحت اختبارات مستقبلات الويب وTizen وwebOS، لكن تشغيل Android الحالي فشل في `bootstrap` قبل Gradle، لذلك لم تُبنَ APKs في ذلك التشغيل. نجاح اختبارات المستقبلات لا يثبت تشغيل الوسائط على جهاز فعلي.
 
 أدلة GitHub Actions لهذا الـcommit: [Android build — فشل bootstrap](https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552752)، [cross-platform regression](https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552764)، [Tizen/webOS receivers](https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552755)، [web receiver protocol](https://github.com/k69437254-creator/Ps-Aram/actions/runs/45481552833). لا تتوفر APKs ناتجة من تشغيل Android هذا.
@@ -25,7 +29,7 @@
 - الترجمة الحية في طبقة PS Link تستخدم PixelCopy لالتقاط عينات من سطح عرض جلسة Chiaki، ثم OCR والترجمة على الجهاز. توجد أيضًا شاشة مستقلة لقراءة لقطة يختارها المستخدم أو إدخال النص يدويًا.
 - محركات OCR: Latin واليابانية والصينية والكورية عبر ML Kit، والعربية عبر Tesseract مع ملف `ara.traineddata` المضمّن في أصول تطبيق الهاتف. ترجمة النصوص غير العربية إلى العربية تستخدم حزم ML Kit التي ينزلها المستخدم عند الحاجة؛ النص العربي المكتشف يُعرض كما هو.
 - مسار Chiaki الأصلي يمرر وحدات الفيديو المفكوكة والصوت PCM المفكوك إلى Android TV عبر WebSocket محلي؛ هذا المسار لم يُبنَ أو يُختبر على جهاز ضمن أدلة الـcommit الحالي.
-- مسار HLS البديل يلتقط عرض Android عبر MediaProjection، وقد يلتقط صوت التطبيقات عبر Android Playback Capture (Android 10+ وإذن RECORD_AUDIO وسياسة التطبيق المصدر). هذا ليس ضمانًا لالتقاط صوت اللعبة ولا يُعد دليلًا على وصول صوت PS5.
+- مسار HLS يلتقط فيديو الشاشة عبر MediaProjection، ويعطي الأولوية لصوت Chiaki PCM المفكوك ثم يرمّزه إلى AAC-LC؛ ويستخدم Android Playback Capture كبديل منفرد فقط عند غياب صوت Chiaki أو تعذر ترميزه، مع بقاء قيود Android 10+ والإذن وسياسة التطبيق المصدر. هذا المسار يحتاج إثباتًا عبر CI واختبار جهاز حقيقي قبل اعتباره صوت PS5 مضمونًا.
 - تخصيص حجم وموضع وشفافية أزرار اللمس، وقائمة صغيرة لإعدادات جلسة اللعب.
 - تسجيل فيديو جلسة اللعبة عبر مسار التسجيل الأصلي المضاف إلى Chiaki-NG، ثم حفظ الملف بعد انتهاء التسجيل. هذا مختلف عن تسجيل شاشة الهاتف عبر MediaProjection.
 - يبقى محرك ML Kit Translation على الهاتف فقط؛ تطبيق التلفاز يستقبل النص المترجم ويعرضه. لا تنقل محرك ML Kit إلى تطبيق التلفاز دون الإذن الكتابي الذي تطلبه إرشادات Google للأجهزة المضمنة.

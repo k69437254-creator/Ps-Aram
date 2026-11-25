@@ -27,6 +27,8 @@ import com.pslink.core.PairingCode
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import java.io.Closeable
 
 /**
  * User-consented screen-to-TV H.264 streaming.
@@ -48,6 +50,7 @@ class TvScreenStreamService : Service() {
 
         private const val CHANNEL_ID = "pslink_screen_stream"
         private const val NOTIFICATION_ID = 5104
+        private const val HLS_NATIVE_AUDIO_WAIT_MS = 1_800L
     }
 
     private val running = AtomicBoolean(false)
@@ -59,6 +62,20 @@ class TvScreenStreamService : Service() {
     private var phoneReceiverServer: PhoneReceiverServer? = null
     private var hlsPublisher: HlsTransportStreamPublisher? = null
     private var audioCapture: AacPlaybackCapture? = null
+    // PSLINK_REMAINING_REPAIRS_V3_SERVICE
+    private enum class HlsAudioRoute { WAITING, CHIAKI_PCM, PLAYBACK_CAPTURE, STOPPING }
+    private val hlsAudioRoute = AtomicReference(HlsAudioRoute.WAITING)
+    private val hlsAudioLock = Any()
+    private val hlsAudioHandler = Handler(Looper.getMainLooper())
+    private var hlsReorderBuffer: HlsAccessUnitReorderBuffer? = null
+    private var chiakiPcmEncoder: ChiakiPcmAacEncoder? = null
+    private var chiakiPcmRegistration: Closeable? = null
+    private var hlsProjectionForAudio: MediaProjection? = null
+    private val hlsAudioFallback = Runnable {
+        if (running.get() && hlsAudioRoute.compareAndSet(HlsAudioRoute.WAITING, HlsAudioRoute.PLAYBACK_CAPTURE)) {
+            startPlaybackCaptureFallback()
+        }
+    }
     private var stopping = false
     private var streamWidth = 0
     private var streamHeight = 0
@@ -191,51 +208,27 @@ class TvScreenStreamService : Service() {
                 }
                 publisher.start()
                 hlsPublisher = publisher
-                receiver.start()
-
-                if (Build.VERSION.SDK_INT >= 29) {
-                    if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                        try {
-                            val capture = AacPlaybackCapture(
-                                activeProjection,
-                                { frame, ptsUs ->
-                                    try {
-                                        publisher.writeAudioAccessUnit(frame, ptsUs)
-                                    } catch (audioError: Exception) {
-                                        report(
-                                            "تعذر نشر إطار AAC: " +
-                                                (audioError.localizedMessage ?: "خطأ غير معروف")
-                                        )
-                                    }
-                                },
-                                { message ->
-                                    report("تعذر التقاط صوت التطبيقات: $message")
-                                }
-                            )
-                            capture.start()
-                            audioCapture = capture
-                            report("تم تشغيل التقاط صوت التطبيقات وترميز AAC-LC.")
-                        } catch (audioError: Exception) {
-                            report(
-                                "سيستمر بث الفيديو دون صوت: " +
-                                    (audioError.localizedMessage ?: "تعذر بدء التقاط الصوت")
-                            )
-                        }
-                    } else {
-                        report(
-                            "سيستمر بث الفيديو دون صوت: إذن RECORD_AUDIO غير ممنوح."
-                        )
-                    }
-                } else {
-                    report("التقاط صوت التطبيقات يتطلب Android 10 أو أحدث.")
+                val reorder = HlsAccessUnitReorderBuffer(
+                    writeVideo = { bytes, ptsUs, keyFrame -> publisher.writeAccessUnit(bytes, ptsUs, keyFrame) },
+                    writeAudio = { bytes, ptsUs, rate, channelCount -> publisher.writeAudioAccessUnit(bytes, ptsUs, rate, channelCount) }
+                )
+                hlsReorderBuffer = reorder
+                hlsAudioRoute.set(HlsAudioRoute.WAITING)
+                hlsProjectionForAudio = activeProjection
+                chiakiPcmRegistration = ChiakiPcmHlsBridge.attach { pcm, rate, channelCount, ptsNs ->
+                    handleChiakiPcm(pcm, rate, channelCount, ptsNs)
                 }
+                receiver.start()
             }
 
             sink?.configureMediaStream(streamWidth, streamHeight, 0, 30)
             running.set(true)
             isStreaming = true
             stopping = false
+            if (phoneReceiverServer != null) {
+                hlsAudioHandler.removeCallbacks(hlsAudioFallback)
+                hlsAudioHandler.postDelayed(hlsAudioFallback, HLS_NATIVE_AUDIO_WAIT_MS)
+            }
 
             encoderThread = Thread({ drainEncoder(codec, sink) }, "PSLink-H264-Encoder").apply {
                 isDaemon = true
@@ -302,7 +295,7 @@ class TvScreenStreamService : Service() {
                                     )
 
                                     try {
-                                        hlsPublisher?.writeAccessUnit(
+                                        hlsReorderBuffer?.offerVideo(
                                             packet,
                                             info.presentationTimeUs.coerceAtLeast(0L),
                                             keyFrame
@@ -384,8 +377,19 @@ class TvScreenStreamService : Service() {
         projection = null
         if (stopProjection) runCatching { oldProjection?.stop() }
 
+        hlsAudioHandler.removeCallbacks(hlsAudioFallback)
+        runCatching { chiakiPcmRegistration?.close() }
+        chiakiPcmRegistration = null
+        val oldChiakiEncoder = synchronized(hlsAudioLock) {
+            hlsAudioRoute.set(HlsAudioRoute.STOPPING)
+            chiakiPcmEncoder.also { chiakiPcmEncoder = null }
+        }
+        runCatching { oldChiakiEncoder?.stop() }
         runCatching { audioCapture?.stop() }
         audioCapture = null
+        runCatching { hlsReorderBuffer?.close() }
+        hlsReorderBuffer = null
+        hlsProjectionForAudio = null
 
         runCatching { hlsPublisher?.stop() }
         hlsPublisher = null
@@ -396,6 +400,97 @@ class TvScreenStreamService : Service() {
         stopSelf()
         report("تم إيقاف بث الشاشة.")
         stopping = false
+    }
+
+    private fun handleChiakiPcm(pcm: ByteArray, rate: Int, channelCount: Int, ptsNs: Long) {
+        var encoderToUse: ChiakiPcmAacEncoder? = null
+        var startFallback = false
+        synchronized(hlsAudioLock) {
+            when (hlsAudioRoute.get()) {
+                HlsAudioRoute.WAITING -> {
+                    if (hlsReorderBuffer == null || hlsProjectionForAudio == null) return
+                    hlsAudioHandler.removeCallbacks(hlsAudioFallback)
+                    hlsAudioRoute.set(HlsAudioRoute.CHIAKI_PCM)
+                    val created = ChiakiPcmAacEncoder(
+                        rate,
+                        channelCount,
+                        { frame, ptsUs, outputRate, outputChannels ->
+                            val accepted = runCatching {
+                                hlsReorderBuffer?.offerAudio(frame, ptsUs, outputRate, outputChannels) ?: false
+                            }.getOrElse { error ->
+                                report("تعذر إدراج AAC الأصلي في HLS: ${error.localizedMessage ?: "خطأ"}")
+                                false
+                            }
+                            if (!accepted) report("تأخر إطار صوت Chiaki أو تعذر إدراجه في طابور HLS.")
+                        },
+                        { message ->
+                            report("تعذر ترميز صوت Chiaki إلى HLS: $message")
+                            switchHlsAudioToFallback()
+                        }
+                    )
+                    chiakiPcmEncoder = created
+                    try {
+                        created.start()
+                        encoderToUse = created
+                    } catch (error: Exception) {
+                        chiakiPcmEncoder = null
+                        hlsAudioRoute.set(HlsAudioRoute.PLAYBACK_CAPTURE)
+                        report("تعذر بدء AAC لصوت Chiaki: ${error.localizedMessage ?: "خطأ"}")
+                        startFallback = true
+                    }
+                }
+                HlsAudioRoute.CHIAKI_PCM -> encoderToUse = chiakiPcmEncoder
+                HlsAudioRoute.PLAYBACK_CAPTURE, HlsAudioRoute.STOPPING -> return
+            }
+        }
+        if (startFallback) hlsAudioHandler.post { startPlaybackCaptureFallback() }
+        encoderToUse?.offer(pcm, rate, channelCount, ptsNs)
+    }
+
+    private fun switchHlsAudioToFallback() {
+        val oldEncoder = synchronized(hlsAudioLock) {
+            if (!hlsAudioRoute.compareAndSet(HlsAudioRoute.CHIAKI_PCM, HlsAudioRoute.PLAYBACK_CAPTURE)) return
+            chiakiPcmEncoder.also { chiakiPcmEncoder = null }
+        }
+        // Keep the Chiaki callback non-blocking while the old encoder is drained.
+        Thread({
+            runCatching { oldEncoder?.stop() }
+            hlsAudioHandler.post { startPlaybackCaptureFallback() }
+        }, "PSLink-HLS-Audio-Fallback").apply { isDaemon = true; start() }
+    }
+
+    private fun startPlaybackCaptureFallback() {
+        if (!running.get() || hlsAudioRoute.get() != HlsAudioRoute.PLAYBACK_CAPTURE) return
+        val activeProjection = hlsProjectionForAudio
+        val reorder = hlsReorderBuffer
+        if (activeProjection == null || reorder == null || audioCapture != null) return
+        if (Build.VERSION.SDK_INT < 29) {
+            report("لا يتوفر التقاط صوت التطبيقات قبل Android 10؛ سيستمر HLS دون صوت.")
+            return
+        }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            report("لم يصل صوت Chiaki ولا يمكن تفعيل البديل لأن إذن RECORD_AUDIO غير ممنوح.")
+            return
+        }
+        synchronized(hlsAudioLock) {
+            if (!running.get() || hlsAudioRoute.get() != HlsAudioRoute.PLAYBACK_CAPTURE || audioCapture != null) return
+            try {
+                val capture = AacPlaybackCapture(
+                    activeProjection,
+                    { frame, ptsUs ->
+                        runCatching { reorder.offerAudio(frame, ptsUs, 48000, 2) }
+                            .onFailure { report("تعذر إدراج صوت Playback Capture في HLS: ${it.localizedMessage ?: "خطأ"}") }
+                    },
+                    { message -> report("تعذر التقاط صوت التطبيقات: $message") }
+                )
+                capture.start()
+                audioCapture = capture
+                report("لم يصل صوت Chiaki؛ فُعّل Playback Capture كمسار بديل منفرد.")
+            } catch (error: Exception) {
+                report("سيستمر HLS دون صوت: ${error.localizedMessage ?: "تعذر بدء التقاط الصوت البديل"}")
+            }
+        }
     }
 
     private fun createNotificationChannel() {

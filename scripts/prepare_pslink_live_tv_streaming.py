@@ -2064,6 +2064,8 @@ def patch_stream_activity_wiring() -> None:
 		}
 		viewModel.session.decodedAudioSampleCallback = { data, sampleRate, channels, ptsNs ->
 			psLinkTvClient?.sendAudioSample(data, sampleRate, channels, ptsNs)
+			com.pslink.mobile.capture.ChiakiPcmHlsBridge.publish(data, sampleRate, channels, ptsNs)
+			// PSLINK_REMAINING_REPAIRS_V3_CHIAKI_HLS_AUDIO
 		}
 
 '''

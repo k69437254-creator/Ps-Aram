@@ -105,12 +105,12 @@ The phone exposes `POST /receiver/roku/stream-url` on the existing PS Link
 port. The endpoint checks the six-digit pairing code and returns the HLS URL
 only after the first playlist is ready.
 
-Media limitation: the HLS publisher carries H.264 and can optionally mux AAC
-from Android Playback Capture when Android permissions and source-app policy
-permit it. This does not establish that PS5/Chiaki game audio is captured.
-The separate Chiaki decoded-PCM path targets Android TV and is not proven by
-the HLS fixture. Do not advertise complete audio/video support for Roku,
-Tizen, webOS or Xbox before real audio and device playback are verified.
+Media limitation: the phone HLS path prioritizes decoded Chiaki PCM, encodes AAC-LC,
+and uses Android Playback Capture only as a mutually exclusive fallback when
+Chiaki PCM is absent or its encoder fails. H.264 and AAC access units pass through
+a bounded shared-PTS reorder window before muxing. This source-level integration
+does not prove PS5 audio capture, long-session A/V synchronization, or playback
+on receiver devices; validate real media and hardware before advertising full support.
 
 Xbox Edge production hosting requires secure WebSocket/HTTP delivery through
 a trusted reverse proxy if the receiver page is served over HTTPS.
@@ -140,10 +140,10 @@ subtitles rather than the browser WebSocket client.
 
 ### Media limitations
 
-The current phone HLS publisher carries H.264 and may carry AAC from Android
-Playback Capture when allowed by the source app and Android permission state.
-Neither this conditional path nor the synthetic AAC integration fixture proves
-capture of real PS5 game audio or A/V synchronization.
+The phone HLS implementation now routes Chiaki decoded PCM through AAC-LC encoding
+first and starts Playback Capture only as an exclusive fallback when Chiaki audio
+is unavailable. Its bounded PTS scheduler improves callback ordering, but
+synthetic tests do not prove real PS5 audio capture or hardware-clock drift correction.
 
 Tizen and webOS caption panels display text; they are not calibrated
 geometric overlays on the video. Roku's HLS audio handling is not validated.
@@ -152,3 +152,5 @@ Xbox Edge is a browser receiver, not a native Xbox application.
 Physical-device validation must be recorded separately from automated
 source tests.
 <!-- /PSLINK_PLATFORM_COMPLETION_DOCS_V1 -->
+
+<!-- PSLINK_REMAINING_REPAIRS_V3_HLS_AUDIO_PATH -->

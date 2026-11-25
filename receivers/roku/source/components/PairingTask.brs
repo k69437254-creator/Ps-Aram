@@ -16,6 +16,23 @@ sub run()
         return
     end if
 
+    secure = Left(LCase(host), 6) = "wss://"
+    wsUrl = ""
+    if secure then
+        authority = secureProxyAuthority(host)
+        if authority = invalid then
+            m.top.error = "عنوان WSS يجب أن يكون أصلًا موثوقًا بلا مسار إضافي"
+            return
+        end if
+        wsUrl = "wss://" + authority + "/subtitle"
+    else
+        if Instr(1, host, "://") > 0 or Instr(1, host, "/") > 0 or Instr(1, host, "?") > 0 or Instr(1, host, "#") > 0 then
+            m.top.error = "أدخل مضيف LAN أو عنوان WSS موثوقًا"
+            return
+        end if
+        wsUrl = "ws://" + host + ":8765/subtitle"
+    end if
+
     retryCount = 0
     maxRetries = 5
     backoffMs = 3000
@@ -25,7 +42,14 @@ sub run()
         msgPort = CreateObject("roMessagePort")
         ws.SetMessagePort(msgPort)
 
-        if not ws.SetUrl("ws://" + host + ":8765/subtitle") then
+        if secure then
+            if not ws.SetCertificatesFile("common:/certs/ca-bundle.crt") then
+                m.top.error = "تعذر تهيئة مخزن شهادات TLS في Roku"
+                return
+            end if
+        end if
+
+        if not ws.SetUrl(wsUrl) then
             m.top.error = "عنوان WebSocket للهاتف غير صالح"
             return
         end if
@@ -106,6 +130,18 @@ sub run()
         m.top.error = "تعذر الحصول على رابط بث HLS من الهاتف"
     end if
 end sub
+
+function secureProxyAuthority(endpoint as Dynamic) as Dynamic
+    if endpoint = invalid then return invalid
+    value = endpoint.ToStr()
+    if Right(value, 1) = "/" then value = Left(value, Len(value) - 1)
+    if Left(LCase(value), 6) <> "wss://" then return invalid
+
+    authority = Mid(value, 7)
+    if authority = "" then return invalid
+    if Instr(1, authority, "/") > 0 or Instr(1, authority, "?") > 0 or Instr(1, authority, "#") > 0 or Instr(1, authority, "@") > 0 or Instr(1, authority, " ") > 0 or Instr(1, authority, Chr(9)) > 0 then return invalid
+    return authority
+end function
 
 function isSixDigitCode(code as Dynamic) as Boolean
     if code = invalid or Len(code) <> 6 then return false

@@ -5,6 +5,8 @@ cd "$ROOT"
 python3 scripts/validate_package.py
 bash -n scripts/bootstrap.sh scripts/build.sh scripts/push-github.sh scripts/check-ps5-wiring.sh
 python3 -m py_compile scripts/prepare_upstream.py scripts/validate_package.py scripts/prepare_pslink_upstream.py scripts/prepare_pslink_stream_recording.py scripts/prepare_pslink_audio_recording.py scripts/prepare_pslink_complete_fix.py scripts/prepare_pslink_live_tv_streaming.py
+# PSLINK_REMAINING_REPAIRS_V3: tests for Chiaki PCM -> AAC -> HLS routing and PTS ordering
+python3 tests/test_hls_audio_repair_contracts.py
 # PSLINK_RESOURCE_BACKUP_GUARD_V1
 python3 scripts/test_pslink_backup_storage.py
 for resource_dir in mobile/src/main/res tv/app/src/main/res third_party/chiaki-ng/android/app/src/main/res; do

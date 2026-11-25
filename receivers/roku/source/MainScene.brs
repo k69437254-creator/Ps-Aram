@@ -41,7 +41,7 @@ sub startPairing()
 end sub
 
 sub onStreamUrl()
-    url = m.task.url
+    url = rewriteSecureHlsUrl(m.task.url, m.top.phoneHost)
     if not isValidStreamUrl(url) then
         m.status.text = "رابط بث HLS غير صالح"
         return
@@ -50,6 +50,9 @@ sub onStreamUrl()
     content = CreateObject("roSGNode", "ContentNode")
     content.url = url
     content.streamFormat = "hls"
+    if Left(LCase(url), 8) = "https://"
+        content.HttpCertificatesFile = "common:/certs/ca-bundle.crt"
+    end if
 
     m.player.content = content
     m.player.control = "play"
@@ -106,6 +109,35 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     end if
 
     return false
+end function
+
+function rewriteSecureHlsUrl(url as Dynamic, phoneHost as Dynamic) as Dynamic
+    authority = secureProxyAuthority(phoneHost)
+    if authority = invalid then return url
+    if url = invalid or Len(url) > 2048 then return invalid
+    if Left(LCase(url), 7) <> "http://" then return invalid
+
+    remainder = Mid(url, 8)
+    pathStart = Instr(1, remainder, "/")
+    if pathStart < 2 then return invalid
+    path = Mid(remainder, pathStart)
+    if Left(LCase(path), 5) <> "/hls/" then return invalid
+    if Right(LCase(path), 10) <> "index.m3u8" then return invalid
+    if Instr(1, path, "?") > 0 or Instr(1, path, "#") > 0 then return invalid
+
+    return "https://" + authority + path
+end function
+
+function secureProxyAuthority(endpoint as Dynamic) as Dynamic
+    if endpoint = invalid then return invalid
+    value = endpoint.ToStr()
+    if Right(value, 1) = "/" then value = Left(value, Len(value) - 1)
+    if Left(LCase(value), 6) <> "wss://" then return invalid
+
+    authority = Mid(value, 7)
+    if authority = "" then return invalid
+    if Instr(1, authority, "/") > 0 or Instr(1, authority, "?") > 0 or Instr(1, authority, "#") > 0 or Instr(1, authority, "@") > 0 or Instr(1, authority, " ") > 0 or Instr(1, authority, Chr(9)) > 0 then return invalid
+    return authority
 end function
 
 ' PSLINK_ROKU_SCENE_VALIDATION_V1
