@@ -16,6 +16,8 @@ object PsLinkProtocol {
     const val KIND_HEARTBEAT_ACK = "heartbeat_ack"
     const val KIND_SUBTITLE = "subtitle"
     const val KIND_ACK = "ack"
+    const val MAX_AUTH_FRAME_BYTES = 16 * 1024
+    const val MAX_CONTROL_FRAME_BYTES = 64 * 1024
 
     fun socketUrl(input: String): String? {
         val value = input.trim()
@@ -50,13 +52,16 @@ object PsLinkProtocol {
         return "$scheme://$host$effectivePort$PATH"
     }
 
-    fun auth(code: String, sessionId: String = ""): String = JSONObject()
-        .put("v", VERSION)
-        .put("kind", KIND_AUTH)
-        .put("code", code.trim())
-        .put("client", "PS Link Mobile")
-        .put("sessionId", sessionId.take(80))
-        .toString()
+    fun auth(code: String, sessionId: String): String {
+        require(SessionIds.validate(sessionId) != null) { "Invalid session ID" }
+        return JSONObject()
+            .put("v", VERSION)
+            .put("kind", KIND_AUTH)
+            .put("code", code.trim())
+            .put("client", "PS Link Mobile")
+            .put("sessionId", sessionId)
+            .toString()
+    }
 }
 
 data class SubtitlePacket(
@@ -65,18 +70,21 @@ data class SubtitlePacket(
     val translatedText: String,
     val timestampMs: Long = System.currentTimeMillis(),
     val messageId: String = UUID.randomUUID().toString(),
-    val sessionId: String = ""
+    val sessionId: String
 ) {
-    fun toJson(): String = JSONObject()
-        .put("v", PsLinkProtocol.VERSION)
-        .put("kind", PsLinkProtocol.KIND_SUBTITLE)
-        .put("game", game.take(100))
-        .put("source", sourceText.take(4000))
-        .put("translation", translatedText.take(4000))
-        .put("timestamp", timestampMs)
-        .put("id", messageId)
-        .put("sessionId", sessionId.take(80))
-        .toString()
+    fun toJson(): String {
+        require(SessionIds.validate(sessionId) != null) { "Invalid session ID" }
+        return JSONObject()
+            .put("v", PsLinkProtocol.VERSION)
+            .put("kind", PsLinkProtocol.KIND_SUBTITLE)
+            .put("game", game.take(100))
+            .put("source", sourceText.take(4000))
+            .put("translation", translatedText.take(4000))
+            .put("timestamp", timestampMs)
+            .put("id", messageId)
+            .put("sessionId", sessionId)
+            .toString()
+    }
 
     companion object {
         @Throws(JSONException::class)
@@ -86,13 +94,15 @@ data class SubtitlePacket(
             require(json.optString("kind") == PsLinkProtocol.KIND_SUBTITLE) { "Unexpected packet type" }
             val id = json.optString("id", "")
             require(id.isNotBlank() && id.length <= 80) { "Missing packet ID" }
+            val sessionId = SessionIds.validate(json.optString("sessionId", ""))
+                ?: throw IllegalArgumentException("Invalid session ID")
             return SubtitlePacket(
                 game = json.optString("game", "").take(100),
                 sourceText = json.optString("source", "").take(4000),
                 translatedText = json.optString("translation", "").take(4000),
                 timestampMs = json.optLong("timestamp", System.currentTimeMillis()),
                 messageId = id,
-                sessionId = json.optString("sessionId", "").take(80)
+                sessionId = sessionId
             )
         }
     }

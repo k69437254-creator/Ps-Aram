@@ -197,6 +197,8 @@ jobs:
         with:
           name: PS-Link-Test-Reports-and-HLS-Evidence
           path: |
+            core/shared/build/test-results/testDebugUnitTest/**
+            core/shared/build/reports/tests/testDebugUnitTest/**
             mobile/build/test-results/testDebugUnitTest/**
             mobile/build/reports/tests/testDebugUnitTest/**
             mobile/build/hls-integration-test/**

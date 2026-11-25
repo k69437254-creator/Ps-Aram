@@ -4,6 +4,9 @@ package com.pslink.mobile.capture
 import com.pslink.core.PairingCode
 import com.pslink.core.PairingAttemptLimiter
 import com.pslink.core.OriginAllowlist
+import com.pslink.core.ConnectionSlotLimiter
+import com.pslink.core.SessionIds
+import com.pslink.core.BoundedByteAccumulator
 import com.pslink.core.SubtitlePacket
 import com.pslink.core.PsLinkProtocol
 import io.ktor.http.ContentType
@@ -12,9 +15,10 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.origin
-import io.ktor.server.request.receiveText
+import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.post
+import io.ktor.server.routing.options
 import io.ktor.server.application.install
 import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
@@ -30,15 +34,18 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
+import org.json.JSONException
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -47,6 +54,18 @@ import java.security.SecureRandom
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.coroutineContext
+
+private sealed class LimitedJsonBody {
+    data class Parsed(val value: JSONObject) : LimitedJsonBody()
+    object Invalid : LimitedJsonBody()
+    object TooLarge : LimitedJsonBody()
+}
+
+private data class ActivePhoneSession(
+    val sessionId: String,
+    val slot: ConnectionSlotLimiter.Slot
+)
 
 /**
  * Phone-side PS Link receiver endpoint for Tizen/webOS clients.
@@ -75,7 +94,12 @@ class PhoneReceiverServer(
             }
         }
     }
-    private val sessions = ConcurrentHashMap<DefaultWebSocketServerSession, String>()
+    private val sessions = ConcurrentHashMap<DefaultWebSocketServerSession, ActivePhoneSession>()
+    private val connectionLeases = ConcurrentHashMap<Job, ConnectionSlotLimiter.Slot>()
+    private val sessionLock = Any()
+    private val sessionSlots = ConnectionSlotLimiter(MAX_SESSIONS)
+    private val connectionSlots = ConnectionSlotLimiter(MAX_CONNECTIONS)
+    private val stopping = AtomicBoolean(true)
     private val streamAvailable = AtomicBoolean(false)
     private val subtitleHistoryLock = Any()
     private val subtitleHistory = mutableListOf<Pair<Long, String>>()
@@ -83,14 +107,57 @@ class PhoneReceiverServer(
     private var engine: ApplicationEngine? = null
     private var serverScope: CoroutineScope? = null
 
+    private suspend fun receiveLimitedJson(call: ApplicationCall, limitBytes: Int): LimitedJsonBody {
+        val contentLength = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        if (contentLength != null && contentLength > limitBytes) return LimitedJsonBody.TooLarge
+
+        val channel = call.receiveChannel()
+        val accumulator = BoundedByteAccumulator(limitBytes)
+        val buffer = ByteArray(minOf(limitBytes + 1, 8 * 1024))
+        var received = 0
+        while (received <= limitBytes) {
+            val readLimit = minOf(buffer.size, limitBytes + 1 - received)
+            val count = channel.readAvailable(buffer, 0, readLimit)
+            if (count < 0) break
+            if (count == 0) continue
+            received += count
+            if (!accumulator.append(buffer, 0, count)) return LimitedJsonBody.TooLarge
+        }
+
+        val raw = accumulator.toByteArray() ?: return LimitedJsonBody.TooLarge
+        return try {
+            LimitedJsonBody.Parsed(JSONObject(String(raw, Charsets.UTF_8)))
+        } catch (_: JSONException) {
+            LimitedJsonBody.Invalid
+        }
+    }
+
     @Synchronized fun start() {
         if (engine != null) return
+        stopping.set(false)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         serverScope = scope
         try {
             engine = embeddedServer(CIO, host = "0.0.0.0", port = PsLinkProtocol.PORT) {
-                install(WebSockets)
+                install(WebSockets) {
+                    maxFrameSize = MAX_CONTROL_FRAME_BYTES.toLong() + 1L
+                    pingInterval = 25_000L
+                    timeoutMillis = SESSION_IDLE_TIMEOUT_MS
+                }
                 routing {
+                    options("/hls/{token}/{name}") {
+                        val origin = call.request.headers["Origin"]
+                        if (origin != null && !originAllowlist.allows(call.request.headers["Origin"])) {
+                            call.respond(HttpStatusCode.Forbidden)
+                            return@options
+                        }
+                        if (origin != null) {
+                            call.response.headers.append(HttpHeaders.AccessControlAllowOrigin, origin)
+                            call.response.headers.append(HttpHeaders.Vary, HttpHeaders.Origin)
+                            call.response.headers.append(HttpHeaders.AccessControlAllowMethods, "GET, OPTIONS")
+                        }
+                        call.respond(HttpStatusCode.NoContent)
+                    }
                     post("/receiver/roku/stream-url") {
                         val pairingSource = call.request.origin.remoteHost
                         if (!originAllowlist.allows(call.request.headers["Origin"])) {
@@ -102,10 +169,13 @@ class PhoneReceiverServer(
                             call.respond(HttpStatusCode.TooManyRequests)
                             return@post
                         }
-                        val request = runCatching {
-                            JSONObject(call.receiveText())
-                        }.getOrNull()
-
+                        val body = receiveLimitedJson(call, MAX_HTTP_BODY_BYTES)
+                        if (body === LimitedJsonBody.TooLarge) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
+                            call.respond(HttpStatusCode.PayloadTooLarge)
+                            return@post
+                        }
+                        val request = (body as? LimitedJsonBody.Parsed)?.value
                         if (request == null) {
                             pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.BadRequest)
@@ -151,10 +221,13 @@ class PhoneReceiverServer(
                             call.respond(HttpStatusCode.TooManyRequests)
                             return@post
                         }
-                        val request = runCatching {
-                            JSONObject(call.receiveText())
-                        }.getOrNull()
-
+                        val body = receiveLimitedJson(call, MAX_HTTP_BODY_BYTES)
+                        if (body === LimitedJsonBody.TooLarge) {
+                            pairingAttempts.recordFailure(pairingSource, monotonicMillis())
+                            call.respond(HttpStatusCode.PayloadTooLarge)
+                            return@post
+                        }
+                        val request = (body as? LimitedJsonBody.Parsed)?.value
                         if (request == null) {
                             pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.BadRequest)
@@ -211,6 +284,7 @@ class PhoneReceiverServer(
                     }
 
                     get("/hls/{token}/index.m3u8") {
+                        val origin = call.request.headers["Origin"]
                         if (!originAllowlist.allows(call.request.headers["Origin"])) {
                             call.respond(HttpStatusCode.Forbidden)
                             return@get
@@ -225,8 +299,15 @@ class PhoneReceiverServer(
                         } else {
                             call.response.headers.append(
                                 HttpHeaders.CacheControl,
-                                "no-cache, no-store, must-revalidate"
+                                "no-store, private"
                             )
+                            call.response.headers.append(HttpHeaders.Vary, HttpHeaders.Origin)
+                            if (origin != null) {
+                                call.response.headers.append(
+                                    HttpHeaders.AccessControlAllowOrigin,
+                                    origin
+                                )
+                            }
                             call.respondBytes(
                                 playlist.readBytes(),
                                 ContentType.parse("application/vnd.apple.mpegurl")
@@ -234,6 +315,7 @@ class PhoneReceiverServer(
                         }
                     }
                     get("/hls/{token}/{name}") {
+                        val origin = call.request.headers["Origin"]
                         if (!originAllowlist.allows(call.request.headers["Origin"])) {
                             call.respond(HttpStatusCode.Forbidden)
                             return@get
@@ -252,12 +334,44 @@ class PhoneReceiverServer(
                         if (segment.parentFile != directory || !segment.isFile) {
                             call.respond(HttpStatusCode.NotFound)
                         } else {
-                            call.response.headers.append(HttpHeaders.CacheControl, "no-cache")
+                            call.response.headers.append(HttpHeaders.CacheControl, "no-store, private")
+                            call.response.headers.append(HttpHeaders.Vary, HttpHeaders.Origin)
+                            if (origin != null) {
+                                call.response.headers.append(
+                                    HttpHeaders.AccessControlAllowOrigin,
+                                    origin
+                                )
+                            }
                             call.respondBytes(segment.readBytes(), ContentType.parse("video/mp2t"))
                         }
                     }
                     webSocket(PsLinkProtocol.PATH) {
                         val pairingSource = call.request.origin.remoteHost
+                        val connectionJob = coroutineContext[Job]
+                            ?: throw IllegalStateException("WebSocket connection has no Job")
+                        val connectionSlot = connectionSlots.tryAcquire()
+                        if (connectionSlot == null) {
+                            reject("TOO_MANY_CONNECTIONS", "تم بلوغ الحد الأقصى لاتصالات الهاتف", false)
+                            return@webSocket
+                        }
+                        val connectionRegistered = synchronized(sessionLock) {
+                            if (stopping.get()) false
+                            else {
+                                connectionLeases[connectionJob] = connectionSlot
+                                true
+                            }
+                        }
+                        if (!connectionRegistered) {
+                            connectionSlot.close()
+                            reject("SERVER_STOPPING", "خادم الهاتف قيد الإيقاف", false)
+                            return@webSocket
+                        }
+                        connectionJob.invokeOnCompletion {
+                            synchronized(sessionLock) {
+                                connectionLeases.remove(connectionJob, connectionSlot)
+                            }
+                            connectionSlot.close()
+                        }
                         if (!originAllowlist.allows(call.request.headers["Origin"])) {
                             reject("ORIGIN_NOT_ALLOWED", "مصدر اتصال الويب غير مصرح به")
                             return@webSocket
@@ -277,6 +391,10 @@ class PhoneReceiverServer(
                             reject("INVALID_AUTH_FRAME", "طلب الاقتران غير صالح")
                             return@webSocket
                         }
+                        if (authFrame.data.size > MAX_AUTH_FRAME_BYTES) {
+                            reject("AUTH_FRAME_TOO_LARGE", "بيانات الاقتران أكبر من الحد المسموح")
+                            return@webSocket
+                        }
                         val auth = runCatching { JSONObject(authFrame.readText()) }.getOrNull()
                         if (auth == null ||
                             auth.optInt("v", -1) != PsLinkProtocol.VERSION ||
@@ -289,15 +407,30 @@ class PhoneReceiverServer(
                             reject("INVALID_PAIRING_CODE", "رمز اقتران الهاتف غير صحيح")
                             return@webSocket
                         }
-                        val authenticatedSessionId = auth.optString("sessionId", "").take(80)
-                        if (authenticatedSessionId.isBlank()) {
-                            reject("INVALID_SESSION_ID", "معرّف الجلسة مطلوب؛ حدّث المستقبل")
+                        val authenticatedSessionId = SessionIds.validate(auth.optString("sessionId", ""))
+                        if (authenticatedSessionId == null) {
+                            reject("INVALID_SESSION_ID", "معرّف الجلسة فارغ أو أطول من الحد المسموح")
                             return@webSocket
                         }
-                        pairingAttempts.recordSuccess(pairingSource)
-
-                        sessions[this] = authenticatedSessionId
+                        val sessionSlot = sessionSlots.tryAcquire()
+                        if (sessionSlot == null) {
+                            reject("TOO_MANY_SESSIONS", "تم بلوغ الحد الأقصى لاتصالات الهاتف")
+                            return@webSocket
+                        }
+                        val activeSession = ActivePhoneSession(authenticatedSessionId, sessionSlot)
                         try {
+                            val registered = synchronized(sessionLock) {
+                                if (stopping.get()) false
+                                else {
+                                    sessions[this] = activeSession
+                                    true
+                                }
+                            }
+                            if (!registered) {
+                                reject("SERVER_STOPPING", "خادم الهاتف قيد الإيقاف")
+                                return@webSocket
+                            }
+                            pairingAttempts.recordSuccess(pairingSource)
                             send(Frame.Text(JSONObject()
                                 .put("v", PsLinkProtocol.VERSION)
                                 .put("kind", PsLinkProtocol.KIND_READY)
@@ -308,6 +441,17 @@ class PhoneReceiverServer(
                                 when (frame) {
                                     is Frame.Close -> break
                                     is Frame.Text -> {
+                                        if (frame.data.size > MAX_CONTROL_FRAME_BYTES) {
+                                            send(Frame.Text(JSONObject()
+                                                .put("v", PsLinkProtocol.VERSION)
+                                                .put("kind", "error")
+                                                .put("errorCode", "CONTROL_FRAME_TOO_LARGE")
+                                                .put("message", "رسالة التحكم أكبر من الحد المسموح")
+                                                .put("sessionId", authenticatedSessionId)
+                                                .toString()))
+                                            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "CONTROL_FRAME_TOO_LARGE"))
+                                            break
+                                        }
                                         val message = runCatching {
                                             JSONObject(frame.readText())
                                         }.getOrNull()
@@ -325,13 +469,17 @@ class PhoneReceiverServer(
                                 }
                             }
                         } finally {
-                            sessions.remove(this, authenticatedSessionId)
+                            synchronized(sessionLock) {
+                                sessions.remove(this, activeSession)
+                            }
+                            sessionSlot.close()
                         }
                     }
                 }
             }.start(wait = false)
             activeServer = this
         } catch (error: Exception) {
+            stopping.set(true)
             engine = null
             scope.cancel()
             serverScope = null
@@ -384,10 +532,10 @@ class PhoneReceiverServer(
 
         if (targets.isNotEmpty()) {
             scope.launch {
-                targets.forEach { (session, sessionId) ->
+                targets.forEach { (session, activeSession) ->
                     runCatching {
                         val boundPayload = JSONObject(payload)
-                            .put("sessionId", sessionId)
+                            .put("sessionId", activeSession.sessionId)
                             .toString()
                         session.send(Frame.Text(boundPayload))
                     }
@@ -401,11 +549,12 @@ class PhoneReceiverServer(
 
     /** Called after the first complete IDR-aligned HLS segment is published. */
     fun notifyStreamAvailable() {
+        if (stopping.get()) return
         streamAvailable.set(true)
         val scope = serverScope ?: return
         scope.launch {
-            sessions.entries.toList().forEach { (session, sessionId) ->
-                val messageReady = streamUrlMessage(sessionId) ?: return@forEach
+            sessions.entries.toList().forEach { (session, activeSession) ->
+                val messageReady = streamUrlMessage(activeSession.sessionId) ?: return@forEach
                 runCatching { session.send(Frame.Text(messageReady)) }
             }
         }
@@ -435,20 +584,44 @@ class PhoneReceiverServer(
     }
 
     @Synchronized fun stop() {
+        stopping.set(true)
         if (activeServer === this) activeServer = null
-        sessions.clear()
-        runCatching { engine?.stop(gracePeriodMillis = 300L, timeoutMillis = 1_000L) }
+        val stoppingEngine = engine
         engine = null
-        serverScope?.cancel()
+        val stoppingScope = serverScope
         serverScope = null
+        stoppingScope?.cancel()
         streamAvailable.set(false)
         synchronized(subtitleHistoryLock) {
             subtitleHistory.clear()
             subtitleSequence = 0L
         }
+        synchronized(sessionLock) {
+            connectionLeases.values.forEach { it.close() }
+            connectionLeases.clear()
+            sessions.values.forEach { it.slot.close() }
+            sessions.clear()
+        }
+        try {
+            stoppingEngine?.stop(gracePeriodMillis = 300L, timeoutMillis = 1_000L)
+        } finally {
+            synchronized(sessionLock) {
+                connectionLeases.values.forEach { it.close() }
+                connectionLeases.clear()
+                sessions.values.forEach { it.slot.close() }
+                sessions.clear()
+            }
+        }
     }
 
     companion object {
+        const val MAX_AUTH_FRAME_BYTES = PsLinkProtocol.MAX_AUTH_FRAME_BYTES
+        const val MAX_CONTROL_FRAME_BYTES = PsLinkProtocol.MAX_CONTROL_FRAME_BYTES
+        const val MAX_HTTP_BODY_BYTES = 32 * 1024
+        const val MAX_SESSIONS = 8
+        const val MAX_CONNECTIONS = 16
+        const val SESSION_IDLE_TIMEOUT_MS = 90_000L
+
         @Volatile
         private var activeServer: PhoneReceiverServer? = null
 

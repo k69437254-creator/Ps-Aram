@@ -97,7 +97,8 @@ class V2ProtocolSourceContracts(unittest.TestCase):
                 self.assertIn("activeSession.get() === sessionJob", server)
                 self.assertIn('optString("sessionId", "") != authenticatedSessionId', server)
                 self.assertIn('.put("sessionId", authenticatedSessionId)', server)
-                self.assertIn('json.optString("sessionId", "").take(80) != activeSessionId.get()', server)
+                self.assertIn('SessionIds.validate(json.optString("sessionId", "")) != activeSessionId.get()', server)
+                self.assertIn('SessionIds.validate(auth.optString("sessionId", ""))', server)
                 self.assertIn("originAllowlist.allows(call.request.headers[\"Origin\"])", server)
 
         client = (
@@ -116,11 +117,65 @@ class V2ProtocolSourceContracts(unittest.TestCase):
             5,
         )
         self.assertGreaterEqual(phone.count("pairingAttempts.isAllowed(pairingSource"), 3)
-        self.assertIn("private val sessions = ConcurrentHashMap<DefaultWebSocketServerSession, String>()", phone)
-        self.assertIn('val authenticatedSessionId = auth.optString("sessionId", "").take(80)', phone)
+        self.assertIn(
+            "private val sessions = ConcurrentHashMap<DefaultWebSocketServerSession, ActivePhoneSession>()",
+            phone,
+        )
+        self.assertIn('SessionIds.validate(auth.optString("sessionId", ""))', phone)
+        self.assertIn("sessionSlots.tryAcquire()", phone)
+        self.assertIn("connectionSlots.tryAcquire()", phone)
+        self.assertIn("connectionLeases.values.forEach { it.close() }", phone)
+        self.assertIn("MAX_CONNECTIONS = 16", phone)
+        self.assertNotIn("sessions.size >= MAX_SESSIONS", phone)
         self.assertIn('message.optString("sessionId", "") == authenticatedSessionId', phone)
         self.assertIn('.put("sessionId", authenticatedSessionId)', phone)
         self.assertIn("streamUrlMessage(sessionId)", phone)
+
+    def test_hls_cors_and_receiver_transport_limits_are_explicit(self):
+        phone = (
+            ROOT / "mobile/src/main/java/com/pslink/mobile/capture/PhoneReceiverServer.kt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("HttpHeaders.AccessControlAllowOrigin", phone)
+        self.assertIn("HttpHeaders.Vary", phone)
+        self.assertIn("no-store, private", phone)
+        self.assertIn("MAX_AUTH_FRAME_BYTES", phone)
+        self.assertIn("MAX_CONTROL_FRAME_BYTES", phone)
+        self.assertIn("MAX_HTTP_BODY_BYTES", phone)
+        self.assertIn("MAX_SESSIONS", phone)
+        self.assertIn("SESSION_IDLE_TIMEOUT_MS", phone)
+        self.assertIn("call.receiveChannel()", phone)
+        self.assertIn("BoundedByteAccumulator(limitBytes)", phone)
+        self.assertIn("HttpStatusCode.PayloadTooLarge", phone)
+        self.assertIn("CONTROL_FRAME_TOO_LARGE", phone)
+
+        for path in (
+            "tv/app/src/main/java/com/pslink/tv/TvSubtitleServer.kt",
+            "tv-google/app/src/main/java/com/pslink/tvgoogle/TvSubtitleServer.kt",
+            "tv-fire/app/src/main/java/com/pslink/tvfire/TvSubtitleServer.kt",
+        ):
+            with self.subTest(server=path):
+                server = (ROOT / path).read_text(encoding="utf-8")
+                self.assertIn("frame.data.size > PsLinkProtocol.MAX_CONTROL_FRAME_BYTES", server)
+                self.assertIn("CONTROL_FRAME_TOO_LARGE", server)
+                self.assertNotIn("frame.data.size > 64 * 1024) continue", server)
+                self.assertIn("connectionSlots.tryAcquire()", server)
+                self.assertIn("connectionLeases.values.forEach { it.close() }", server)
+
+    def test_tv_media_queues_have_packet_and_byte_budgets(self):
+        for path in (
+            "tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt",
+            "tv-google/app/src/main/java/com/pslink/tvgoogle/TvMediaPlayer.kt",
+            "tv-fire/app/src/main/java/com/pslink/tvfire/TvMediaPlayer.kt",
+        ):
+            with self.subTest(server=path):
+                player = (ROOT / path).read_text(encoding="utf-8")
+                self.assertIn("MAX_VIDEO_PACKET_BYTES", player)
+                self.assertIn("MAX_AUDIO_PACKET_BYTES", player)
+                self.assertIn("VIDEO_QUEUE_BYTE_BUDGET", player)
+                self.assertIn("AUDIO_QUEUE_BYTE_BUDGET", player)
+                self.assertIn("BoundedMediaQueue<VideoFrame>(", player)
+                self.assertIn("runIfCurrent(queuedFrame)", player)
+                self.assertNotIn("awaitingKeyFrame", player)
 
     def test_browser_receivers_bind_handshake_and_messages_to_each_connection(self):
         clients = (

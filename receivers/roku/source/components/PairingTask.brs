@@ -42,7 +42,7 @@ sub run()
         end if
 
         deviceInfo = CreateObject("roDeviceInfo")
-        receiverSessionId = "roku-" + deviceInfo.GetChannelClientId()
+        receiverSessionId = "roku-" + deviceInfo.GetChannelClientId() + "-" + StrI(Rnd(2147483647), 10)
         authMsg = FormatJson({
             v: 2,
             kind: "auth",
@@ -65,17 +65,21 @@ sub run()
                         response = ParseJson(info.Text)
                         if response <> invalid and response.v = 2
                             if response.kind = "ready"
-                                gotReady = true
+                                if response.sessionId <> invalid and response.sessionId = receiverSessionId
+                                    gotReady = true
+                                end if
                             else if response.kind = "stream_url" and gotReady
-                                url = response.url
-                                if isValidStreamUrl(url)
-                                    m.top.url = url
+                                if response.sessionId <> invalid and response.sessionId = receiverSessionId
+                                    url = response.url
+                                    if isValidStreamUrl(url)
+                                        m.top.url = url
+                                        ws.Close()
+                                        return
+                                    end if
+                                    m.top.error = "الهاتف أعاد رابط بث غير صالح"
                                     ws.Close()
                                     return
                                 end if
-                                m.top.error = "الهاتف أعاد رابط بث غير صالح"
-                                ws.Close()
-                                return
                             else if response.kind = "error"
                                 m.top.error = response.message
                                 ws.Close()

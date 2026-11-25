@@ -290,8 +290,6 @@ class TvSubtitleClient(
             onStatus("رمز الاقتران يجب أن يتكون من 6 أرقام", false)
             return
         }
-        sessionId = UUID.randomUUID().toString()
-        val connectionSessionId = sessionId
         if (manual) {
             if (!disconnectInternal(
                     invalidateGeneration = false,
@@ -326,6 +324,8 @@ class TvSubtitleClient(
             ) {
                 return
             }
+            val connectionSessionId = UUID.randomUUID().toString()
+            sessionId = connectionSessionId
             // Preserve reconnectLock -> mediaSendLock while serializing validation and creation.
             synchronized(mediaSendLock) {
             val newSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -554,7 +554,8 @@ class TvSubtitleClient(
 
     fun sendCaptions(lines: List<LiveGameTranslator.CaptionLine>, ptsNs: Long, sessionId: String = "") {
         if (ptsNs <= 0L) return
-        val effectiveSessionId = sessionId.takeIf { it == this.sessionId } ?: this.sessionId
+        if (sessionId.isNotBlank() && sessionId != this.sessionId) return
+        val effectiveSessionId = this.sessionId
         val array = JSONArray()
         lines.take(3).forEach { line ->
             array.put(JSONObject()

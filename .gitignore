@@ -19,3 +19,4 @@ __pycache__/
 
 # PS Link edit backups are kept outside Android resource directories.
 /.pslink-backups/
+/.pslink-decoder-update-backups/

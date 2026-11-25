@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.pslink.tvfire
 
+import com.pslink.core.BoundedMediaQueue
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -36,6 +37,10 @@ class TvMediaPlayer(
         private const val FLAG_KEY_FRAME = 1
         private const val VIDEO_QUEUE_CAPACITY = 96
         private const val AUDIO_QUEUE_CAPACITY = 80
+        private const val MAX_VIDEO_PACKET_BYTES = 2 * 1024 * 1024
+        private const val MAX_AUDIO_PACKET_BYTES = 64 * 1024
+        private const val VIDEO_QUEUE_BYTE_BUDGET = 8 * 1024 * 1024
+        private const val AUDIO_QUEUE_BYTE_BUDGET = 2 * 1024 * 1024
         private const val PLAYOUT_BUFFER_NS = 1_000_000_000L
     }
 
@@ -44,14 +49,21 @@ class TvMediaPlayer(
     private data class QueuedCaption(val frame: TvCaptionFrame, val generation: Long)
 
     private val running = AtomicBoolean(true)
-    private val videoQueue = ArrayBlockingQueue<VideoFrame>(VIDEO_QUEUE_CAPACITY)
-    private val audioQueue = ArrayBlockingQueue<AudioBlock>(AUDIO_QUEUE_CAPACITY)
+    private val videoQueue = BoundedMediaQueue<VideoFrame>(
+        VIDEO_QUEUE_CAPACITY,
+        VIDEO_QUEUE_BYTE_BUDGET,
+        { it.data.size },
+        { it.keyFrame }
+    )
+    private val audioQueue = BoundedMediaQueue<AudioBlock>(
+        AUDIO_QUEUE_CAPACITY,
+        AUDIO_QUEUE_BYTE_BUDGET,
+        { it.data.size }
+    )
     private val captionQueue = ArrayBlockingQueue<QueuedCaption>(8)
     private val captionGeneration = AtomicLong(0L)
-    @Volatile private var activeTrack: AudioTrack? = null
     @Volatile private var config: TvMediaConfig? = null
     @Volatile private var surface: Surface? = null
-    @Volatile private var awaitingKeyFrame = true
     @Volatile private var senderOriginNs = 0L
     @Volatile private var localRenderOriginNs = 0L
     private var decoder: MediaCodec? = null
@@ -70,26 +82,22 @@ class TvMediaPlayer(
 
     fun resetStream() {
         config = null
-        videoQueue.clear()
-        audioQueue.clear()
+        videoQueue.reset()
+        audioQueue.reset()
         captionGeneration.incrementAndGet()
         captionQueue.clear()
-        activeTrack?.let { track -> runCatching { track.pause(); track.flush(); track.play() } }
         onCaptions(emptyList())
-        awaitingKeyFrame = true
         senderOriginNs = 0L
         localRenderOriginNs = 0L
     }
 
     fun configure(next: TvMediaConfig) {
         config = next
-        videoQueue.clear()
-        audioQueue.clear()
+        videoQueue.reset()
+        audioQueue.reset()
         captionGeneration.incrementAndGet()
         captionQueue.clear()
-        activeTrack?.let { track -> runCatching { track.pause(); track.flush(); track.play() } }
         onCaptions(emptyList())
-        awaitingKeyFrame = true
         senderOriginNs = 0L
         localRenderOriginNs = 0L
         onStatus("وصل إعداد بث اللعبة: ${next.width}×${next.height}، ${next.fps} إطار/ث")
@@ -150,27 +158,29 @@ class TvMediaPlayer(
         val arg2 = input.int
         val length = input.int
         if (length <= 0 || length != input.remaining()) return
+        if (type == VIDEO && length > MAX_VIDEO_PACKET_BYTES) {
+            videoQueue.awaitKeyFrame()
+            onStatus("إطار فيديو أكبر من الحد المسموح؛ جارٍ انتظار إطار مفتاح جديد")
+            return
+        }
+        if (type == AUDIO && length > MAX_AUDIO_PACKET_BYTES) return
+        if (type != VIDEO && type != AUDIO) return
         val payload = ByteArray(length)
         input.get(payload)
         when (type) {
             VIDEO -> {
                 val keyFrame = flags and FLAG_KEY_FRAME != 0
-                if (awaitingKeyFrame && !keyFrame) return
-                if (!videoQueue.offer(VideoFrame(payload, ptsNs, keyFrame))) {
-                    videoQueue.clear()
-                    awaitingKeyFrame = true
-                    if (keyFrame && videoQueue.offer(VideoFrame(payload, ptsNs, true))) awaitingKeyFrame = false
-                    return
+                when (videoQueue.offer(VideoFrame(payload, ptsNs, keyFrame))) {
+                    BoundedMediaQueue.OfferResult.DROPPED_UNTIL_KEY_FRAME ->
+                        onStatus("امتلأ طابور الفيديو؛ جارٍ انتظار إطار مفتاح لاستعادة العرض")
+                    BoundedMediaQueue.OfferResult.REJECTED_OVERSIZED ->
+                        onStatus("إطار فيديو أكبر من سعة الطابور")
+                    else -> Unit
                 }
-                if (keyFrame) awaitingKeyFrame = false
             }
             AUDIO -> {
                 if (arg1 !in 8000..192000 || arg2 !in 1..2 || length % (arg2 * 2) != 0) return
-                if (!audioQueue.offer(AudioBlock(payload, ptsNs, arg1, arg2))) {
-                    // Discard stale queued audio rather than playing seconds behind the game.
-                    audioQueue.clear()
-                    audioQueue.offer(AudioBlock(payload, ptsNs, arg1, arg2))
-                }
+                audioQueue.offer(AudioBlock(payload, ptsNs, arg1, arg2))
             }
         }
     }
@@ -185,6 +195,7 @@ class TvMediaPlayer(
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         surface = null
+        videoQueue.awaitKeyFrame()
     }
 
     private fun establishClock(ptsNs: Long) {
@@ -198,17 +209,20 @@ class TvMediaPlayer(
         }
     }
 
-    private fun awaitPlayout(ptsNs: Long): Boolean {
-        if (ptsNs <= 0L) return false
+    private fun awaitPlayout(
+        ptsNs: Long,
+        entry: BoundedMediaQueue.Entry<AudioBlock>
+    ): Boolean {
+        if (ptsNs <= 0L || !audioQueue.isCurrent(entry)) return false
         establishClock(ptsNs)
         val targetNs = localRenderOriginNs + (ptsNs - senderOriginNs).coerceAtLeast(0L)
         var waitNs = targetNs - System.nanoTime()
-        while (waitNs > 0L && running.get()) {
+        while (waitNs > 0L && running.get() && audioQueue.isCurrent(entry)) {
             val sleepNs = minOf(waitNs, 20_000_000L)
             Thread.sleep(sleepNs / 1_000_000L, (sleepNs % 1_000_000L).toInt())
             waitNs = targetNs - System.nanoTime()
         }
-        return running.get()
+        return running.get() && audioQueue.isCurrent(entry)
     }
 
     private fun videoLoop() {
@@ -233,7 +247,6 @@ class TvMediaPlayer(
                         created.start()
                         decoder = created
                         activeConfig = wanted
-                        awaitingKeyFrame = true
                         onStatus("مفكّك ترميز التلفاز جاهز؛ بانتظار إطار المفتاح")
                     } catch (error: Exception) {
                         releaseDecoder()
@@ -243,10 +256,9 @@ class TvMediaPlayer(
                     }
                 }
 
-                val frame = videoQueue.poll(30, TimeUnit.MILLISECONDS) ?: continue
+                val queuedFrame = videoQueue.poll(30, TimeUnit.MILLISECONDS) ?: continue
+                val frame = queuedFrame.value
                 val codec = decoder ?: continue
-                if (awaitingKeyFrame && !frame.keyFrame) continue
-                if (frame.keyFrame) awaitingKeyFrame = false
                 establishClock(frame.ptsNs)
                 val origin = senderOriginNs
                 val relativeUs = ((frame.ptsNs - origin).coerceAtLeast(0L)) / 1000L
@@ -255,16 +267,19 @@ class TvMediaPlayer(
                     val inputBuffer = codec.getInputBuffer(inputIndex)
                     if (inputBuffer == null || frame.data.size > inputBuffer.capacity()) {
                         codec.queueInputBuffer(inputIndex, 0, 0, relativeUs, 0)
-                        awaitingKeyFrame = true
+                        videoQueue.awaitKeyFrame()
                     } else {
                         inputBuffer.clear()
                         inputBuffer.put(frame.data)
-                        codec.queueInputBuffer(inputIndex, 0, frame.data.size, relativeUs, 0)
+                        val submitted = videoQueue.runIfCurrent(queuedFrame) {
+                            codec.queueInputBuffer(inputIndex, 0, frame.data.size, relativeUs, 0)
+                        }
+                        if (!submitted) {
+                            codec.queueInputBuffer(inputIndex, 0, 0, relativeUs, 0)
+                        }
                     }
                 } else {
-                    // Input buffer temporarily unavailable — retry next iteration.
-                    // Do NOT set awaitingKeyFrame here; that would drop all frames until
-                    // a key frame arrives. Just yield briefly and try again.
+                    // This is a transient decoder shortage, not a stream reset.
                     Thread.sleep(2)
                 }
 
@@ -291,11 +306,25 @@ class TvMediaPlayer(
         var track: AudioTrack? = null
         var activeRate = 0
         var activeChannels = 0
+        var activeQueueGeneration = audioQueue.generation
         try {
             while (running.get()) {
-                val block = audioQueue.poll(100, TimeUnit.MILLISECONDS) ?: continue
+                val queuedBlock = audioQueue.poll(100, TimeUnit.MILLISECONDS) ?: continue
+                val block = queuedBlock.value
+                if (!audioQueue.isCurrent(queuedBlock)) continue
+                if (activeQueueGeneration != queuedBlock.generation) {
+                    track?.let { currentTrack ->
+                        currentTrack.pause()
+                        currentTrack.flush()
+                        currentTrack.play()
+                    }
+                    activeQueueGeneration = queuedBlock.generation
+                }
                 if (track == null || activeRate != block.rate || activeChannels != block.channels) {
-                    track?.let { oldTrack -> runCatching { oldTrack.pause(); oldTrack.flush(); oldTrack.release() } }
+                    track?.let { oldTrack ->
+                        track = null
+                        releaseAudioTrack(oldTrack)
+                    }
                     val mask = if (block.channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
                     val minimum = AudioTrack.getMinBufferSize(block.rate, mask, AudioFormat.ENCODING_PCM_16BIT)
                     if (minimum <= 0) {
@@ -318,14 +347,21 @@ class TvMediaPlayer(
                         .build()
                     activeRate = block.rate
                     activeChannels = block.channels
-                    activeTrack = track
                     track?.play()
                     onStatus("صوت اللعبة متصل بالتلفاز")
                 }
-                if (!awaitPlayout(block.ptsNs)) break
+                if (!awaitPlayout(block.ptsNs, queuedBlock)) {
+                    if (!running.get()) break
+                    if (audioQueue.isCurrent(queuedBlock)) {
+                        onStatus("تجاهل كتلة صوت بتوقيت غير صالح")
+                    }
+                    continue
+                }
                 var offset = 0
-                while (offset < block.data.size && running.get()) {
-                    val written = track?.write(block.data, offset, block.data.size - offset) ?: 0
+                while (offset < block.data.size && running.get() &&
+                    audioQueue.isCurrent(queuedBlock)) {
+                    val chunkSize = minOf(4_096, block.data.size - offset)
+                    val written = track?.write(block.data, offset, chunkSize) ?: 0
                     if (written <= 0) break
                     offset += written
                 }
@@ -335,8 +371,29 @@ class TvMediaPlayer(
         } catch (error: Exception) {
             onStatus("توقف صوت التلفاز: ${error.localizedMessage ?: "خطأ في تشغيل الصوت"}")
         } finally {
-            track?.let { oldTrack -> runCatching { oldTrack.pause(); oldTrack.flush(); oldTrack.release() } }
-            activeTrack = null
+            track?.let(::releaseAudioTrack)
+        }
+    }
+
+    private fun releaseAudioTrack(track: AudioTrack) {
+        var failure: Exception? = null
+        try {
+            track.pause()
+        } catch (error: Exception) {
+            failure = error
+        }
+        try {
+            track.flush()
+        } catch (error: Exception) {
+            if (failure == null) failure = error
+        }
+        try {
+            track.release()
+        } catch (error: Exception) {
+            if (failure == null) failure = error
+        }
+        failure?.let {
+            onStatus("تعذر تحرير مسار الصوت: ${it.localizedMessage ?: "خطأ غير معروف"}")
         }
     }
 
@@ -355,7 +412,8 @@ class TvMediaPlayer(
         surfaceView.holder.removeCallback(this)
         captionGeneration.incrementAndGet()
         captionQueue.clear()
-        activeTrack?.let { track -> runCatching { track.pause(); track.flush() } }
+        videoQueue.reset()
+        audioQueue.reset()
         videoThread.interrupt()
         audioThread.interrupt()
         captionThread.interrupt()

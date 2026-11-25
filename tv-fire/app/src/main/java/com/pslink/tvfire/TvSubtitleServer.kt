@@ -5,6 +5,8 @@ import com.pslink.core.PsLinkProtocol
 import com.pslink.core.PairingCode
 import com.pslink.core.PairingAttemptLimiter
 import com.pslink.core.OriginAllowlist
+import com.pslink.core.SessionIds
+import com.pslink.core.ConnectionSlotLimiter
 import com.pslink.core.SubtitlePacket
 import io.ktor.server.application.install
 import io.ktor.server.engine.ApplicationEngine
@@ -26,6 +28,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
 import java.security.SecureRandom
@@ -54,6 +58,9 @@ class TvSubtitleServer(
     private val activeSession = AtomicReference<Job?>(null)
     private val activeSessionId = AtomicReference<String?>(null)
     private val sessionLock = Any()
+    private val connectionSlots = ConnectionSlotLimiter(MAX_CONNECTIONS)
+    private val connectionLeases = ConcurrentHashMap<Job, ConnectionSlotLimiter.Slot>()
+    private val stopping = AtomicBoolean(true)
     private val pairingAttempts = PairingAttemptLimiter()
     private val originAllowlist = OriginAllowlist(allowedOrigins)
     private val mutableLatestPacket = MutableStateFlow<SubtitlePacket?>(null)
@@ -63,13 +70,20 @@ class TvSubtitleServer(
 
     @Synchronized fun start() {
         if (engine != null) return
+        stopping.set(false)
         engine = embeddedServer(CIO, host = "0.0.0.0", port = PsLinkProtocol.PORT) {
-            install(WebSockets)
+            install(WebSockets) {
+                maxFrameSize = 2 * 1024 * 1024L + 28L
+                pingInterval = 25_000L
+                timeoutMillis = 90_000L
+            }
             routing {
                 webSocket(PsLinkProtocol.PATH) {
                     val pairingSource = call.request.origin.remoteHost
                     suspend fun rejectPairing(errorCode: String, message: String) {
-                        if (errorCode != "PAIRING_RATE_LIMITED") {
+                        if (errorCode != "PAIRING_RATE_LIMITED" &&
+                            errorCode != "TOO_MANY_CONNECTIONS" &&
+                            errorCode != "SERVER_STOPPING") {
                             pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                         }
                         send(Frame.Text(JSONObject()
@@ -79,6 +93,32 @@ class TvSubtitleServer(
                             .put("message", message)
                             .toString()))
                         close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, errorCode))
+                    }
+
+                    val connectionJob = coroutineContext[Job]
+                        ?: throw IllegalStateException("WebSocket connection has no Job")
+                    val connectionSlot = connectionSlots.tryAcquire()
+                    if (connectionSlot == null) {
+                        rejectPairing("TOO_MANY_CONNECTIONS", "تم بلوغ الحد الأقصى لاتصالات التلفاز")
+                        return@webSocket
+                    }
+                    val connectionRegistered = synchronized(sessionLock) {
+                        if (stopping.get()) false
+                        else {
+                            connectionLeases[connectionJob] = connectionSlot
+                            true
+                        }
+                    }
+                    if (!connectionRegistered) {
+                        connectionSlot.close()
+                        rejectPairing("SERVER_STOPPING", "خادم التلفاز قيد الإيقاف")
+                        return@webSocket
+                    }
+                    connectionJob.invokeOnCompletion {
+                        synchronized(sessionLock) {
+                            connectionLeases.remove(connectionJob, connectionSlot)
+                        }
+                        connectionSlot.close()
                     }
 
                     if (!originAllowlist.allows(call.request.headers["Origin"])) {
@@ -102,6 +142,10 @@ class TvSubtitleServer(
                         rejectPairing("INVALID_AUTH_FRAME", "طلب الاقتران غير صالح؛ أعد الاتصال من تطبيق الهاتف")
                         return@webSocket
                     }
+                    if (authFrame.data.size > 16 * 1024) {
+                        rejectPairing("AUTH_FRAME_TOO_LARGE", "إطار المصادقة أكبر من الحد المسموح")
+                        return@webSocket
+                    }
 
                     val auth = runCatching { JSONObject(authFrame.readText()) }.getOrNull()
                     if (auth == null) {
@@ -122,19 +166,28 @@ class TvSubtitleServer(
                         rejectPairing("INVALID_PAIRING_CODE", "رمز الاقتران غير صحيح أو لا يخص هذا التلفاز")
                         return@webSocket
                     }
-                    val authenticatedSessionId = auth.optString("sessionId", "").take(80)
-                    if (authenticatedSessionId.isBlank()) {
-                        rejectPairing("INVALID_SESSION_ID", "معرّف الجلسة مطلوب؛ حدّث تطبيق الهاتف")
+                    val authenticatedSessionId = SessionIds.validate(auth.optString("sessionId", ""))
+                    if (authenticatedSessionId == null) {
+                        rejectPairing("INVALID_SESSION_ID", "معرّف الجلسة فارغ أو أطول من الحد المسموح")
+                        return@webSocket
+                    }
+                    val sessionJob = coroutineContext[Job]
+                        ?: throw IllegalStateException("Authenticated WebSocket session has no Job")
+                    val admission = synchronized(sessionLock) {
+                        if (stopping.get()) {
+                            false to null
+                        } else {
+                            val previous = activeSession.getAndSet(sessionJob)
+                            activeSessionId.set(authenticatedSessionId)
+                            true to previous
+                        }
+                    }
+                    if (!admission.first) {
+                        rejectPairing("SERVER_STOPPING", "خادم التلفاز قيد الإيقاف")
                         return@webSocket
                     }
                     pairingAttempts.recordSuccess(pairingSource)
-                    val sessionJob = coroutineContext[Job]
-                        ?: throw IllegalStateException("Authenticated WebSocket session has no Job")
-                    val previousSession = synchronized(sessionLock) {
-                        activeSession.getAndSet(sessionJob).also {
-                            activeSessionId.set(authenticatedSessionId)
-                        }
-                    }
+                    val previousSession = admission.second
                     if (previousSession != null && previousSession !== sessionJob) {
                         // The new authenticated session replaces the old one.
                         previousSession.cancel()
@@ -157,6 +210,20 @@ class TvSubtitleServer(
                                     }
                                 }
                                 is Frame.Text -> {
+                                    if (frame.data.size > PsLinkProtocol.MAX_CONTROL_FRAME_BYTES) {
+                                        send(Frame.Text(JSONObject()
+                                            .put("v", PsLinkProtocol.VERSION)
+                                            .put("kind", "error")
+                                            .put("errorCode", "CONTROL_FRAME_TOO_LARGE")
+                                            .put("message", "رسالة التحكم أكبر من الحد المسموح")
+                                            .put("sessionId", authenticatedSessionId)
+                                            .toString()))
+                                        close(CloseReason(
+                                            CloseReason.Codes.VIOLATED_POLICY,
+                                            "CONTROL_FRAME_TOO_LARGE"
+                                        ))
+                                        break
+                                    }
                                     val raw = frame.readText()
                                     val message = runCatching { JSONObject(raw) }.getOrNull()
                                     if (message == null ||
@@ -223,7 +290,7 @@ class TvSubtitleServer(
 
         if (json.optInt("v", -1) != PsLinkProtocol.VERSION ||
             json.optString("kind") != "media_config" ||
-            json.optString("sessionId", "").take(80) != activeSessionId.get()) {
+            SessionIds.validate(json.optString("sessionId", "")) != activeSessionId.get()) {
             return null
         }
 
@@ -245,15 +312,15 @@ class TvSubtitleServer(
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "media_config_ack")
             .put("requestId", requestId)
-            .put("sessionId", json.optString("sessionId").take(80))
+            .put("sessionId", json.optString("sessionId"))
             .toString()
     }
 
     private fun handleTextFrame(raw: String) {
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return
         if (json.optInt("v", -1) != PsLinkProtocol.VERSION) return
-        val sessionId = json.optString("sessionId", "").take(80)
-        if (sessionId.isBlank() || sessionId != activeSessionId.get()) return
+        val sessionId = SessionIds.validate(json.optString("sessionId", "")) ?: return
+        if (sessionId != activeSessionId.get()) return
         when (json.optString("kind")) {
             "captions" -> {
                 val array = json.optJSONArray("lines") ?: JSONArray()
@@ -303,15 +370,26 @@ class TvSubtitleServer(
     }
 
     @Synchronized fun stop() {
-        engine?.stop(gracePeriodMillis = 500L, timeoutMillis = 2_000L)
-        synchronized(sessionLock) {
-            activeSession.getAndSet(null)?.cancel()
-            activeSessionId.set(null)
-            mutableCaptions.value = TvCaptionFrame(0L, emptyList())
-            onMediaStop()
-        }
+        stopping.set(true)
+        val stoppingEngine = engine
         engine = null
+        try {
+            synchronized(sessionLock) {
+                connectionLeases.values.forEach { it.close() }
+                connectionLeases.clear()
+                activeSession.getAndSet(null)?.cancel()
+                activeSessionId.set(null)
+                mutableCaptions.value = TvCaptionFrame(0L, emptyList())
+                onMediaStop()
+            }
+        } finally {
+            stoppingEngine?.stop(gracePeriodMillis = 500L, timeoutMillis = 2_000L)
+        }
     }
 
     private fun monotonicMillis(): Long = System.nanoTime() / 1_000_000L
+
+    companion object {
+        const val MAX_CONNECTIONS = 16
+    }
 }
