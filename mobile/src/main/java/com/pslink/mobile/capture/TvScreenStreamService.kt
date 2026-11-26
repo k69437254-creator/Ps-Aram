@@ -39,11 +39,13 @@ class TvScreenStreamService : Service() {
     companion object {
         const val ACTION_START = "com.pslink.mobile.stream.START"
         const val ACTION_STOP = "com.pslink.mobile.stream.STOP"
+        const val ACTION_RELEASE_CLIENT = "com.pslink.mobile.stream.RELEASE_CLIENT"
         const val EXTRA_RESULT_CODE = "stream_projection_result_code"
         const val EXTRA_RESULT_DATA = "stream_projection_result_data"
         const val EXTRA_PHONE_PAIR_CODE = "stream_phone_pairing_code"
 
         @Volatile var mediaSink: TvSubtitleClient? = null
+        @Volatile var activityOwnsService: Boolean = false
         @Volatile var statusListener: ((String) -> Unit)? = null
         @Volatile var isStreaming: Boolean = false
             private set
@@ -92,6 +94,18 @@ class TvScreenStreamService : Service() {
         when (intent?.action) {
             ACTION_START -> startStream(intent, startId)
             ACTION_STOP -> stopStream()
+            ACTION_RELEASE_CLIENT -> {
+                val sinkToRelease = mediaSink
+                stopStream()
+                if (mediaSink === sinkToRelease) {
+                    mediaSink = null
+                }
+                activityOwnsService = false
+                statusListener = null
+                sinkToRelease?.setStatusListener(null)
+                sinkToRelease?.close()
+                stopSelf(startId)
+            }
             else -> stopSelf(startId)
         }
         return START_NOT_STICKY
@@ -200,7 +214,8 @@ class TvScreenStreamService : Service() {
                 val receiver = PhoneReceiverServer(
                     phonePairingCode,
                     hlsDirectory,
-                    BuildConfig.PSLINK_ALLOWED_ORIGINS
+                    BuildConfig.PSLINK_ALLOWED_ORIGINS,
+                    BuildConfig.PSLINK_PUBLIC_BASE_URL
                 )
                 phoneReceiverServer = receiver
                 val publisher = HlsTransportStreamPublisher(hlsDirectory) {

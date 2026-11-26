@@ -49,6 +49,7 @@ import org.json.JSONException
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.net.URI
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Collections
@@ -74,13 +75,15 @@ private data class ActivePhoneSession(
 class PhoneReceiverServer(
     pairingCode: String,
     private val hlsDirectory: File,
-    allowedOrigins: String = ""
+    allowedOrigins: String = "",
+    publicBaseUrl: String = ""
 ) {
     private val normalizedCode = requireNotNull(PairingCode.normalize(pairingCode)) {
         "Phone receiver pairing code must contain exactly six digits"
     }
     private val pairingAttempts = PairingAttemptLimiter()
     private val originAllowlist = OriginAllowlist(allowedOrigins)
+    private val configuredPublicBaseUrl = normalizePublicBaseUrl(publicBaseUrl)
     // Bearer token for HLS GET requests; the pairing code is never placed in media URLs.
     private val streamToken: String = run {
         val alphabet = "0123456789abcdef"
@@ -417,7 +420,10 @@ class PhoneReceiverServer(
                             reject("TOO_MANY_SESSIONS", "تم بلوغ الحد الأقصى لاتصالات الهاتف")
                             return@webSocket
                         }
-                        val activeSession = ActivePhoneSession(authenticatedSessionId, sessionSlot)
+                        val activeSession = ActivePhoneSession(
+                            authenticatedSessionId,
+                            sessionSlot
+                        )
                         try {
                             val registered = synchronized(sessionLock) {
                                 if (stopping.get()) false
@@ -573,12 +579,61 @@ class PhoneReceiverServer(
         )
     }
 
+    private fun normalizePublicBaseUrl(value: String): String? {
+        val raw = value.trim()
+        if (raw.isEmpty()) return null
+
+        val parsed = runCatching { URI(raw) }.getOrElse {
+            throw IllegalArgumentException("pslink.publicBaseUrl must be a valid HTTPS origin", it)
+        }
+        require(parsed.scheme.equals("https", ignoreCase = true)) {
+            "pslink.publicBaseUrl must use HTTPS"
+        }
+        require(!parsed.host.isNullOrBlank() && parsed.rawAuthority != null) {
+            "pslink.publicBaseUrl must include a valid host"
+        }
+        require(parsed.rawUserInfo == null && parsed.rawQuery == null && parsed.rawFragment == null) {
+            "pslink.publicBaseUrl must not contain credentials, query, or fragment"
+        }
+        require(parsed.rawPath.isNullOrEmpty() || parsed.rawPath == "/") {
+            "pslink.publicBaseUrl must be an origin without a path prefix"
+        }
+        val authority = requireNotNull(parsed.rawAuthority)
+        require(!authority.any { it.isWhitespace() || it == '\\' || it == '%' }) {
+            "pslink.publicBaseUrl contains an invalid authority"
+        }
+        require(parsed.port == -1 || parsed.port in 1..65535) {
+            "pslink.publicBaseUrl contains an invalid port"
+        }
+        val portSuffix = if (authority.startsWith("[")) {
+            val closingBracket = authority.indexOf(']')
+            require(closingBracket > 0) {
+                "pslink.publicBaseUrl contains an invalid IPv6 authority"
+            }
+            authority.substring(closingBracket + 1)
+        } else {
+            val colon = authority.lastIndexOf(':')
+            if (colon >= 0) authority.substring(colon) else ""
+        }
+        require(
+            portSuffix.isEmpty() ||
+                (portSuffix.startsWith(":") &&
+                    portSuffix.drop(1).isNotEmpty() &&
+                    portSuffix.drop(1).all { it.isDigit() })
+        ) {
+            "pslink.publicBaseUrl contains a malformed port"
+        }
+        return "https://$authority"
+    }
+
     private fun streamUrlMessage(sessionId: String? = null): String? {
-        val address = localIpv4Address() ?: return null
+        val base = configuredPublicBaseUrl
+            ?: localIpv4Address()?.let { "http://$it:${PsLinkProtocol.PORT}" }
+            ?: return null
         val message = JSONObject()
             .put("v", PsLinkProtocol.VERSION)
             .put("kind", "stream_url")
-            .put("url", "http://$address:${PsLinkProtocol.PORT}/hls/$streamToken/index.m3u8")
+            .put("url", "$base/hls/$streamToken/index.m3u8")
         sessionId?.let { message.put("sessionId", it) }
         return message.toString()
     }

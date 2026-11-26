@@ -23,8 +23,19 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** LAN-only paired WebSocket: text control/captions plus bounded binary game media. */
 class TvSubtitleClient(
-    private val onStatus: (String, Boolean) -> Unit
+    initialStatusListener: (String, Boolean) -> Unit
 ) {
+    @Volatile private var statusListener: ((String, Boolean) -> Unit)? =
+        initialStatusListener
+
+    fun setStatusListener(listener: ((String, Boolean) -> Unit)?) {
+        statusListener = listener
+    }
+
+    private fun reportStatus(message: String, connected: Boolean) {
+        statusListener?.invoke(message, connected)
+    }
+
     @Volatile var sessionId: String = UUID.randomUUID().toString()
         private set
 
@@ -99,7 +110,7 @@ class TvSubtitleClient(
             }
             if (sent == false) {
                 resetMediaQueueIfCurrent(queued.generation)
-                onStatus("تعذر إرسال بث اللعبة إلى التلفاز", false)
+                reportStatus("تعذر إرسال بث اللعبة إلى التلفاز", false)
             }
         }
     }, "PSLink-TV-Media-Sender").apply { isDaemon = true; start() }
@@ -207,7 +218,7 @@ class TvSubtitleClient(
                         lastPairingCode == pairingCode
                 }
                 if (!stillCurrent) return@Runnable
-                onStatus("إعادة الاتصال بالتلفاز بعد ${delayMs / 1000} ثانية…", false)
+                reportStatus("إعادة الاتصال بالتلفاز بعد ${delayMs / 1000} ثانية…", false)
                 connectInternal(host, pairingCode, manual = false, generation = generation)
             }
             reconnectRunnable = retry
@@ -250,7 +261,7 @@ class TvSubtitleClient(
                 }
             }
             if (expired) {
-                onStatus("انتهت مهلة التحقق من رمز الاقتران؛ أعد المحاولة", false)
+                reportStatus("انتهت مهلة التحقق من رمز الاقتران؛ أعد المحاولة", false)
                 webSocket.cancel()
                 scheduleReconnect(webSocket)
             }
@@ -283,11 +294,11 @@ class TvSubtitleClient(
         val socketUrl = PsLinkProtocol.socketUrl(host)
         val normalizedCode = PairingCode.normalize(pairingCode)
         if (socketUrl == null) {
-            onStatus("أدخل عنوان IP أو نقطة اتصال WS/WSS موثوقة بمسار /subtitle", false)
+            reportStatus("أدخل عنوان IP أو نقطة اتصال WS/WSS موثوقة بمسار /subtitle", false)
             return
         }
         if (normalizedCode == null) {
-            onStatus("رمز الاقتران يجب أن يتكون من 6 أرقام", false)
+            reportStatus("رمز الاقتران يجب أن يتكون من 6 أرقام", false)
             return
         }
         if (manual) {
@@ -305,7 +316,7 @@ class TvSubtitleClient(
                 .url(socketUrl)
                 .build()
         }.getOrElse {
-            onStatus("عنوان التلفاز غير صالح؛ تحقق من اسم المضيف وشهادة TLS إن كنت تستخدم WSS", false)
+            reportStatus("عنوان التلفاز غير صالح؛ تحقق من اسم المضيف وشهادة TLS إن كنت تستخدم WSS", false)
             return
         }
 
@@ -339,10 +350,10 @@ class TvSubtitleClient(
                 val sent = webSocket.send(PsLinkProtocol.auth(normalizedCode, connectionSessionId))
                 if (!sent) {
                     terminalStatus = "تعذر إرسال رمز الاقتران"
-                    onStatus(terminalStatus!!, false)
+                    reportStatus(terminalStatus!!, false)
                     webSocket.cancel()
                 } else {
-                    onStatus("تم الاتصال؛ جارٍ التحقق من الرمز…", false)
+                    reportStatus("تم الاتصال؛ جارٍ التحقق من الرمز…", false)
                     startHandshakeTimeout(webSocket)
                 }
             }
@@ -373,9 +384,9 @@ class TvSubtitleClient(
                         if (!accepted) return
                         synchronized(reconnectLock) { backoffMs = INITIAL_BACKOFF_MS }
                         if (config != null && !webSocket.send(config)) {
-                            onStatus("تعذر إرسال إعدادات بث الوسائط إلى التلفاز", false)
+                            reportStatus("تعذر إرسال إعدادات بث الوسائط إلى التلفاز", false)
                         }
-                        onStatus("تم اقتران التلفاز؛ بانتظار تأكيد إعداد بث الوسائط", true)
+                        reportStatus("تم اقتران التلفاز؛ بانتظار تأكيد إعداد بث الوسائط", true)
                     }
                     "media_config_ack" -> {
                         if (json.optString("sessionId", "") != connectionSessionId) return
@@ -392,7 +403,7 @@ class TvSubtitleClient(
                             }
                         }
                         if (accepted) {
-                            onStatus("أكد التلفاز قبول إعدادات بث اللعبة؛ مسار الوسائط جاهز", true)
+                            reportStatus("أكد التلفاز قبول إعدادات بث اللعبة؛ مسار الوسائط جاهز", true)
                         }
                     }
                     PsLinkProtocol.KIND_ACK -> {
@@ -402,7 +413,7 @@ class TvSubtitleClient(
                             synchronized(mediaStateLock) {
                                 socket === webSocket && pendingMessageIds.remove(ackId)
                             }) {
-                            onStatus("استلم التلفاز الترجمة", ready)
+                            reportStatus("استلم التلفاز الترجمة", ready)
                         }
                     }
                     "error" -> {
@@ -424,7 +435,7 @@ class TvSubtitleClient(
                         }
                         if (!accepted) return
                         pendingMessageIds.clear()
-                        onStatus(terminalStatus!!, false)
+                        reportStatus(terminalStatus!!, false)
                     }
                 }
             }
@@ -450,7 +461,7 @@ class TvSubtitleClient(
                     }
                 }
                 if (shouldReportFailure) {
-                    onStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
+                    reportStatus("فشل الاتصال بالتلفاز: ${t.localizedMessage ?: "تحقق من الشبكة"}", false)
                     scheduleReconnect(webSocket)
                 }
             }
@@ -476,7 +487,7 @@ class TvSubtitleClient(
                     }
                 }
                 if (shouldReportDisconnect) {
-                    onStatus("انقطع اتصال التلفاز", false)
+                    reportStatus("انقطع اتصال التلفاز", false)
                     scheduleReconnect(webSocket)
                 }
             }
@@ -493,7 +504,7 @@ class TvSubtitleClient(
 
     fun configureMediaStream(width: Int, height: Int, codec: Int, fps: Int) {
         if (width !in 320..7680 || height !in 240..4320 || codec !in 0..2 || fps !in 15..120) {
-            onStatus("إعدادات بث الفيديو غير صالحة", false)
+            reportStatus("إعدادات بث الفيديو غير صالحة", false)
             return
         }
         val requestId = "${System.nanoTime()}-${MEDIA_CONFIG_SEQUENCE.incrementAndGet()}"
@@ -519,7 +530,7 @@ class TvSubtitleClient(
             current?.send(config)
         }
         if (sent == false) {
-            onStatus("تعذر إرسال إعدادات بث الوسائط؛ أعد المحاولة", false)
+            reportStatus("تعذر إرسال إعدادات بث الوسائط؛ أعد المحاولة", false)
         }
     }
 
@@ -527,7 +538,7 @@ class TvSubtitleClient(
         if (data.isEmpty() || ptsNs <= 0L) return
         if (data.size > MAX_MEDIA_PACKET) {
             resetMediaQueue()
-            onStatus("إطار فيديو أكبر من الحد المسموح؛ جارٍ انتظار إطار مفتاح جديد", ready)
+            reportStatus("إطار فيديو أكبر من الحد المسموح؛ جارٍ انتظار إطار مفتاح جديد", ready)
             return
         }
         val connection = mediaConnection() ?: return
@@ -538,7 +549,7 @@ class TvSubtitleClient(
             } else {
                 "امتلأ طابور الوسائط؛ أُسقطت الحزم القديمة وانتظار إطار مفتاح جديد لاستعادة المزامنة"
             }
-            onStatus(message, ready)
+            reportStatus(message, ready)
         }
     }
 
@@ -548,7 +559,7 @@ class TvSubtitleClient(
         val connection = mediaConnection() ?: return
         val packet = mediaPacket(MEDIA_AUDIO_PCM16, 0, ptsNs, sampleRate, channels, data)
         if (enqueueMediaPacket(connection, packet, keyFrame = false) == MediaEnqueueResult.OVERFLOW) {
-            onStatus("امتلأ طابور الوسائط؛ أُسقط الصوت والفيديو المنتظران حتى إطار الفيديو المفتاحي التالي", ready)
+            reportStatus("امتلأ طابور الوسائط؛ أُسقط الصوت والفيديو المنتظران حتى إطار الفيديو المفتاحي التالي", ready)
         }
     }
 
@@ -580,7 +591,7 @@ class TvSubtitleClient(
 
     fun send(packet: SubtitlePacket): Boolean {
         if (!synchronized(mediaStateLock) { ready }) {
-            onStatus("اربط التلفاز أولًا", false)
+            reportStatus("اربط التلفاز أولًا", false)
             return false
         }
         val effectivePacket = packet.copy(sessionId = sessionId)
@@ -596,7 +607,7 @@ class TvSubtitleClient(
         }
         if (!sent) {
             pendingMessageIds.remove(effectivePacket.messageId)
-            onStatus("تعذر إرسال الترجمة", false)
+            reportStatus("تعذر إرسال الترجمة", false)
         }
         return sent
     }

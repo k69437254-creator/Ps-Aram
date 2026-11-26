@@ -37,6 +37,21 @@ def write(path: Path, content: str) -> None:
     temporary.replace(path)
 
 
+def write_if_incomplete(path: Path, content: str, required: tuple[str, ...], label: str) -> None:
+    """Install generated content only when an existing file lacks the feature.
+
+    The repository files carry later protocol/session fixes that are newer than the
+    embedded templates. Overwriting them on every overlay run would silently roll
+    those fixes back, so an already-complete file is preserved.
+    """
+    if path.is_file():
+        existing = path.read_text(encoding="utf-8")
+        if all(token in existing for token in required):
+            print(f"Preserved existing {path.relative_to(ROOT)} ({label})")
+            return
+    write(path, content)
+
+
 TRANSACTION_PATHS = (
     "third_party/chiaki-ng/android/app/src/main/cpp/video-decoder.h",
     "third_party/chiaki-ng/android/app/src/main/cpp/video-decoder.c",
@@ -988,7 +1003,12 @@ class TvSubtitleClient(
 
 def patch_phone_translation() -> None:
     path = MOBILE / "TvSubtitleClient.kt"
-    write(path, TV_CLIENT)
+    write_if_incomplete(
+        path,
+        TV_CLIENT,
+        ("MEDIA_AUDIO_PCM16", "fun sendVideoSample", "fun sendAudioSample", "fun sendCaptions"),
+        "live TV media client",
+    )
 
     translator_path = MOBILE / "LiveGameTranslator.kt"
     src = read(translator_path)
@@ -2076,11 +2096,36 @@ TV_LAYOUT = r'''<?xml version="1.0" encoding="utf-8"?>
 
 
 def patch_tv_app() -> None:
-    write(TV / "TvSubtitleServer.kt", TV_SERVER)
-    write(TV / "TvMediaPlayer.kt", TV_PLAYER)
-    write(TV / "TvCaptionOverlayView.kt", TV_CAPTION_VIEW)
-    write(TV / "TvReceiverActivity.kt", TV_ACTIVITY)
-    write(ROOT / "tv/app/src/main/res/layout/activity_tv_receiver.xml", TV_LAYOUT)
+    write_if_incomplete(
+        TV / "TvSubtitleServer.kt",
+        TV_SERVER,
+        ("class TvSubtitleServer", "Frame.Binary"),
+        "TV subtitle server",
+    )
+    write_if_incomplete(
+        TV / "TvMediaPlayer.kt",
+        TV_PLAYER,
+        ("class TvMediaPlayer", "AudioTrack.Builder"),
+        "TV media player",
+    )
+    write_if_incomplete(
+        TV / "TvCaptionOverlayView.kt",
+        TV_CAPTION_VIEW,
+        ("class TvCaptionOverlayView", "TextDirectionHeuristics.RTL"),
+        "TV caption overlay",
+    )
+    write_if_incomplete(
+        TV / "TvReceiverActivity.kt",
+        TV_ACTIVITY,
+        ("class TvReceiverActivity", "TvSubtitleServer"),
+        "TV receiver activity",
+    )
+    write_if_incomplete(
+        ROOT / "tv/app/src/main/res/layout/activity_tv_receiver.xml",
+        TV_LAYOUT,
+        ('@+id/captionOverlay', '@+id/subtitleText'),
+        "TV receiver layout",
+    )
 
 
 def patch_stream_activity_wiring() -> None:
@@ -2144,7 +2189,7 @@ def patch_static_checks() -> None:
     )
     missing_checks = [line for line in required_checks if line not in src]
     if missing_checks:
-        src = replace_once(src, anchor, "".join(line + "\\n" for line in missing_checks) + anchor,
+        src = replace_once(src, anchor, "".join(line + "\n" for line in missing_checks) + anchor,
                            "extend source checks for binary TV media")
     extra_checks = (
         "need tv/app/src/main/java/com/pslink/tv/TvMediaPlayer.kt 'captionGeneration'\n"

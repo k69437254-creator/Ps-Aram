@@ -102,6 +102,7 @@ else
   grep -Fq 'touches = touches.map { it.copy() }.toTypedArray()' "$CHI_STATE"
   grep -Fq 'psLinkMenuButton' "$CHI_STREAM"
   grep -Fq 'PSLINK_CLEAN_STREAM_OVERLAY_V1' "$CHI_STREAM"
+  grep -Fq 'private var psLinkRecordingActive' "$CHI_STREAM"
   grep -Fq 'psLinkStartGameRecording()' "$CHI_STREAM"
   grep -Fq 'startVideoRecording(openedDescriptor.fd)' "$CHI_STREAM"
   grep -Fq 'stopVideoRecording()' "$CHI_STREAM"

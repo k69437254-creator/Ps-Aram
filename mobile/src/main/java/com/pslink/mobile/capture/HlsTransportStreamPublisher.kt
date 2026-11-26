@@ -7,6 +7,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.util.Locale
+import android.system.ErrnoException
+import android.system.Os
 
 /** Pure Kotlin H.264 Annex-B to MPEG-TS live HLS segment writer. */
 class HlsTransportStreamPublisher(
@@ -29,14 +31,17 @@ class HlsTransportStreamPublisher(
     @Synchronized fun start() {
         check(!closed) { "Publisher already closed" }
         check(directory.exists() || directory.mkdirs()) { "Unable to create HLS directory" }
-        directory.listFiles()?.forEach { file ->
-            if (file.name.matches(Regex("pslink-segment-[0-9]{6}\\.ts")) ||
-                file.name == "index.m3u8" || file.name == "index.m3u8.tmp") {
-                check(file.delete() || !file.exists()) { "Unable to remove stale HLS file: ${file.name}" }
-            }
+        // Keep the currently published playlist and its segments available
+        // until the first playlist for this session is atomically published.
+        directory.listFiles()?.filter { it.name == "index.m3u8.tmp" }?.forEach {
+            check(it.delete() || !it.exists()) { "Unable to remove stale temporary playlist" }
         }
         completed.clear()
-        nextSequence = 0L
+        val segmentPattern = Regex("pslink-segment-([0-9]{6})\\.ts")
+        nextSequence = (directory.listFiles()?.mapNotNull { file ->
+            segmentPattern.matchEntire(file.name)?.groupValues?.get(1)?.toLongOrNull()
+        }?.maxOrNull()?.plus(1L)) ?: 0L
+        check(nextSequence <= 999999L) { "HLS segment sequence exhausted" }
         playlistReady = false
     }
 
@@ -92,12 +97,19 @@ class HlsTransportStreamPublisher(
             val duration = (lastPtsUs - segmentStartUs).coerceAtLeast(200_000L)
             completed.addLast(Segment(name, duration))
             while (completed.size > windowSize) {
-                val removed = completed.removeFirst()
-                File(directory, removed.name).delete()
+                completed.removeFirst()
             }
             val firstPlaylist = !playlistReady
             playlistReady = true
+            // Publish the new playlist before deleting any segment it replaces.
             writePlaylist(endList = false)
+            val retainedNames = completed.mapTo(HashSet()) { it.name }
+            directory.listFiles()
+                ?.filter {
+                    it.name.matches(Regex("pslink-segment-[0-9]{6}\\.ts")) &&
+                        it.name !in retainedNames
+                }
+                ?.forEach { it.delete() }
             if (firstPlaylist) onPlaylistReady?.invoke()
         } else {
             file.delete()
@@ -124,8 +136,14 @@ class HlsTransportStreamPublisher(
         val temporary = File(directory, "index.m3u8.tmp")
         temporary.writeText(body, Charsets.UTF_8)
         val destination = File(directory, "index.m3u8")
-        if (destination.exists()) check(destination.delete()) { "Unable to replace HLS playlist" }
-        check(temporary.renameTo(destination)) { "Unable to publish HLS playlist" }
+        // Atomic same-filesystem replacement. Never delete the published playlist
+        // as a fallback: on failure, keep the previous playlist intact.
+        try {
+            Os.rename(temporary.absolutePath, destination.absolutePath)
+        } catch (error: ErrnoException) {
+            temporary.delete()
+            throw IllegalStateException("Unable to atomically publish HLS playlist", error)
+        }
     }
 
     private fun writePsi(stream: OutputStream, pid: Int, section: ByteArray) {

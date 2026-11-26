@@ -67,6 +67,10 @@ class TranslationActivity : AppCompatActivity() {
     private var translatorGeneration = 0
     private var ocrGeneration = 0
     private var currentSessionId = UUID.randomUUID().toString()
+    // The foreground stream service may outlive this screen. Only stop it when this
+    // activity actually started it and the user is finishing the screen, never on a
+    // configuration change or for a service started by another owner.
+    private var ownsScreenStreamService = false
 
     private val openScreenshot = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) runOcr(uri)
@@ -105,6 +109,8 @@ class TranslationActivity : AppCompatActivity() {
                 try {
                     if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent)
                     else startService(intent)
+                    ownsScreenStreamService = true
+                    TvScreenStreamService.activityOwnsService = true
                     binding.screenStreamStatus.text =
                         if (
                             Build.VERSION.SDK_INT >= 29 &&
@@ -115,6 +121,8 @@ class TranslationActivity : AppCompatActivity() {
                             "تم منح إذن مشاركة الشاشة؛ جارٍ تجهيز بث H.264 والصوت إذا كان مسموحًا."
                         }
                 } catch (error: Exception) {
+                    ownsScreenStreamService = false
+                    TvScreenStreamService.activityOwnsService = false
                     binding.screenStreamStatus.text =
                         "تعذر بدء البث: ${error.localizedMessage ?: "خطأ غير معروف"}"
                 }
@@ -134,6 +142,15 @@ class TranslationActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityTranslationBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        if (TvScreenStreamService.mediaSink != null) {
+            TvScreenStreamService.statusListener = { message ->
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        binding.screenStreamStatus.text = message
+                    }
+                }
+            }
+        }
 
         binding.translationToolbar.setNavigationOnClickListener {
             finish()
@@ -176,7 +193,9 @@ class TranslationActivity : AppCompatActivity() {
             }
         }
 
-        tvClient = TvSubtitleClient { status, connected ->
+        tvClient = TvScreenStreamService.mediaSink ?: TvSubtitleClient { _, _ -> }
+        TvScreenStreamService.mediaSink = tvClient
+        tvClient?.setStatusListener { status, connected ->
             runOnUiThread {
                 binding.tvConnectionStatus.text = status
                 binding.tvConnectionStatus.setTextColor(
@@ -474,11 +493,32 @@ class TranslationActivity : AppCompatActivity() {
         ocrGeneration++
         tvReconnectHandler.removeCallbacksAndMessages(null)
         stopTvDiscovery()
-        stopService(Intent(this, TvScreenStreamService::class.java))
+
+        // Detach UI callbacks immediately. The client may outlive this Activity.
+        tvClient?.setStatusListener(null)
         TvScreenStreamService.statusListener = null
-        TvScreenStreamService.mediaSink = null
+
+        if (!isChangingConfigurations && isFinishing) {
+            val client = tvClient
+            if (TvScreenStreamService.activityOwnsService &&
+                client != null &&
+                TvScreenStreamService.mediaSink === client
+            ) {
+                runCatching {
+                    startService(
+                        Intent(this, TvScreenStreamService::class.java)
+                            .setAction(TvScreenStreamService.ACTION_RELEASE_CLIENT)
+                    )
+                }
+            } else if (!TvScreenStreamService.isStreaming) {
+                if (TvScreenStreamService.mediaSink === client) {
+                    TvScreenStreamService.mediaSink = null
+                }
+                client?.close()
+            }
+        }
+
         translator?.close()
-        tvClient?.close()
         super.onDestroy()
     }
 

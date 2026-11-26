@@ -883,6 +883,7 @@ def patch_runtime_upstream(root: Path) -> dict[Path, str]:
 
     # Ensure native stream recording is active; MediaProjection screen capture is not used.
     required = (
+        "private var psLinkRecordingActive",
         "private fun psLinkStartGameRecording()",
         "startVideoRecording(openedDescriptor.fd)",
         "private fun psLinkStopGameRecording()",

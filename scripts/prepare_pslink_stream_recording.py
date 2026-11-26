@@ -858,7 +858,8 @@ def patch_stream_activity() -> None:
         src = remove_kotlin_block(src, declaration)
 
     src = re.sub(r"(?m)^\s*private var psLinkRecordingReceiverRegistered\s*=.*\n", "", src)
-    src = re.sub(r"(?m)^\s*private var psLinkRecordingActive\s*=.*\n", "", src)
+    # Keep psLinkRecordingActive: the native recorder reuses it, and removing it on a
+    # second run without re-adding it left the activity referencing an undefined field.
 
     # The former onStart/onStop overrides existed only to register the MediaProjection result receiver.
     for declaration in ("override fun onStart()", "override fun onStop()"):
@@ -925,8 +926,14 @@ import java.util.Locale
         src = src[:package_line.end()] + insert + src[package_line.end():]
 
     property_anchor = "\tprivate lateinit var binding: ActivityStreamBinding"
+    if "private var psLinkRecordingActive" not in src:
+        src = add_after_once(
+            src,
+            property_anchor,
+            "\n\tprivate var psLinkRecordingActive = false",
+            'StreamActivity recording active state',
+        )
     props = '''
-\tprivate var psLinkRecordingActive = false
 \tprivate var psLinkRecordingDescriptor: ParcelFileDescriptor? = null
 \tprivate var psLinkRecordingUri: Uri? = null
 \tprivate var psLinkRecordingLegacyFile: File? = null'''

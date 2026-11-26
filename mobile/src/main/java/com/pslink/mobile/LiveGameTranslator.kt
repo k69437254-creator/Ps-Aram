@@ -47,6 +47,7 @@ import com.google.android.gms.tasks.Task
 //   implementation("com.rmtheis:tess-two:9.1.0")
 // Copy ara.traineddata to assets/tessdata/ara.traineddata
 import com.googlecode.tesseract.android.TessBaseAPI
+import com.googlecode.tesseract.android.ResultIterator
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -82,6 +83,14 @@ class LiveGameTranslator(
     data class CaptionLine(
         val source: String,
         val translated: String,
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float
+    )
+
+    private data class ArabicOcrLine(
+        val text: String,
         val left: Float,
         val top: Float,
         val right: Float,
@@ -209,24 +218,34 @@ class LiveGameTranslator(
                                             tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)
                                         }
                                     } else {
-                                        val arabicText = withContext(Dispatchers.Default) {
+                                        val arabicLines = withContext(Dispatchers.Default) {
                                             ocrArabic(tessAPI, bitmap)
-                                        } ?: ""
+                                        } ?: emptyList()
                                         currentCoroutineContext().ensureActive()
-                                        val lines = arabicText.lines()
-                                            .map { it.trim() }
-                                            .filter { it.length >= 2 && it.length <= MAX_OCR_CHARS }
+                                        val detected = arabicLines
+                                            .asSequence()
+                                            .filter { it.text.length <= MAX_OCR_CHARS }
+                                            .filter { line ->
+                                                val centerY = (line.top + line.bottom) / 2f
+                                                val width = line.right - line.left
+                                                val heightPixels = (line.bottom - line.top) * bitmap.height
+                                                centerY >= 0.48f &&
+                                                    width >= 0.06f &&
+                                                    heightPixels >= 8f
+                                            }
+                                            .sortedWith(compareBy({ it.top }, { it.left }))
                                             .take(3)
-                                        val detected = lines.mapIndexed { index, sourceText ->
-                                            CaptionLine(
-                                                source = sourceText,
-                                                translated = sourceText,
-                                                left = 0.05f,
-                                                top = 0.48f + (index * 0.08f),
-                                                right = 0.95f,
-                                                bottom = 0.48f + (index * 0.08f) + 0.06f
-                                            )
-                                        }
+                                            .map { line ->
+                                                CaptionLine(
+                                                    source = line.text,
+                                                    translated = line.text,
+                                                    left = line.left,
+                                                    top = line.top,
+                                                    right = line.right,
+                                                    bottom = line.bottom
+                                                )
+                                            }
+                                            .toList()
                                         val signature = detected.joinToString("|") { it.source }
                                         if (detected.isEmpty()) {
                                             stableTextGate.offer("")
@@ -533,10 +552,36 @@ class LiveGameTranslator(
         }
     }
 
-    private fun ocrArabic(tessBaseApi: TessBaseAPI, bitmap: Bitmap): String? {
+    private fun ocrArabic(tessBaseApi: TessBaseAPI, bitmap: Bitmap): List<ArabicOcrLine>? {
         tessBaseApi.setPageSegMode(TESSERACT_PSM_SPARSE_TEXT)
         tessBaseApi.setImage(bitmap)
-        return tessBaseApi.getUTF8Text()?.trim()
+        val iterator: ResultIterator = tessBaseApi.getResultIterator() ?: return emptyList()
+        val lines = ArrayList<ArabicOcrLine>()
+        try {
+            iterator.begin()
+            do {
+                val text = iterator.getUTF8Text(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE)
+                    ?.trim()
+                    ?.replace(Regex("[\\t ]+"), " ")
+                    ?.takeIf { it.length >= 2 }
+                    ?: continue
+                val bounds = iterator.getBoundingRect(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE)
+                    ?: continue
+                if (bounds.width() <= 0 || bounds.height() <= 0) continue
+                lines.add(
+                    ArabicOcrLine(
+                        text = text,
+                        left = (bounds.left.toFloat() / bitmap.width).coerceIn(0f, 1f),
+                        top = (bounds.top.toFloat() / bitmap.height).coerceIn(0f, 1f),
+                        right = (bounds.right.toFloat() / bitmap.width).coerceIn(0f, 1f),
+                        bottom = (bounds.bottom.toFloat() / bitmap.height).coerceIn(0f, 1f)
+                    )
+                )
+            } while (iterator.next(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE))
+        } finally {
+            iterator.delete()
+        }
+        return lines
     }
 }
 
