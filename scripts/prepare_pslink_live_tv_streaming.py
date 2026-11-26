@@ -134,45 +134,103 @@ def ensure_sample_timestamp(src: str) -> str:
 
 
 def ensure_caption_clear_paths(src: str) -> str:
+    """Ensure stop/pause clear both Android-TV and phone-side receiver captions."""
     for method, next_statement, label in (
         ("stop", "enabled = false", "clear TV captions when translation stops"),
         ("pause", "loop?.cancel()", "clear TV captions while game stream is paused"),
     ):
-        existing = re.search(
-            rf"(?m)^(?P<i>[ \t]*)fun {method}\(\) \{{\n(?P=i)    "
-            r"tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)(?:,\s*sessionId)?\)",
-            src,
-        )
-        if existing:
+        start, brace, close, end = function_bounds(src, rf"(?m)^[ \t]*fun {method}\(\)", label)
+        body = src[brace + 1:close]
+        has_timestamp = re.search(r"(?m)^[ \t]*val clearPtsNs = System\.nanoTime\(\)$", body) is not None
+        has_tv = re.search(r"tvClient\?\.sendCaptions\(emptyList\(\),\s*clearPtsNs,\s*sessionId\)", body) is not None
+        has_receivers = re.search(r"PhoneReceiverServer\.publishCaptionsToReceivers\(emptyList\(\),\s*clearPtsNs\)", body) is not None
+        if has_timestamp and has_tv and has_receivers:
             continue
-        pattern = re.compile(
-            rf"(?m)^(?P<i>[ \t]*)fun {method}\(\) \{{\n(?P=i)    "
-            + re.escape(next_statement)
-        )
-        src, count = pattern.subn(
-            lambda match: (
-                f"{match.group('i')}fun {method}() {{\n"
-                f"{match.group('i')}    tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)\n"
-                f"{match.group('i')}    {next_statement}"
-            ),
-            src,
-            count=1,
-        )
-        if count != 1:
-            raise SystemExit(f"Anchor mismatch ({label}): found {count}")
+        if not has_timestamp:
+            legacy = re.search(
+                r"(?m)^(?P<i>[ \t]*)tvClient\?\.sendCaptions"
+                r"\(emptyList\(\),\s*System\.nanoTime\(\)(?:,\s*sessionId)?\)$", body
+            )
+            if legacy:
+                indent = legacy.group("i")
+                block = (
+                    f"{indent}val clearPtsNs = System.nanoTime()\n"
+                    f"{indent}tvClient?.sendCaptions(emptyList(), clearPtsNs, sessionId)"
+                )
+                body = body[:legacy.start()] + block + body[legacy.end():]
+                existing_receiver = re.search(
+                    r"PhoneReceiverServer\.publishCaptionsToReceivers\(emptyList\(\),\s*([A-Za-z_]\w*)\)",
+                    body,
+                )
+                if existing_receiver:
+                    body = (
+                        body[:existing_receiver.start(1)]
+                        + "clearPtsNs"
+                        + body[existing_receiver.end(1):]
+                    )
+                else:
+                    tv_clear = re.search(
+                        r"(?m)^(?P<i>[ \t]*)tvClient\?\.sendCaptions\(emptyList\(\),\s*clearPtsNs,\s*sessionId\)$",
+                        body,
+                    )
+                    if not tv_clear:
+                        raise SystemExit(f"Cannot locate TV clear call for {label}")
+                    receiver_line = (
+                        f"\n{tv_clear.group('i')}"
+                        "PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), clearPtsNs)"
+                    )
+                    body = body[:tv_clear.end()] + receiver_line + body[tv_clear.end():]
+            else:
+                anchor = re.compile(rf"(?m)^(?P<i>[ \t]*){re.escape(next_statement)}$")
+                matches = list(anchor.finditer(body))
+                if len(matches) != 1:
+                    raise SystemExit(f"Anchor mismatch ({label}): expected one insertion point, found {len(matches)}")
+                match = matches[0]
+                indent = match.group("i")
+                block = (
+                    f"{indent}val clearPtsNs = System.nanoTime()\n"
+                    f"{indent}tvClient?.sendCaptions(emptyList(), clearPtsNs, sessionId)\n"
+                    f"{indent}PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), clearPtsNs)\n"
+                )
+                body = body[:match.start()] + block + body[match.start():]
+        else:
+            declaration = re.search(r"(?m)^(?P<i>[ \t]*)val clearPtsNs = System\.nanoTime\(\)$", body)
+            if not declaration:
+                raise SystemExit(f"Cannot locate timestamp declaration for {label}")
+            indent = declaration.group("i")
+            insertion = declaration.end()
+            additions = ""
+            if not has_tv:
+                additions += f"\n{indent}tvClient?.sendCaptions(emptyList(), clearPtsNs, sessionId)"
+            if not has_receivers:
+                existing_receiver = re.search(
+                    r"PhoneReceiverServer\.publishCaptionsToReceivers\(emptyList\(\),\s*([A-Za-z_]\w*)\)",
+                    body,
+                )
+                if existing_receiver:
+                    body = (
+                        body[:existing_receiver.start(1)]
+                        + "clearPtsNs"
+                        + body[existing_receiver.end(1):]
+                    )
+                else:
+                    additions += f"\n{indent}PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), clearPtsNs)"
+            body = body[:insertion] + additions + body[insertion:]
+        src = src[:brace + 1] + body + src[close:]
 
     empty_clear = re.search(
-        r"(?m)^[ \t]*lastSource = \"\"\n"
-        r"(?P<i>[ \t]*)lastTranslation = \"\"\n"
-        r"(?P=i)(?:stableTextGate\.reset\(\)\n(?P=i))?"
-        r"onCaption\(emptyList\(\)\)\n"
-        r"(?P=i)tvClient\?\.sendCaptions\(emptyList\(\), samplePtsNs(?:,\s*sessionId)?\)",
+        r'(?m)^[ \t]*lastSource = ""\n'
+        r'(?P<i>[ \t]*)lastTranslation = ""\n'
+        r'(?P=i)(?:stableTextGate\.reset\(\)\n(?P=i))?'
+        r'onCaption\(emptyList\(\)\)\n'
+        r'(?P=i)tvClient\?\.sendCaptions\(emptyList\(\), samplePtsNs(?:,\s*sessionId)?\)',
         src,
     )
     if not empty_clear:
         clear_pattern = re.compile(
-            r"(?m)^(?P<i>[ \t]*)lastSource = \"\"\n(?P=i)lastTranslation = \"\"\n"
-            r"(?P=i)onCaption\(emptyList\(\)\)$"
+            r'(?m)^(?P<i>[ \t]*)lastSource = ""\n'
+            r'(?P=i)lastTranslation = ""\n'
+            r'(?P=i)onCaption\(emptyList\(\)\)$'
         )
         matches = list(clear_pattern.finditer(src))
         if not matches:
@@ -185,16 +243,12 @@ def ensure_caption_clear_paths(src: str) -> str:
             f"{indent}tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)"
         )
         src = src[:match.start()] + replacement + src[match.end():]
-
     clear_packets = re.findall(
-        r"tvClient\?\.sendCaptions\(emptyList\(\), samplePtsNs(?:,\s*sessionId)?\)",
-        src,
+        r"tvClient\?\.sendCaptions\(emptyList\(\), samplePtsNs(?:,\s*sessionId)?\)", src
     )
     if not clear_packets:
         raise SystemExit("Expected a timestamped empty-caption packet after empty OCR")
     return src
-
-
 def ensure_caption_geometry_signature(src: str) -> str:
     signature = re.compile(
         r'(?m)^(?P<indent>[ \t]*)val signature = detected\.joinToString\("\|"\) \{\n'
