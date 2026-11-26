@@ -76,6 +76,13 @@ sub onSubtitlePacket()
 
     parsed = ParseJson(raw)
     if parsed = invalid then return
+
+    if parsed.clear = true
+        m.subtitleTimer.control = "stop"
+        m.subtitleLabel.text = ""
+        return
+    end if
+
     if parsed.translation = invalid then return
 
     translated = parsed.translation.ToStr()

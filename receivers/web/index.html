@@ -3,17 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<meta name="color-scheme" dark">
+<meta name="color-scheme" content="dark">
 <title>PS Link Web Receiver</title>
 <link rel="stylesheet" href="app.css">
 <script src="pslink-client.js"></script>
 <script src="vendor/hls.min.js"></script>
 <script src="media-player.js"></script>
+<script src="../shared/pslink-spatial-captions.js"></script>
 <script defer src="app.js"></script>
 </head>
 <body data-platform="web">
 <div id="video-stage" aria-label="PS Link game video">
-  <video id="game-video" playsinline muted></video>
+  <video id="game-video" playsinline controls></video>
 </div>
 <main class="shell">
 <header class="header">
@@ -71,7 +72,8 @@
   </p>
 </section>
 
-<footer>PS Link — Web browser receiver (HTTP only; no WSS/TLS; HLS.js 1.5.13 bundled)</footer>
+<footer>PS Link — Web browser receiver (WS/WSS + HLS.js 1.5.13 bundled)</footer>
 </main>
+<script src="../shared/tv-remote.js"></script>
 </body>
 </html>

@@ -108,6 +108,7 @@ else
   grep -Fq 'stopVideoRecording()' "$CHI_STREAM"
   grep -Fq 'PSLINK_NATIVE_STREAM_RECORDER_V1' "$CHI_DECODER"
   grep -Fq 'PSLINK_NATIVE_AUDIO_RECORDER_JNI_V1' "$ROOT/third_party/chiaki-ng/android/app/src/main/cpp/chiaki-jni.c"
+  grep -Fq 'ChiakiPcmHlsBridge.publish(data, sampleRate, channels, ptsNs)' "$CHI_STREAM"
   if grep -Eq 'MediaProjectionManager|ScreenRecordingService' "$CHI_STREAM"; then
     echo "Active stream screen still references the phone-display recorder; expected native Chiaki game-stream recording." >&2
     exit 1
@@ -133,4 +134,5 @@ grep -Fq 'surface.isAttachedToWindow' "$SCREENSHOT"
 grep -Fq 'surface.holder.surface.isValid' "$SCREENSHOT"
 grep -Fq 'activity.isDestroyed' "$SCREENSHOT"
 grep -Fq 'overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)' "$TRANSLATION_ACTIVITY"
+grep -Fq 'PhoneReceiverServer.publishCaptionsToReceivers(' "$LIVE_TRANSLATOR"
 echo "PS Link stale-callback, screenshot lifecycle, navigation transition and caption-clear regression guards passed."

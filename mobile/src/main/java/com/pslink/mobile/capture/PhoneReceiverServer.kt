@@ -9,6 +9,7 @@ import com.pslink.core.SessionIds
 import com.pslink.core.BoundedByteAccumulator
 import com.pslink.core.SubtitlePacket
 import com.pslink.core.PsLinkProtocol
+import com.pslink.mobile.LiveGameTranslator
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -107,8 +108,9 @@ class PhoneReceiverServer(
     private val subtitleHistoryLock = Any()
     private val subtitleHistory = mutableListOf<Pair<Long, String>>()
     private var subtitleSequence = 0L
+    private var lastPublishedCaptionText = ""
     private var engine: ApplicationEngine? = null
-    private var serverScope: CoroutineScope? = null
+    @Volatile private var serverScope: CoroutineScope? = null
 
     private suspend fun receiveLimitedJson(call: ApplicationCall, limitBytes: Int): LimitedJsonBody {
         val contentLength = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
@@ -514,33 +516,24 @@ class PhoneReceiverServer(
 
     private fun monotonicMillis(): Long = System.nanoTime() / 1_000_000L
 
-    /**
-     * Broadcast one translated subtitle packet to all authenticated TV receivers.
-     * Returns false when the receiver server is stopped; true means the packet
-     * was retained in history, not that a TV has displayed it.
-     */
-    private fun publishSubtitle(packet: SubtitlePacket): Boolean {
-        val scope = serverScope ?: return false
-        val payload = packet.toJson()
-
-        // Retain a bounded history for independent Roku polling cursors.
+    private fun appendSubtitleHistory(payload: String) {
         synchronized(subtitleHistoryLock) {
             subtitleSequence += 1L
             subtitleHistory.add(subtitleSequence to payload)
-
             while (subtitleHistory.size > 100) {
                 subtitleHistory.removeAt(0)
             }
         }
+    }
 
-        // WebSocket receivers receive the same packet immediately.
+    private fun broadcastBoundJson(baseJson: JSONObject): Boolean {
+        val scope = serverScope ?: return false
         val targets = sessions.entries.toList()
-
         if (targets.isNotEmpty()) {
             scope.launch {
                 targets.forEach { (session, activeSession) ->
                     runCatching {
-                        val boundPayload = JSONObject(payload)
+                        val boundPayload = JSONObject(baseJson.toString())
                             .put("sessionId", activeSession.sessionId)
                             .toString()
                         session.send(Frame.Text(boundPayload))
@@ -548,9 +541,68 @@ class PhoneReceiverServer(
                 }
             }
         }
-
-        // True means accepted into the receiver history, not confirmed displayed.
         return true
+    }
+
+    /**
+     * Broadcast one translated subtitle packet to all authenticated TV receivers.
+     * Returns false when the receiver server is stopped; true means the packet
+     * was retained in history, not that a TV has displayed it.
+     */
+    private fun publishSubtitle(packet: SubtitlePacket): Boolean {
+        if (serverScope == null) return false
+        val payload = packet.toJson()
+        appendSubtitleHistory(payload)
+        return broadcastBoundJson(JSONObject(payload))
+    }
+
+    /**
+     * Broadcast live OCR spatial captions to all authenticated phone-side WebSocket receivers
+     * and record changed dialogue states in Roku's polling history.
+     */
+    private fun publishCaptions(lines: List<LiveGameTranslator.CaptionLine>, timestampNs: Long): Boolean {
+        if (serverScope == null || timestampNs <= 0L) return false
+        val boundedLines = lines.take(3)
+        val array = org.json.JSONArray()
+        boundedLines.forEach { line ->
+            val text = line.translated.take(1000).trim()
+            if (text.isNotEmpty()) {
+                array.put(JSONObject()
+                    .put("text", text)
+                    .put("left", line.left.coerceIn(0f, 1f).toDouble())
+                    .put("top", line.top.coerceIn(0f, 1f).toDouble())
+                    .put("right", line.right.coerceIn(0f, 1f).toDouble())
+                    .put("bottom", line.bottom.coerceIn(0f, 1f).toDouble()))
+            }
+        }
+        val payload = JSONObject()
+            .put("v", PsLinkProtocol.VERSION)
+            .put("kind", "captions")
+            .put("timestampNs", timestampNs)
+            .put("lines", array)
+
+        val combinedText = boundedLines
+            .map { it.translated.take(1000).trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n")
+        val rokuPacketJson = synchronized(subtitleHistoryLock) {
+            if (combinedText == lastPublishedCaptionText) {
+                null
+            } else {
+                lastPublishedCaptionText = combinedText
+                JSONObject()
+                    .put("v", PsLinkProtocol.VERSION)
+                    .put("kind", PsLinkProtocol.KIND_SUBTITLE)
+                    .put("game", "PS Link")
+                    .put("source", boundedLines.joinToString("\n") { it.source.take(1000).trim() })
+                    .put("translation", combinedText)
+                    .put("clear", combinedText.isEmpty())
+                    .put("timestamp", System.currentTimeMillis())
+                    .toString()
+            }
+        }
+        if (rokuPacketJson != null) appendSubtitleHistory(rokuPacketJson)
+        return broadcastBoundJson(payload)
     }
 
     /** Called after the first complete IDR-aligned HLS segment is published. */
@@ -650,6 +702,7 @@ class PhoneReceiverServer(
         synchronized(subtitleHistoryLock) {
             subtitleHistory.clear()
             subtitleSequence = 0L
+            lastPublishedCaptionText = ""
         }
         synchronized(sessionLock) {
             connectionLeases.values.forEach { it.close() }
@@ -686,6 +739,16 @@ class PhoneReceiverServer(
          */
         fun publishToReceivers(packet: SubtitlePacket): Boolean {
             return activeServer?.publishSubtitle(packet) ?: false
+        }
+
+        /**
+         * Broadcast live OCR spatial captions to phone-side WebSocket receivers and Roku history.
+         */
+        fun publishCaptionsToReceivers(
+            lines: List<LiveGameTranslator.CaptionLine>,
+            timestampNs: Long
+        ): Boolean {
+            return activeServer?.publishCaptions(lines, timestampNs) ?: false
         }
 
         /** Prefer Wi-Fi IPv4; return null rather than advertising loopback. */

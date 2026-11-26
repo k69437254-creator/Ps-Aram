@@ -34,6 +34,35 @@
   }
 
   function showCaptions(message) {
+    var target = document.getElementById("game-video") ||
+      document.getElementById("video-stage");
+    var spatialRendered = false;
+
+    if (window.PSLinkSpatialCaptions) {
+      try {
+        if (target) {
+          spatialRendered =
+            window.PSLinkSpatialCaptions.render(message, target) === true;
+        } else {
+          window.PSLinkSpatialCaptions.clear();
+        }
+      } catch (error) {
+        try {
+          window.PSLinkSpatialCaptions.clear();
+        } catch (ignore) {}
+        spatialRendered = false;
+      }
+    }
+
+    if (spatialRendered) {
+      captionsNode.textContent = "";
+      return;
+    }
+
+    if (window.PSLinkSpatialCaptions) {
+      window.PSLinkSpatialCaptions.clear();
+    }
+
     var lines = message && Array.isArray(message.lines) ? message.lines : [];
     captionsNode.textContent = lines.slice(0, 3).map(function (line) {
       if (typeof line === "string") return line;
@@ -45,6 +74,7 @@
   function disconnect() {
     if (receiver) receiver.disconnect();
     if (mediaPlayer) mediaPlayer.stop();
+    if (window.PSLinkSpatialCaptions) window.PSLinkSpatialCaptions.clear();
     streamUrlReceived = false;
     mediaNotice.hidden = true;
     receiver = null;
@@ -100,6 +130,10 @@
 
   window.addEventListener("pslink-media-error", function (event) {
     status(String(event.detail || "حدث خطأ في مشغل الوسائط"), "error");
+  });
+
+  window.addEventListener("pslink-media-warning", function (event) {
+    status(String(event.detail || ""), "info");
   });
 
   setConnected(false);

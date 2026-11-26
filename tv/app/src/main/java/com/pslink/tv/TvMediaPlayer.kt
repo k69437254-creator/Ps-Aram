@@ -311,6 +311,9 @@ class TvMediaPlayer(
                             codec.queueInputBuffer(inputIndex, 0, 0, relativeUs, 0)
                         }
                     }
+                } else {
+                    // Transient decoder shortage, not a stream reset.
+                    Thread.sleep(2)
                 }
 
                 while (true) {

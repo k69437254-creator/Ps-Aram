@@ -59,4 +59,34 @@ assert.ok(secondPlayer.hls);
 assert.notEqual(secondPlayer.hls, previous);
 assert.equal(previous.destroyed, true);
 secondPlayer.stop();
-console.log("PS Link HLS.js/player adapter integration tests passed");
+
+// Verify NotAllowedError triggers muted autoplay fallback with warning event.
+(async function verifyMutedFallback() {
+  const warned = [];
+  context.dispatchEvent = function (ev) {
+    if (ev && ev.type === "pslink-media-warning") warned.push(ev.detail);
+  };
+  let attempts = 0;
+  video.muted = false;
+  video.play = function () {
+    attempts += 1;
+    if (attempts === 1) {
+      const err = new Error("user gesture required");
+      err.name = "NotAllowedError";
+      return Promise.reject(err);
+    }
+    return Promise.resolve();
+  };
+  const fallbackPlayer = context.PSLinkMediaPlayer();
+  fallbackPlayer.start(validUrl);
+  fallbackPlayer.hls.handlers[context.Hls.Events.MANIFEST_PARSED]();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(attempts, 2);
+  assert.equal(video.muted, true);
+  assert.equal(warned.length, 1);
+  fallbackPlayer.stop();
+  console.log("PS Link HLS.js/player adapter integration tests passed");
+})().catch(err => {
+  console.error(err);
+  process.exitCode = 1;
+});

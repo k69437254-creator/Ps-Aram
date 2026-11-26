@@ -145,6 +145,14 @@ function verifyTransportBehavior(name) {
     Receiver.normalizeStreamUrl("javascript:alert(1)", { protocol: "http:" }),
     null
   );
+  assert.strictEqual(
+    Receiver.normalizeStreamUrl("http://user:pass@phone.local/hls/index.m3u8", { protocol: "http:" }),
+    null
+  );
+  assert.strictEqual(
+    Receiver.normalizeStreamUrl("http://@phone.local/hls/index.m3u8", { protocol: "http:" }),
+    null
+  );
 
   var observed = { ready: [], subtitles: [], streams: [], media: [], errors: [] };
   var receiver = new Receiver({
@@ -321,6 +329,13 @@ function verifyHeartbeatTimeout(name) {
   if (name === "tizen") assert(player.indexOf("prepareAsync") !== -1, "Tizen AVPlay adapter missing prepareAsync");
   if (name === "webos") assert(player.indexOf("game-video") !== -1, "webOS HTML media element missing");
   assert(html.indexOf('src="pslink-client.js"') !== -1, name + " does not load packaged transport client");
+  assert(html.indexOf('src="shared/pslink-spatial-captions.js"') !== -1, name + " does not load self-contained spatial captions");
+  assert(html.indexOf('src="shared/tv-remote.js"') !== -1, name + " does not load self-contained remote helper");
+  ["pslink-spatial-captions.js", "tv-remote.js"].forEach(function (sharedFile) {
+    var canonical = fs.readFileSync(path.join(root, "receivers/shared", sharedFile), "utf8");
+    var packaged = fs.readFileSync(path.join(dir, "shared", sharedFile), "utf8");
+    assert.strictEqual(packaged, canonical, name + " packaged shared/" + sharedFile + " is out of sync");
+  });
   assert(app.indexOf("if (!streamUrlReceived)") !== -1, name + " HLS notification guard missing");
   assert(app.indexOf("streamUrlReceived = true;") !== -1, name + " HLS received state missing");
   verifyTransportBehavior(name);

@@ -213,6 +213,19 @@ class V2ProtocolSourceContracts(unittest.TestCase):
                 self.assertIn("decoderEpoch.get() == currentDecoderEpoch", player)
                 self.assertIn("codec.releaseOutputBuffer(outputIndex, false)", player)
                 self.assertIn("!outputSurface.isValid || wanted == null) releaseDecoder()", player)
+                self.assertIn("Thread.sleep(2)", player)
+
+    def test_live_captions_forward_to_phone_receiver_server_and_roku_clear(self):
+        phone = (
+            ROOT / "mobile/src/main/java/com/pslink/mobile/capture/PhoneReceiverServer.kt"
+        ).read_text(encoding="utf-8")
+        translator = (
+            ROOT / "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("fun publishCaptionsToReceivers(", phone)
+        self.assertIn('.put("kind", "captions")', phone)
+        self.assertIn('.put("clear", combinedText.isEmpty())', phone)
+        self.assertIn("PhoneReceiverServer.publishCaptionsToReceivers(", translator)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

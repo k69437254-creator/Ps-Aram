@@ -2151,13 +2151,39 @@ def patch_stream_activity_wiring() -> None:
 
 '''
         src = replace_once(src, anchor, wiring + anchor, "connect native Chiaki media samples to paired TV client")
+    elif "ChiakiPcmHlsBridge.publish" not in src:
+        audio_anchor = "\t\t\tpsLinkTvClient?.sendAudioSample(data, sampleRate, channels, ptsNs)\n"
+        audio_addition = (
+            audio_anchor
+            + "\t\t\tcom.pslink.mobile.capture.ChiakiPcmHlsBridge.publish(data, sampleRate, channels, ptsNs)\n"
+            + "\t\t\t// PSLINK_REMAINING_REPAIRS_V3_CHIAKI_HLS_AUDIO\n"
+        )
+        src = replace_once(src, audio_anchor, audio_addition, "forward Chiaki decoded PCM to HLS bridge")
     # Ensure callbacks do not retain the Activity after its destruction.
-    src = replace_once(
-        src,
-        "\t\tpsLinkTranslator?.close()\n\t\tpsLinkTvClient?.close()",
-        "\t\tpsLinkTranslator?.close()\n\t\tviewModel.session.encodedVideoSampleCallback = null\n\t\tviewModel.session.decodedAudioSampleCallback = null\n\t\tpsLinkTvClient?.close()",
-        "release TV media callback references",
+    if "viewModel.session.encodedVideoSampleCallback = null" not in src:
+        src = replace_once(
+            src,
+            "\t\tpsLinkTranslator?.close()\n\t\tpsLinkTvClient?.close()",
+            "\t\tpsLinkTranslator?.close()\n\t\tviewModel.session.encodedVideoSampleCallback = null\n\t\tviewModel.session.decodedAudioSampleCallback = null\n\t\tpsLinkTvClient?.close()",
+            "release TV media callback references",
+        )
+    duplicated_close = (
+        "\t\tpsLinkTranslator?.close()\n"
+        "\t\tviewModel.session.encodedVideoSampleCallback = null\n"
+        "\t\tviewModel.session.decodedAudioSampleCallback = null\n"
+        "\t\tpsLinkTvClient?.close()\n"
+        "\t\tpsLinkTranslator?.close()\n"
+        "\t\tpsLinkTvClient?.close()"
     )
+    if duplicated_close in src:
+        src = src.replace(
+            duplicated_close,
+            "\t\tpsLinkTranslator?.close()\n"
+            "\t\tviewModel.session.encodedVideoSampleCallback = null\n"
+            "\t\tviewModel.session.decodedAudioSampleCallback = null\n"
+            "\t\tpsLinkTvClient?.close()",
+            1,
+        )
     write(path, src)
 
 

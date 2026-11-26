@@ -1,7 +1,11 @@
 <resources>
-    <style name="TvTheme" parent="Theme.AppCompat.NoActionBar">
-        <item name="colorPrimary">#00A2D1</item>
-        <item name="colorPrimaryDark">#007BA7</item>
-        <item name="colorAccent">#FF9900</item>
+    <style name="TvTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#1677FF</item>
+        <item name="colorPrimaryVariant">#0A4CB0</item>
+        <item name="colorSecondary">#1677FF</item>
+        <item name="android:windowBackground">#050811</item>
+        <item name="android:statusBarColor">#050811</item>
+        <item name="android:navigationBarColor">#050811</item>
+        <item name="android:fontFamily">sans</item>
     </style>
 </resources>

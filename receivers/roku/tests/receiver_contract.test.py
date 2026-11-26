@@ -31,6 +31,7 @@ assert 'Right(LCase(path), 10) <> "index.m3u8"' in scene
 assert 'Instr(1, path, "?") > 0 or Instr(1, path, "#") > 0' in scene
 assert 'content.streamFormat = "hls"' in scene
 assert 'm.subtitleTask.control = "RUN"' in scene
+assert 'if parsed.clear = true' in scene
 
 # All proxy config parsers reject path/query/fragment/user-info.
 for source in (pair, poll, scene):

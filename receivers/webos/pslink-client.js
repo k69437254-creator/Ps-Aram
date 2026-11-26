@@ -94,6 +94,15 @@
       return null;
     }
 
+    // Reject URLs containing credentials (including empty @)
+    if (parsed.username || parsed.password) {
+      return null;
+    }
+    var authority = input.split("://")[1].split("/")[0];
+    if (authority.indexOf("@") !== -1) {
+      return null;
+    }
+
     var securePage = !!(loc && loc.protocol === "https:");
     var lowerPath = parsed.pathname.toLowerCase();
     var isHlsPlaylist =

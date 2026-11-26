@@ -243,7 +243,11 @@ class TvSubtitleServer(
                                             emptyList()
                                         } else {
                                             handleTextFrame(raw)
-                                            val configAck = mediaConfigAck(raw)
+                                            val configAck = if (message.optString("kind") == "media_config") {
+                                                mediaConfigAck(raw)
+                                            } else {
+                                                null
+                                            }
                                             val packet = if (message.optString("kind") == PsLinkProtocol.KIND_SUBTITLE) {
                                                 runCatching { SubtitlePacket.fromJson(raw) }.getOrNull()
                                             } else {

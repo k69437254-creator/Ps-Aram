@@ -14,17 +14,21 @@
     }
   }
 
-  function emitError(message) {
-    root.dispatchEvent(new CustomEvent("pslink-media-error", {
-      detail: String(message || "Media playback failed")
+  function emitEvent(name, message) {
+    root.dispatchEvent(new CustomEvent(name, {
+      detail: String(message || "")
     }));
+  }
+
+  function emitError(message) {
+    emitEvent("pslink-media-error", message || "Media playback failed");
   }
 
   function canPlayHlsNatively(node) {
     if (!node || typeof node.canPlayType !== "function") return false;
     try {
-      return node.canPlayType('application/vnd.apple.mpegurl') !== "" ||
-        node.canPlayType('application/x-mpegURL') !== "";
+      return node.canPlayType("application/vnd.apple.mpegurl") !== "" ||
+        node.canPlayType("application/x-mpegURL") !== "";
     } catch (error) {
       return false;
     }
@@ -36,6 +40,48 @@
     this.onError = null;
     this.hls = null;
   }
+
+  BrowserPlayer.prototype._attemptPlay = function (generation) {
+    var self = this;
+    var node = this.node;
+    node.autoplay = true;
+    node.playsInline = true;
+    node.muted = false;
+    node.volume = 1;
+
+    var result;
+    try {
+      result = node.play();
+    } catch (error) {
+      emitError(error.message || error);
+      return;
+    }
+    if (result && typeof result.catch === "function") {
+      result.catch(function (error) {
+        if (self.generation !== generation) return;
+        if (error && error.name === "NotAllowedError" && !node.muted) {
+          node.muted = true;
+          try {
+            var retry = node.play();
+            if (retry && typeof retry.then === "function") {
+              retry.then(function () {
+                if (self.generation === generation) {
+                  emitEvent("pslink-media-warning", "بدأ العرض مكتومًا بسبب سياسة المتصفح؛ فعّل الصوت من عناصر التحكم.");
+                }
+              }).catch(function (retryError) {
+                if (self.generation === generation) emitError(retryError.message || retryError);
+              });
+              return;
+            }
+          } catch (retryError) {
+            emitError(retryError.message || retryError);
+            return;
+          }
+        }
+        emitError((error && error.message) || error);
+      });
+    }
+  };
 
   BrowserPlayer.prototype.start = function (url) {
     if (!validUrl(url)) throw new Error("عنوان بث HLS غير صالح");
@@ -58,17 +104,8 @@
     // Native HLS (Safari, Edge, etc.)
     if (canPlayHlsNatively(this.node)) {
       this.node.src = url;
-      this.node.autoplay = true;
-      this.node.playsInline = true;
-      this.node.volume = 1;
       this.node.load();
-      var result;
-      try { result = this.node.play(); } catch (error) { emitError(error.message || error); return; }
-      if (result && typeof result.catch === "function") {
-        result.catch(function (error) {
-          if (self.generation === generation) emitError(error.message || error);
-        });
-      }
+      this._attemptPlay(generation);
       return;
     }
 
@@ -85,15 +122,7 @@
         this.hls.attachMedia(this.node);
         this.hls.on(root.Hls.Events.MANIFEST_PARSED, function () {
           if (self.generation !== generation) return;
-          self.node.autoplay = true;
-          self.node.playsInline = true;
-          self.node.volume = 1;
-          var p = self.node.play();
-          if (p && typeof p.catch === "function") {
-            p.catch(function (error) {
-              if (self.generation === generation) emitError(error.message || error);
-            });
-          }
+          self._attemptPlay(generation);
         });
         this.hls.on(root.Hls.Events.ERROR, function (event, data) {
           if (self.generation !== generation) return;

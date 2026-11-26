@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.view.SurfaceView
 import android.view.PixelCopy
 import com.pslink.core.StableTextGate
+import com.pslink.mobile.capture.PhoneReceiverServer
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -129,7 +130,9 @@ class LiveGameTranslator(
     }
 
     fun pause() {
-        tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)
+        val clearPtsNs = System.nanoTime()
+        tvClient?.sendCaptions(emptyList(), clearPtsNs, sessionId)
+        PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), clearPtsNs)
         loop?.cancel()
         lastSource = ""
         lastTranslation = ""
@@ -142,7 +145,9 @@ class LiveGameTranslator(
     }
 
     fun stop() {
-        tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)
+        val clearPtsNs = System.nanoTime()
+        tvClient?.sendCaptions(emptyList(), clearPtsNs, sessionId)
+        PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), clearPtsNs)
         enabled = false
         pause()
         lastSource = ""
@@ -216,6 +221,7 @@ class LiveGameTranslator(
                                             lastTranslation = ""
                                             onCaption(emptyList())
                                             tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)
+                                            PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), samplePtsNs)
                                         }
                                     } else {
                                         val arabicLines = withContext(Dispatchers.Default) {
@@ -256,6 +262,7 @@ class LiveGameTranslator(
                                                 stableTextGate.reset()
                                                 onCaption(emptyList())
                                                 tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)
+                                                PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), samplePtsNs)
                                             }
                                         } else {
                                             emptyFrameCount = 0
@@ -265,6 +272,7 @@ class LiveGameTranslator(
                                                 lastTranslation = detected.joinToString("\n") { it.translated }
                                                 onCaption(detected)
                                                 tvClient?.sendCaptions(detected, samplePtsNs, sessionId)
+                                                PhoneReceiverServer.publishCaptionsToReceivers(detected, samplePtsNs)
                                             }
                                         }
                                     }
@@ -310,6 +318,7 @@ class LiveGameTranslator(
                                             stableTextGate.reset()
                                             onCaption(emptyList())
                                             tvClient?.sendCaptions(emptyList(), samplePtsNs, sessionId)
+                                            PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), samplePtsNs)
                                         }
                                     } else {
                                         emptyFrameCount = 0
@@ -331,6 +340,7 @@ class LiveGameTranslator(
                                             // The TV receives the exact OCR geometry so Arabic covers the
                                             // source dialogue in the streamed game image, not in a text panel.
                                             tvClient?.sendCaptions(captions, samplePtsNs, sessionId)
+                                            PhoneReceiverServer.publishCaptionsToReceivers(captions, samplePtsNs)
                                         }
                                     }
                                 }
@@ -347,7 +357,9 @@ class LiveGameTranslator(
                     if (generation == loopGeneration) {
                         enabled = false
                         stableTextGate.reset()
-                        tvClient?.sendCaptions(emptyList(), System.nanoTime(), sessionId)
+                        val clearPtsNs = System.nanoTime()
+                        tvClient?.sendCaptions(emptyList(), clearPtsNs, sessionId)
+                        PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), clearPtsNs)
                         onCaption(emptyList())
                         onStatus("توقفت الترجمة الحية: ${error.localizedMessage ?: "تعذر معالجة إطار الفيديو"}")
                     }

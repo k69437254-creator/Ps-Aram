@@ -11,6 +11,14 @@ class HlsAudioRepairContracts(unittest.TestCase):
     def test_bootstrap_overlay_forwards_native_pcm_to_hls_bridge(self):
         overlay = self.read("scripts/prepare_pslink_live_tv_streaming.py")
         self.assertIn("ChiakiPcmHlsBridge.publish(data, sampleRate, channels, ptsNs)", overlay)
+        self.assertIn('elif "ChiakiPcmHlsBridge.publish" not in src:', overlay)
+
+    def test_stream_activity_has_chiaki_pcm_hls_bridge_when_bootstrapped(self):
+        stream_path = ROOT / "third_party/chiaki-ng/android/app/src/main/java/com/metallic/chiaki/stream/StreamActivity.kt"
+        if stream_path.is_file():
+            stream = stream_path.read_text(encoding="utf-8")
+            self.assertIn("ChiakiPcmHlsBridge.publish(data, sampleRate, channels, ptsNs)", stream)
+            self.assertIn("private var psLinkRecordingActive", stream)
 
     def test_service_has_native_first_single_source_fallback(self):
         service = self.read("mobile/src/main/java/com/pslink/mobile/capture/TvScreenStreamService.kt")

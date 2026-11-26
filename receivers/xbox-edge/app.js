@@ -23,13 +23,41 @@
     video.load();
   }
 
+  function attemptPlay() {
+    video.muted = false;
+    video.volume = 1;
+    var playPromise = video.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(function (error) {
+        if (error && error.name === "NotAllowedError" && !video.muted) {
+          video.muted = true;
+          video.play().then(function () {
+            setStatus("بدأ العرض مكتومًا بسبب سياسة المتصفح؛ فعّل الصوت من عناصر التحكم.");
+          }).catch(function () {
+            setStatus("اضغط تشغيل الفيديو لبدء العرض");
+          });
+        } else {
+          setStatus("اضغط تشغيل الفيديو لبدء العرض");
+        }
+      });
+    }
+  }
+
   function playStream(url) {
     stopVideo();
 
     if (window.Hls && Hls.isSupported()) {
-      hls = new Hls();
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60
+      });
       hls.loadSource(url);
       hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, function () {
+        attemptPlay();
+      });
       hls.on(Hls.Events.ERROR, function (_event, data) {
         if (data && data.fatal) {
           setStatus("تعذر تشغيل HLS في المتصفح");
@@ -37,9 +65,7 @@
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = url;
-      video.play().catch(function () {
-        setStatus("اضغط تشغيل الفيديو لبدء العرض");
-      });
+      attemptPlay();
     } else {
       setStatus("هذا المتصفح لا يدعم تشغيل HLS");
     }
@@ -69,13 +95,30 @@
             item.translation || "";
         },
         onCaptions: function (message) {
+          var captionsNode = document.getElementById("captions");
+          var spatialRendered = false;
+          if (window.PSLinkSpatialCaptions) {
+            try {
+              spatialRendered = window.PSLinkSpatialCaptions.render(message, video) === true;
+            } catch (error) {
+              try { window.PSLinkSpatialCaptions.clear(); } catch (ignore) {}
+              spatialRendered = false;
+            }
+          }
+          if (spatialRendered) {
+            captionsNode.textContent = "";
+            return;
+          }
+          if (window.PSLinkSpatialCaptions) {
+            window.PSLinkSpatialCaptions.clear();
+          }
           var lines = Array.isArray(message.lines) ? message.lines : [];
-          document.getElementById("captions").textContent =
-            lines.map(function (line) {
+          captionsNode.textContent =
+            lines.slice(0, 3).map(function (line) {
               return typeof line === "string"
                 ? line
-                : String(line.text || line.translation || "");
-            }).join("\n");
+                : String(line.text || line.translation || line.source || "");
+            }).filter(Boolean).join("\n");
         },
         onStreamUrl: function (stream) {
           playStream(stream.url);
@@ -93,6 +136,7 @@
     if (receiver) receiver.disconnect();
     receiver = null;
     stopVideo();
+    if (window.PSLinkSpatialCaptions) window.PSLinkSpatialCaptions.clear();
 
     document.getElementById("game").textContent = "PS Link";
     document.getElementById("translation").textContent = "";

@@ -120,3 +120,24 @@ prep = (ROOT / "scripts/prepare_upstream.py").read_text(encoding="utf-8")
 if "PsnAccountIdClient.accountIdFromRedirect" not in prep or "psnLoginButton" not in prep:
     raise SystemExit("PSN OAuth native registration UI patch is missing from prepare_upstream.py")
 print("PSN browser OAuth and Account-ID extraction checks passed.")
+
+# Validate Google TV and Fire TV companion modules (resources, theme compatibility, and view IDs).
+for tv_mod, pkg, needs_banner in (
+    ("tv-google", "com.pslink.tvgoogle", True),
+    ("tv-fire", "com.pslink.tvfire", False),
+):
+    mod_root = ROOT / tv_mod / "app"
+    layout_xml = (mod_root / "src/main/res/layout/activity_tv_receiver.xml").read_text(encoding="utf-8")
+    styles_xml = (mod_root / "src/main/res/values/styles.xml").read_text(encoding="utf-8")
+    if "android:marginTop" in layout_xml:
+        raise SystemExit(f"{tv_mod} layout uses invalid attribute android:marginTop")
+    for view_id in ("gameSurfaceView", "pairingPanel", "pairCodeText", "ipAddressText", "serverStatusText", "subtitleText"):
+        if f"@+id/{view_id}" not in layout_xml:
+            raise SystemExit(f"{tv_mod} layout missing required view id: {view_id}")
+    if "Theme.Leanback" in styles_xml:
+        raise SystemExit(f"{tv_mod} TvTheme must inherit AppCompat/MaterialComponents for AppCompatActivity")
+    if not (mod_root / "src/main/res/drawable-nodpi/pslink_launcher_art.png").is_file():
+        raise SystemExit(f"{tv_mod} missing drawable-nodpi/pslink_launcher_art.png")
+    if needs_banner and not (mod_root / "src/main/res/drawable/tv_banner.xml").is_file():
+        raise SystemExit(f"{tv_mod} missing drawable/tv_banner.xml")
+print("Google TV and Fire TV resource and theme checks passed.")

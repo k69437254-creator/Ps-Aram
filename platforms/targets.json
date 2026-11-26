@@ -14,7 +14,7 @@
         "packageSigned": "not-tested",
         "installable": "not-tested",
         "physicalDevice": "not-tested-in-this-validation",
-        "fullMediaPath": "partial; playback capture and HLS path present",
+        "fullMediaPath": "partial; Chiaki PCM to AAC HLS path plus Android Playback Capture fallback present; device capture not validated",
         "audioVideoSync": "not-validated-over-session-duration",
         "longDurationStability": "not-tested"
       }
@@ -117,7 +117,7 @@
         "installable": "not-tested",
         "physicalDevice": "not-tested",
         "fullMediaPath": "video-only-path-described; device-validation-pending",
-        "audioVideoSync": "not-supported-or-validated",
+        "audioVideoSync": "not-validated-on-device",
         "longDurationStability": "not-tested"
       }
     },
@@ -192,7 +192,7 @@
   "acceptanceMatrix": {
     "android-mobile": {
       "sourceComplete": "PARTIAL",
-      "buildPassed": "NOT_VERIFIED_AFTER_WORKTREE_CHANGES_PREVIOUS_HEAD_FAILED_KOTLIN_COMPILE",
+      "buildPassed": "NOT_RUN_ON_CURRENT_HEAD",
       "unitTestsPassed": "NOT_RUN",
       "integrationTestsPassed": "NOT_RUN",
       "packageVerified": "NOT_BUILT",
@@ -327,7 +327,7 @@
     },
     "playstation": {
       "sourceComplete": "PARTIAL_ANDROID_CHIAKI_ROUTE",
-      "buildPassed": "NOT_VERIFIED_AFTER_WORKTREE_CHANGES_PREVIOUS_HEAD_FAILED_KOTLIN_COMPILE",
+      "buildPassed": "NOT_RUN_ON_CURRENT_HEAD",
       "unitTestsPassed": "NOT_RUN",
       "integrationTestsPassed": "NOT_RUN",
       "packageVerified": "NOT_BUILT",
