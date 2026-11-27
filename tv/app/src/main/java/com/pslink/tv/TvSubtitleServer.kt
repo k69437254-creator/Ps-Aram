@@ -13,7 +13,6 @@ import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.cio.CIO
 import io.ktor.server.routing.routing
-import io.ktor.server.request.origin
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
@@ -63,12 +62,12 @@ class TvSubtitleServer(
         engine = embeddedServer(CIO, host = "0.0.0.0", port = PsLinkProtocol.PORT) {
             install(WebSockets) {
                 maxFrameSize = 2 * 1024 * 1024L + 28L
-                pingInterval = 25_000L
+                pingPeriodMillis = 25_000L
                 timeoutMillis = 90_000L
             }
             routing {
                 webSocket(PsLinkProtocol.PATH) {
-                    val pairingSource = call.request.origin.remoteHost
+                    val pairingSource = call.request.local.remoteHost
                     suspend fun rejectPairing(errorCode: String, message: String) {
                         if (errorCode != "PAIRING_RATE_LIMITED" &&
                             errorCode != "TOO_MANY_CONNECTIONS" &&

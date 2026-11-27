@@ -78,6 +78,30 @@ class V2ProtocolSourceContracts(unittest.TestCase):
         self.assertIn("data class Overflow(val bucket: Int)", limiter)
         self.assertIn("if (key is SourceKey.Exact) failuresBySource.remove(key)", limiter)
 
+    def test_tv_servers_use_supported_ktor_apis_and_leanback_version(self):
+        server_paths = (
+            "tv/app/src/main/java/com/pslink/tv/TvSubtitleServer.kt",
+            "tv-google/app/src/main/java/com/pslink/tvgoogle/TvSubtitleServer.kt",
+            "tv-fire/app/src/main/java/com/pslink/tvfire/TvSubtitleServer.kt",
+        )
+        for path in server_paths:
+            with self.subTest(server=path):
+                server = (ROOT / path).read_text(encoding="utf-8")
+                self.assertIn("call.request.local.remoteHost", server)
+                self.assertNotIn("call.request.origin.remoteHost", server)
+                self.assertNotIn("io.ktor.server.request.origin", server)
+                self.assertIn("pingPeriodMillis = 25_000L", server)
+                self.assertIn("timeoutMillis = 90_000L", server)
+                self.assertNotRegex(server, r"(?m)^\s*pingInterval\s*=")
+
+        versions = (ROOT / "gradle/libs.versions.toml").read_text(encoding="utf-8")
+        self.assertIn('ktor = "2.3.12"', versions)
+        self.assertIn(
+            'leanback = { module = "androidx.leanback:leanback", version = "1.2.0" }',
+            versions,
+        )
+        self.assertNotIn("1.1.0-alpha09", versions)
+
     def test_mobile_media_config_carries_authenticated_session_id(self):
         client = (
             ROOT / "mobile/src/main/java/com/pslink/mobile/TvSubtitleClient.kt"
