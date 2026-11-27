@@ -15,7 +15,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.origin
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.post
@@ -146,7 +145,7 @@ class PhoneReceiverServer(
             engine = embeddedServer(CIO, host = "0.0.0.0", port = PsLinkProtocol.PORT) {
                 install(WebSockets) {
                     maxFrameSize = MAX_CONTROL_FRAME_BYTES.toLong() + 1L
-                    pingInterval = 25_000L
+                    pingPeriodMillis = 25_000L
                     timeoutMillis = SESSION_IDLE_TIMEOUT_MS
                 }
                 routing {
@@ -164,7 +163,7 @@ class PhoneReceiverServer(
                         call.respond(HttpStatusCode.NoContent)
                     }
                     post("/receiver/roku/stream-url") {
-                        val pairingSource = call.request.origin.remoteHost
+                        val pairingSource = call.request.local.remoteHost
                         if (!originAllowlist.allows(call.request.headers["Origin"])) {
                             pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.Forbidden)
@@ -216,7 +215,7 @@ class PhoneReceiverServer(
                     }
 
                     post("/receiver/roku/subtitle") {
-                        val pairingSource = call.request.origin.remoteHost
+                        val pairingSource = call.request.local.remoteHost
                         if (!originAllowlist.allows(call.request.headers["Origin"])) {
                             pairingAttempts.recordFailure(pairingSource, monotonicMillis())
                             call.respond(HttpStatusCode.Forbidden)
@@ -351,7 +350,7 @@ class PhoneReceiverServer(
                         }
                     }
                     webSocket(PsLinkProtocol.PATH) {
-                        val pairingSource = call.request.origin.remoteHost
+                        val pairingSource = call.request.local.remoteHost
                         val connectionJob = coroutineContext[Job]
                             ?: throw IllegalStateException("WebSocket connection has no Job")
                         val connectionSlot = connectionSlots.tryAcquire()
@@ -501,7 +500,7 @@ class PhoneReceiverServer(
         recordFailure: Boolean = true
     ) {
         if (recordFailure) {
-            pairingAttempts.recordFailure(call.request.origin.remoteHost, monotonicMillis())
+            pairingAttempts.recordFailure(call.request.local.remoteHost, monotonicMillis())
         }
         runCatching {
             send(Frame.Text(JSONObject()
