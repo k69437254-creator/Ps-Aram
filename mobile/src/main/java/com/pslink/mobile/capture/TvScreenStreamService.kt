@@ -226,9 +226,10 @@ class TvScreenStreamService : Service() {
                     BuildConfig.PSLINK_PUBLIC_BASE_URL
                 )
                 phoneReceiverServer = receiver
-                val publisher = HlsTransportStreamPublisher(hlsDirectory) {
-                    receiver.notifyStreamAvailable()
-                }
+                val publisher = HlsTransportStreamPublisher(
+                    hlsDirectory,
+                    onPlaylistReady = { receiver.notifyStreamAvailable() }
+                )
                 publisher.start()
                 hlsPublisher = publisher
                 val reorder = HlsAccessUnitReorderBuffer(

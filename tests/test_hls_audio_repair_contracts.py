@@ -62,6 +62,17 @@ class HlsAudioRepairContracts(unittest.TestCase):
         gate = self.read("scripts/check-source.sh")
         self.assertIn("tests/test_hls_audio_repair_contracts.py", gate)
 
+    def test_hls_playlist_ready_callback_uses_named_argument(self):
+        service = self.read("mobile/src/main/java/com/pslink/mobile/capture/TvScreenStreamService.kt")
+        self.assertRegex(
+            service,
+            r"HlsTransportStreamPublisher\(\s*hlsDirectory,\s*onPlaylistReady\s*=\s*\{\s*receiver\.notifyStreamAvailable\(\)\s*\}\s*\)"
+        )
+        self.assertNotRegex(
+            service,
+            r"HlsTransportStreamPublisher\(\s*hlsDirectory\s*\)\s*\{"
+        )
+
     def test_hls_playlist_publish_is_atomic(self):
         publisher = self.read("mobile/src/main/java/com/pslink/mobile/capture/HlsTransportStreamPublisher.kt")
         self.assertIn("playlistRenamer: (File, File) -> Unit = { source, destination ->", publisher)
