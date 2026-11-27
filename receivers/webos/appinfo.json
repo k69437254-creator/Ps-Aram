@@ -9,5 +9,6 @@
   "transparent": false,
   "icon": "icon.png",
   "largeIcon": "largeicon.png",
-  "iconColor": "#090D16"
+  "iconColor": "#090D16",
+  "requiredACG": []
 }

@@ -55,19 +55,61 @@ jobs:
           node receivers/webos/tests/receiver.test.js
           node receivers/webos/tests/back-button.test.js
 
+      - name: Prepare clean production application
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SOURCE="receivers/webos"
+          STAGE="$RUNNER_TEMP/webos-production"
+          OUT="$RUNNER_TEMP/webos-ipk"
+
+          rm -rf "$STAGE" "$OUT"
+          mkdir -p "$STAGE/shared" "$OUT"
+
+          FILES=(
+            appinfo.json
+            index.html
+            icon.png
+            largeicon.png
+            app.css
+            app.js
+            media-player.js
+            pslink-client.js
+            shared/pslink-spatial-captions.js
+            shared/tv-remote.js
+          )
+
+          for file in "${FILES[@]}"; do
+            test -s "$SOURCE/$file"
+            install -D "$SOURCE/$file" "$STAGE/$file"
+          done
+
+          echo "Production staging contents:"
+          find "$STAGE" -type f -printf '%P\n' | sort
+
+          test "$(find "$STAGE" -type f | wc -l)" -eq "${#FILES[@]}"
+
+          if find "$STAGE" \( \
+            -path '*/tests/*' -o \
+            -name '*diagnostic*' -o \
+            -name 'README.md' \
+          \) -print -quit | grep -q .; then
+            echo "Development files found in production staging." >&2
+            exit 1
+          fi
+
+          echo "WEBOS_PRODUCTION_STAGING=PASSED"
+
       - name: Package production IPK
         shell: bash
         run: |
-          OUT="$RUNNER_TEMP/webos-ipk"
-          mkdir -p "$OUT"
+          set -euo pipefail
 
-          ares-package \
-            --outdir "$OUT" \
-            --app-exclude tests \
-            --app-exclude README.md \
-            --app-exclude webrtc-diagnostic.html \
-            --app-exclude webrtc-diagnostic.js \
-            receivers/webos
+          STAGE="$RUNNER_TEMP/webos-production"
+          OUT="$RUNNER_TEMP/webos-ipk"
+
+          ares-package --outdir "$OUT" "$STAGE"
 
           mapfile -t PACKAGES < <(
             find "$OUT" -maxdepth 1 -type f -name '*.ipk' -print
@@ -81,7 +123,6 @@ jobs:
           IPK="${PACKAGES[0]}"
           test -s "$IPK"
 
-          echo "Created: $IPK"
           ares-package -i "$IPK"
 
           ar t "$IPK" | grep -Fx "data.tar.gz"
@@ -91,19 +132,34 @@ jobs:
 
           CONTENTS="$OUT/package-contents.txt"
 
-          grep -Eq '(^|/)appinfo.json$' "$CONTENTS"
-          grep -Eq '(^|/)index.html$' "$CONTENTS"
-          grep -Eq '(^|/)icon.png$' "$CONTENTS"
-          grep -Eq '(^|/)largeicon.png$' "$CONTENTS"
-          grep -Eq '(^|/)app.js$' "$CONTENTS"
-          grep -Eq '(^|/)media-player.js$' "$CONTENTS"
-          grep -Eq '(^|/)pslink-client.js$' "$CONTENTS"
+          REQUIRED=(
+            appinfo.json
+            index.html
+            icon.png
+            largeicon.png
+            app.css
+            app.js
+            media-player.js
+            pslink-client.js
+            shared/pslink-spatial-captions.js
+            shared/tv-remote.js
+          )
 
-          if grep -Eq '(^|/)tests(/|$)|(^|/)README\.md$|webrtc-diagnostic' "$CONTENTS"; then
+          for file in "${REQUIRED[@]}"; do
+            grep -Eq "(^|/)${file//./\\.}$" "$CONTENTS" || {
+              echo "Missing production resource: $file" >&2
+              exit 1
+            }
+          done
+
+          if grep -Eiq \
+            '(^|/)(tests|README\.md)(/|$)|diagnostic' "$CONTENTS"; then
             echo "Development-only files leaked into production IPK." >&2
             exit 1
           fi
 
+          echo "===== VERIFIED IPK CONTENTS ====="
+          cat "$CONTENTS"
           echo "WEBOS_IPK_VALIDATION=PASSED"
           echo "WEBOS_IPK_PATH=$IPK"
 

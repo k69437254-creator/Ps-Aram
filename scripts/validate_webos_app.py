@@ -74,6 +74,9 @@ if len(meta["title"]) > 20:
 if not re.fullmatch(r"#[0-9A-Fa-f]{6}", str(meta.get("iconColor", ""))):
     fail("iconColor must be a six-digit hexadecimal color.")
 
+if not isinstance(meta.get("requiredACG"), list):
+    fail("requiredACG must be an array.")
+
 for key, expected in (("icon", (80, 80)), ("largeIcon", (130, 130))):
     name = meta.get(key)
     if not isinstance(name, str) or not name:
