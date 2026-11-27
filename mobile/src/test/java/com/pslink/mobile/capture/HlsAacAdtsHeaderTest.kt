@@ -12,7 +12,7 @@ class HlsAacAdtsHeaderTest {
         val output = File(requireNotNull(System.getProperty("pslink.hls.test.outputDir")), "dynamic-aac-format")
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
-        val publisher = HlsTransportStreamPublisher(output)
+        val publisher = HlsTransportStreamPublisher(output, playlistRenamer = ::atomicRenameForJvm)
         publisher.start()
         publisher.writeAccessUnit(fixture, ptsUs = 0L, keyFrame = true)
         publisher.writeAudioAccessUnit(byteArrayOf(0x11, 0x22, 0x33), 20_000L, 44_100, 1)

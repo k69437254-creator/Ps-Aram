@@ -7,7 +7,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.util.Locale
-import android.system.ErrnoException
 import android.system.Os
 
 /** Pure Kotlin H.264 Annex-B to MPEG-TS live HLS segment writer. */
@@ -15,7 +14,10 @@ class HlsTransportStreamPublisher(
     private val directory: File,
     private val segmentTargetUs: Long = 2_000_000L,
     private val windowSize: Int = 6,
-    private val onPlaylistReady: (() -> Unit)? = null
+    private val onPlaylistReady: (() -> Unit)? = null,
+    private val playlistRenamer: (File, File) -> Unit = { source, destination ->
+        Os.rename(source.absolutePath, destination.absolutePath)
+    }
 ) {
     private data class Segment(val name: String, val durationUs: Long)
     private var output: OutputStream? = null
@@ -139,8 +141,8 @@ class HlsTransportStreamPublisher(
         // Atomic same-filesystem replacement. Never delete the published playlist
         // as a fallback: on failure, keep the previous playlist intact.
         try {
-            Os.rename(temporary.absolutePath, destination.absolutePath)
-        } catch (error: ErrnoException) {
+            playlistRenamer(temporary, destination)
+        } catch (error: Exception) {
             temporary.delete()
             throw IllegalStateException("Unable to atomically publish HLS playlist", error)
         }

@@ -5,6 +5,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
+internal fun atomicRenameForJvm(source: File, destination: File) {
+    Files.move(
+        source.toPath(),
+        destination.toPath(),
+        StandardCopyOption.ATOMIC_MOVE,
+        StandardCopyOption.REPLACE_EXISTING
+    )
+}
 
 class HlsTransportStreamPublisherTest {
     @Test fun writesIdrAlignedMpegTsThatCanBeDecodedByFfmpegInCi() {
@@ -13,7 +24,7 @@ class HlsTransportStreamPublisherTest {
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 
-        val publisher = HlsTransportStreamPublisher(output)
+        val publisher = HlsTransportStreamPublisher(output, playlistRenamer = ::atomicRenameForJvm)
         publisher.start()
         publisher.writeAccessUnit(fixture, ptsUs = 0L, keyFrame = true)
         publisher.stop()
@@ -43,7 +54,7 @@ class HlsTransportStreamPublisherTest {
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 
-        val publisher = HlsTransportStreamPublisher(output)
+        val publisher = HlsTransportStreamPublisher(output, playlistRenamer = ::atomicRenameForJvm)
         publisher.start()
 
         publisher.writeAccessUnit(
@@ -119,7 +130,7 @@ class HlsTransportStreamPublisherTest {
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 
-        val publisher = HlsTransportStreamPublisher(output)
+        val publisher = HlsTransportStreamPublisher(output, playlistRenamer = ::atomicRenameForJvm)
         publisher.start()
 
         publisher.writeAccessUnit(fixture, 0L, true)
@@ -205,7 +216,7 @@ class HlsTransportStreamPublisherTest {
             .use { it.readBytes() }
 
         val adts = fixture.readBytes()
-        val publisher = HlsTransportStreamPublisher(output)
+        val publisher = HlsTransportStreamPublisher(output, playlistRenamer = ::atomicRenameForJvm)
         publisher.start()
         publisher.writeAccessUnit(video, ptsUs = 0L, keyFrame = true)
 
@@ -291,7 +302,7 @@ class HlsTransportStreamPublisherTest {
         output.deleteRecursively()
         assertTrue(output.mkdirs() || output.isDirectory)
 
-        val publisher = HlsTransportStreamPublisher(output)
+        val publisher = HlsTransportStreamPublisher(output, playlistRenamer = ::atomicRenameForJvm)
         publisher.start()
         publisher.writeAccessUnit(fixture, ptsUs = 0L, keyFrame = true)
 

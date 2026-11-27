@@ -64,8 +64,10 @@ class HlsAudioRepairContracts(unittest.TestCase):
 
     def test_hls_playlist_publish_is_atomic(self):
         publisher = self.read("mobile/src/main/java/com/pslink/mobile/capture/HlsTransportStreamPublisher.kt")
-        self.assertIn("Os.rename(temporary.absolutePath, destination.absolutePath)", publisher)
-        self.assertIn("catch (error: ErrnoException)", publisher)
+        self.assertIn("playlistRenamer: (File, File) -> Unit = { source, destination ->", publisher)
+        self.assertIn("Os.rename(source.absolutePath, destination.absolutePath)", publisher)
+        self.assertIn("playlistRenamer(temporary, destination)", publisher)
+        self.assertIn("catch (error: Exception)", publisher)
         self.assertIn("temporary.delete()", publisher)
         self.assertNotIn("destination.delete()", publisher)
 
