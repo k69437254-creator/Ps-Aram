@@ -58,11 +58,13 @@ class BoundedMediaQueueTest {
             queue.offer(Frame(3, 8, true))
         )
 
+        assertEquals(8, queue.queuedBytes)
+
         val recovered = queue.poll(0, TimeUnit.MILLISECONDS)
         assertEquals(3, recovered?.value?.id)
         assertEquals(queue.generation, recovered?.generation)
         assertTrue(queue.generation > generation)
-        assertEquals(8, queue.queuedBytes)
+        assertEquals(0, queue.queuedBytes)
     }
 
     @Test
