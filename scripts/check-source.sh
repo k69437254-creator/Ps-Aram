@@ -7,6 +7,7 @@ bash -n scripts/bootstrap.sh scripts/build.sh scripts/push-github.sh scripts/che
 python3 -m py_compile scripts/prepare_upstream.py scripts/validate_package.py scripts/prepare_pslink_upstream.py scripts/prepare_pslink_stream_recording.py scripts/prepare_pslink_audio_recording.py scripts/prepare_pslink_complete_fix.py scripts/prepare_pslink_live_tv_streaming.py
 # PSLINK_REMAINING_REPAIRS_V3: tests for Chiaki PCM -> AAC -> HLS routing and PTS ordering
 python3 tests/test_hls_audio_repair_contracts.py
+python3 tests/test_pslink_native_audio_callback_guard.py
 # PSLINK_CONSOLIDATED_REPAIR_REGRESSION_GATE_V1
 for regression_test in \
     "tests/test_pslink_caption_overlay_repair.py" \

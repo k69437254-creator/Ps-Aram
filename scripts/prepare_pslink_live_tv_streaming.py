@@ -628,7 +628,28 @@ static void pslink_live_dispatch_audio_sample(AndroidChiakiSession *session,
         return;
     uint32_t rate = session->audio_decoder.audio_header.rate;
     uint32_t channels = session->audio_decoder.audio_header.channels;
-    if(rate < 8000 || rate > 192000 || channels < 1 || channels > 2)
+
+    /* PSLINK_NATIVE_AUDIO_CALLBACK_BOUNDS_V1 */
+    if(channels < 1 || channels > 2)
+        return;
+
+    if(rate != 96000 && rate != 88200 && rate != 64000
+            && rate != 48000 && rate != 44100 && rate != 32000
+            && rate != 24000 && rate != 22050 && rate != 16000
+            && rate != 12000 && rate != 11025 && rate != 8000
+            && rate != 7350)
+        return;
+
+    /* samples_count counts int16_t values, including all channels. */
+    if(samples_count > (size_t)(256 * 1024) / sizeof(int16_t))
+        return;
+
+    if(samples_count % channels != 0)
+        return;
+
+    const size_t pcm_bytes = samples_count * sizeof(int16_t);
+    if(pcm_bytes == 0 || pcm_bytes > (size_t)(256 * 1024)
+            || pcm_bytes % ((size_t)channels * sizeof(int16_t)) != 0)
         return;
 
     JNIEnv *env = NULL;
@@ -643,7 +664,7 @@ static void pslink_live_dispatch_audio_sample(AndroidChiakiSession *session,
     else if(status != JNI_OK)
         return;
 
-    jsize length = (jsize)(samples_count * sizeof(int16_t));
+    jsize length = (jsize)pcm_bytes;
     jbyteArray bytes = (*env)->NewByteArray(env, length);
     if(bytes)
     {
@@ -681,6 +702,51 @@ static void pslink_live_dispatch_audio_sample(AndroidChiakiSession *session,
             return body.replace(needle, needle + "\n        pslink_live_dispatch_audio_sample(session, samples, samples_count);", 1)
         src = edit_c_function(src, pattern, "existing audio recorder callback", audio_body)
     write(jni, src)
+
+
+    # PSLINK_NATIVE_AUDIO_BOUNDS_INDEPENDENT_PATCH_V1
+    # This must run even when the general live-TV marker already exists.
+    src = read(jni)
+    if "PSLINK_NATIVE_AUDIO_CALLBACK_BOUNDS_V1" not in src:
+        old_guard = (
+            "    uint32_t rate = session->audio_decoder.audio_header.rate;\n"
+            "    uint32_t channels = session->audio_decoder.audio_header.channels;\n"
+            "    if(rate < 8000 || rate > 192000 || channels < 1 || channels > 2)\n"
+            "        return;"
+        )
+        new_guard = """    uint32_t rate = session->audio_decoder.audio_header.rate;
+    uint32_t channels = session->audio_decoder.audio_header.channels;
+
+    /* PSLINK_NATIVE_AUDIO_CALLBACK_BOUNDS_V1 */
+    if(channels < 1 || channels > 2)
+        return;
+
+    if(rate != 96000 && rate != 88200 && rate != 64000
+            && rate != 48000 && rate != 44100 && rate != 32000
+            && rate != 24000 && rate != 22050 && rate != 16000
+            && rate != 12000 && rate != 11025 && rate != 8000
+            && rate != 7350)
+        return;
+
+    /* samples_count counts int16_t values, including all channels. */
+    if(samples_count > (size_t)(256 * 1024) / sizeof(int16_t))
+        return;
+
+    if(samples_count % channels != 0)
+        return;
+
+    const size_t pcm_bytes = samples_count * sizeof(int16_t);
+    if(pcm_bytes == 0 || pcm_bytes > (size_t)(256 * 1024)
+            || pcm_bytes % ((size_t)channels * sizeof(int16_t)) != 0)
+        return;"""
+        if src.count(old_guard) != 1:
+            raise SystemExit("Expected exactly one original JNI audio guard")
+        length_old = "jsize length = (jsize)(samples_count * sizeof(int16_t));"
+        if src.count(length_old) != 1:
+            raise SystemExit("Expected exactly one original JNI byte-length expression")
+        src = src.replace(old_guard, new_guard, 1)
+        src = src.replace(length_old, "jsize length = (jsize)pcm_bytes;", 1)
+        write(jni, src)
 
 
 # ---------------------------------------------------------------------------
