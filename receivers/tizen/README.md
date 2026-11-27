@@ -1,53 +1,44 @@
 # PS Link for Samsung Tizen TV
 
-Tizen TV web application package source. Import this directory into Samsung
-Tizen Studio as a TV Web Application and build/sign the WGT package using a
-valid Samsung developer certificate.
+## Implemented receiver features
 
-Implemented:
-- PS Link v2 WebSocket pairing.
-- Six-digit pairing UI.
-- Arabic subtitle and caption rendering.
-- Disconnect handling and remote Escape-key disconnect.
+- PS Link v2 WebSocket pairing with a six-digit pairing code.
 - Shared PS Link transport client.
+- Arabic subtitle and caption text rendering.
+- Samsung AVPlay adapter for HLS stream URLs received from the paired phone.
+- Playback controls and playback-state feedback.
+- Handling for WebSocket disconnection, AVPlay errors, buffering and stream completion.
+- Samsung TV remote navigation using directional keys and Enter.
+- Samsung Back key handling in the application.
+- Spatial caption positioning when incoming caption lines provide normalized
+  coordinates.
 
-Not implemented:
-- Compressed video decoding or audio playback.
-- Native AVPlay media adapter.
-- Automatic device discovery.
-- Physical-device validation.
+## Video and caption behavior
 
-Media packets are detected but not rendered. This is subtitle receiver
-support only, not complete game streaming support.
+The receiver accepts a protocol v2 `stream_url` message and passes its URL
+to Samsung AVPlay. Raw media packets are not decoded by this web receiver.
 
-## Native HLS media adapter
+Spatial captions are mapped onto the available video content rectangle using
+normalized line coordinates. If spatial rendering is unavailable or invalid,
+caption text is shown in the regular subtitle panel instead.
 
-This receiver includes a native HLS playback adapter and accepts a protocol v2 `stream_url` message from the paired phone.
-
-Tizen uses Samsung AVPlay. webOS uses HTML5 video playback. The phone-side HLS publisher and real-device playback validation remain separate required integration steps.
-
-<!-- PSLINK_TIZEN_DOCS_V1 -->
-# PS Link Samsung Tizen receiver
-
-## Implementation
-
-The Tizen receiver uses Samsung AVPlay for HLS playback and the PS Link
-protocol client for subtitle communication.
-
-The caption interface currently displays translated text in a text panel.
-It is not a calibrated geometric overlay synchronized to video coordinates.
+The receiver does not currently establish calibrated game-specific geometry
+or guarantee frame-accurate caption synchronization with the video.
 
 ## Media limitations
 
 The current phone HLS stream provides H.264 video only. Complete captured
 game audio and verified audio/video synchronization are not established.
 
-## Packaging and device validation
+## Remaining integration and device validation
+
+The phone-side HLS publisher remains a separate integration requirement.
+Automatic device discovery is not implemented.
 
 WGT packaging, signing, installation and physical Samsung TV testing remain
-separate validation tasks. Do not treat source-level checks as proof that
-a signed application works on a television.
+separate validation tasks. Source-level checks and simulated tests do not
+prove that a signed application works on physical television hardware.
 
-Validate pairing, reconnection, subtitle delivery, HLS playback and
-long-session stability on actual supported Tizen hardware.
-<!-- /PSLINK_TIZEN_DOCS_V1 -->
+Validate pairing, reconnection, subtitle delivery, spatial caption placement,
+HLS playback, remote navigation and long-session stability on supported
+Samsung Tizen devices.

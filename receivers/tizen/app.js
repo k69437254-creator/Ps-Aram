@@ -10,12 +10,16 @@
   var subtitleNode = document.getElementById("subtitle");
   var captionsNode = document.getElementById("captions");
   var mediaNotice = document.getElementById("media-notice");
+  var playbackToolbar = document.getElementById("playback-toolbar");
+  var playbackStatusNode = document.getElementById("playback-status");
+  var playbackDisconnectButton = document.getElementById("playback-disconnect");
   var mediaPlayer = new window.PSLinkMediaPlayer();
   var streamUrlReceived = false;
 
   function status(message, state) {
     statusNode.textContent = message;
     statusNode.setAttribute("data-state", state || "info");
+    if (playbackStatusNode) playbackStatusNode.textContent = message;
   }
 
   function setConnected(connected) {
@@ -23,6 +27,37 @@
     disconnectButton.disabled = !connected;
     document.getElementById("host").disabled = connected;
     document.getElementById("code").disabled = connected;
+  }
+
+  function setPlaybackMode(active) {
+    if (active) {
+      document.body.classList.add("is-playing");
+      playbackToolbar.hidden = false;
+      if (playbackDisconnectButton) playbackDisconnectButton.focus();
+    } else {
+      document.body.classList.remove("is-playing");
+      playbackToolbar.hidden = true;
+    }
+  }
+
+  function resetPlayback(showNotice) {
+    if (streamUrlReceived || !playbackToolbar.hidden) {
+      mediaPlayer.stop();
+    }
+
+    streamUrlReceived = false;
+    setPlaybackMode(false);
+
+    if (window.PSLinkSpatialCaptions) {
+      window.PSLinkSpatialCaptions.clear();
+    }
+    captionsNode.textContent = "";
+
+    mediaNotice.hidden = !showNotice;
+    if (showNotice) {
+      mediaNotice.textContent =
+        "تعذر تشغيل بث الوسائط؛ تحقق من HLS واتصال الهاتف.";
+    }
   }
 
   function showSubtitle(item) {
@@ -34,13 +69,17 @@
     document.getElementById("empty-subtitle").hidden = true;
   }
 
-  /* PSLINK_SPATIAL_CAPTIONS_INTEGRATION_V2 */
+  /* PSLINK_SPATIAL_CAPTIONS_INTEGRATION_V3 */
   function showCaptions(message) {
     var target = document.getElementById("game-video") ||
       document.getElementById("video-stage");
     var spatialRendered = false;
 
-    if (window.PSLinkSpatialCaptions) {
+    /*
+     * The video-stage exists before playback. Spatial captions must only
+     * be positioned over it after an HLS stream URL has been accepted.
+     */
+    if (streamUrlReceived && window.PSLinkSpatialCaptions) {
       try {
         if (target) {
           spatialRendered =
@@ -54,15 +93,13 @@
         } catch (ignore) {}
         spatialRendered = false;
       }
+    } else if (window.PSLinkSpatialCaptions) {
+      window.PSLinkSpatialCaptions.clear();
     }
 
     if (spatialRendered) {
       captionsNode.textContent = "";
       return;
-    }
-
-    if (window.PSLinkSpatialCaptions) {
-      window.PSLinkSpatialCaptions.clear();
     }
 
     var lines = message && Array.isArray(message.lines)
@@ -72,14 +109,12 @@
       if (typeof line === "string") return line;
       if (!line || typeof line !== "object") return "";
       return String(line.text || line.translation || line.source || "");
-    }).filter(Boolean).join("\n");
+    }).filter(Boolean).join("\\n");
   }
 
   function disconnect() {
     if (receiver) receiver.disconnect();
-    if (mediaPlayer) mediaPlayer.stop();
-    if (window.PSLinkSpatialCaptions) window.PSLinkSpatialCaptions.clear();
-    streamUrlReceived = false;
+    resetPlayback(false);
     mediaNotice.hidden = true;
     receiver = null;
     setConnected(false);
@@ -104,6 +139,10 @@
         },
         onReady: function (ready) {
           setConnected(ready);
+
+          // A lost or rejected WebSocket session must not leave stale HLS
+          // playback running while the receiver is disconnected/reconnecting.
+          if (!ready) resetPlayback(false);
         },
         onSubtitle: showSubtitle,
         onCaptions: showCaptions,
@@ -119,9 +158,10 @@
             mediaPlayer.start(stream.url);
             streamUrlReceived = true;
             mediaNotice.hidden = true;
-            status("تم استلام عنوان البث؛ جارٍ تشغيل الفيديو والصوت.", "info");
+            setPlaybackMode(true);
+            status("تم استلام عنوان البث؛ جارٍ تشغيل HLS.", "info");
           } catch (error) {
-            streamUrlReceived = false;
+            resetPlayback(true);
             status(error.message || "تعذر تشغيل بث الوسائط", "error");
           }
         }
@@ -136,15 +176,40 @@
   });
 
   disconnectButton.addEventListener("click", disconnect);
+  playbackDisconnectButton.addEventListener("click", disconnect);
 
   window.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" || event.keyCode === 27) {
+    var keyCode = event.keyCode || event.which || 0;
+    var isBack =
+      event.key === "Escape" ||
+      event.key === "Back" ||
+      event.key === "BrowserBack" ||
+      keyCode === 27 ||
+      keyCode === 10009;
+
+    if (isBack) {
+      event.preventDefault();
       disconnect();
     }
   });
 
   window.addEventListener("pslink-media-error", function (event) {
+    resetPlayback(true);
     status(String(event.detail || "حدث خطأ في مشغل الوسائط"), "error");
+  });
+
+  window.addEventListener("pslink-media-ended", function (event) {
+    resetPlayback(false);
+    status(String(event.detail || "انتهى بث الوسائط"), "info");
+  });
+
+  window.addEventListener("pslink-media-buffering", function (event) {
+    var detail = event.detail || {};
+    if (detail.active && streamUrlReceived) {
+      status("جارٍ تحميل بيانات الفيديو…", "info");
+    } else if (streamUrlReceived && mediaPlayer.active) {
+      status("الفيديو والصوت قيد التشغيل", "success");
+    }
   });
 
   setConnected(false);

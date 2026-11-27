@@ -52,19 +52,45 @@ async function main() {
   assert.equal(video.playsInline, true);
   assert.equal(video.volume, 1);
   assert.equal(listeners.has("error"), true);
+  assert.equal(listeners.has("waiting"), true);
+  assert.equal(listeners.has("playing"), true);
+  assert.equal(listeners.has("ended"), true);
+
+  listeners.get("waiting")();
+  listeners.get("playing")();
+
+  assert(events.some(event =>
+    event.type === "pslink-media-buffering" &&
+    event.detail.active === true
+  ));
+  assert(events.some(event =>
+    event.type === "pslink-media-buffering" &&
+    event.detail.active === false
+  ));
+
   assert.deepEqual(calls.slice(-2), [["load"], ["play"]]);
   await Promise.resolve();
 
   const onError = listeners.get("error");
+  const onWaiting = listeners.get("waiting");
+  const eventCountBeforeStop = events.length;
+
   player.stop();
-  assert.equal(listeners.has("error"), false);
+  ["error", "waiting", "playing", "ended"].forEach(name => {
+    assert.equal(listeners.has(name), false, name + " listener must be removed");
+  });
   assert.deepEqual(calls.slice(-3), [
     ["pause"],
     ["removeAttribute", "src"],
     ["load"]
   ]);
   onError();
-  assert.equal(events.length, 0, "stale media errors must be ignored after stop");
+  onWaiting();
+  assert.equal(
+    events.length,
+    eventCountBeforeStop,
+    "stale media callbacks must be ignored after stop"
+  );
 
   playResult = Promise.reject(new Error("autoplay denied"));
   player.start("http://phone.local/hls/index.m3u8");
@@ -73,10 +99,53 @@ async function main() {
     event.detail === "autoplay denied"));
 
   player.stop();
+
+  playResult = Promise.resolve();
+  player.start("https://phone.local/hls/ended.m3u8");
+  const onEnded = listeners.get("ended");
+  assert.equal(typeof onEnded, "function");
+  onEnded();
+
+  assert(events.some(event => event.type === "pslink-media-ended"),
+    "completed playback must emit an ended event");
+
+  player.stop();
   console.log("webOS HTML media lifecycle tests passed.");
+  console.log("webOS buffering and completion tests passed.");
+  console.log("webOS stale callback tests passed.");
 }
 
 main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });
+
+
+// PSLINK_WEBOS_LIFECYCLE_TESTS_V1
+{
+  const app = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
+  const playerSource = fs.readFileSync(
+    path.join(__dirname, "../media-player.js"), "utf8"
+  );
+  const cssSource = fs.readFileSync(path.join(__dirname, "../app.css"), "utf8");
+
+  assert(app.includes("PSLINK_WEBOS_LIFECYCLE_REPAIR_V1"));
+  assert(
+  /onReady:\s*function\s*\(ready\)\s*\{[\s\S]*?if\s*\(!ready\)\s*resetPlayback\(\);/.test(app),
+  "connection loss must reset playback"
+);
+  assert(app.includes('window.addEventListener("pslink-media-ended"'));
+  assert(app.includes('window.addEventListener("pslink-media-buffering"'));
+  assert(app.includes("setPlaybackMode(true)"));
+  assert(app.includes("captionsNode.textContent = \"\";"));
+
+  assert(playerSource.includes("PSLINK_WEBOS_MEDIA_EVENTS_V1"));
+  for (const eventName of ["waiting", "playing", "ended", "error"]) {
+    assert(playerSource.includes(eventName + ": function"));
+  }
+
+  assert(cssSource.includes("PSLINK_WEBOS_PLAYBACK_MODE_V1"));
+  assert(cssSource.includes("body.is-playing"));
+
+  console.log("webOS app lifecycle contract tests passed.");
+}

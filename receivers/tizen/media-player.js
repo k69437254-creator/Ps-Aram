@@ -48,14 +48,38 @@
     try {
       if (typeof api.setListener === "function") {
         api.setListener({
-          onbufferingstart: function () {},
-          onbufferingcomplete: function () {},
+          onbufferingstart: function () {
+            if (self.generation === generation) {
+              root.dispatchEvent(new CustomEvent(
+                "pslink-media-buffering",
+                { detail: { active: true } }
+              ));
+            }
+          },
+          onbufferingcomplete: function () {
+            if (self.generation === generation) {
+              root.dispatchEvent(new CustomEvent(
+                "pslink-media-buffering",
+                { detail: { active: false } }
+              ));
+            }
+          },
           onstreamcompleted: function () {
-            if (self.generation === generation) self.active = false;
+            if (self.generation === generation) {
+              self.active = false;
+              root.dispatchEvent(new CustomEvent(
+                "pslink-media-ended",
+                { detail: "اكتمل بث الوسائط" }
+              ));
+            }
           },
           onerror: function (error) {
             if (self.generation === generation) {
               self.active = false;
+              root.dispatchEvent(new CustomEvent(
+                "pslink-media-buffering",
+                { detail: { active: false } }
+              ));
               emitError(error || "AVPlay error");
             }
           }
@@ -63,7 +87,11 @@
       }
 
       api.open(url);
-      api.setDisplayRect(0, 0,
+            root.dispatchEvent(new CustomEvent(
+        "pslink-media-buffering",
+        { detail: { active: true } }
+      ));
+api.setDisplayRect(0, 0,
         Math.max(1, root.innerWidth || 1920),
         Math.max(1, root.innerHeight || 1080));
 
@@ -75,16 +103,30 @@
         if (self.generation !== generation) return;
         try {
           api.play();
-          if (self.generation === generation) self.active = true;
+          if (self.generation === generation) {
+            self.active = true;
+            root.dispatchEvent(new CustomEvent(
+              "pslink-media-buffering",
+              { detail: { active: false } }
+            ));
+          }
         } catch (error) {
           if (self.generation === generation) {
             self.active = false;
+            root.dispatchEvent(new CustomEvent(
+              "pslink-media-buffering",
+              { detail: { active: false } }
+            ));
             emitError(error.message || error);
           }
         }
       }, function (error) {
         if (self.generation === generation) {
           self.active = false;
+          root.dispatchEvent(new CustomEvent(
+            "pslink-media-buffering",
+            { detail: { active: false } }
+          ));
           emitError(error || "AVPlay prepare failed");
         }
       });
@@ -96,6 +138,10 @@
 
   TizenPlayer.prototype.stop = function () {
     this.generation += 1;
+    root.dispatchEvent(new CustomEvent(
+      "pslink-media-buffering",
+      { detail: { active: false } }
+    ));
     var api = root.webapis && root.webapis.avplay;
     if (api) {
       try { api.stop(); } catch (ignore) {}

@@ -168,3 +168,97 @@ footer {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+
+/* PSLINK_TIZEN_PLAYBACK_MODE_V1 */
+.playback-toolbar {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 2147483001;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 80vw;
+  padding: 10px 14px;
+  border: 1px solid rgba(150, 185, 235, .35);
+  border-radius: 14px;
+  background: rgba(8, 13, 23, .88);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .35);
+  pointer-events: auto;
+}
+
+#playback-status {
+  margin: 0;
+  color: #dce9ff;
+  font-size: 15px;
+}
+
+#playback-disconnect {
+  min-height: 44px;
+  padding: 10px 18px;
+  background: #a63242;
+  font-size: 16px;
+}
+
+body.is-playing {
+  background: #000;
+}
+
+body.is-playing .shell {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+body.is-playing .header,
+body.is-playing .pair-card,
+body.is-playing footer {
+  display: none !important;
+}
+
+body.is-playing .subtitle-card {
+  position: fixed;
+  left: 4vw;
+  right: 4vw;
+  bottom: 18px;
+  max-height: 27vh;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 12px 20px;
+  border-color: rgba(190, 210, 245, .25);
+  border-radius: 14px;
+  background: rgba(7, 12, 22, .68);
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body.is-playing .subtitle-card > .eyebrow {
+  display: none;
+}
+
+body.is-playing #game {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+body.is-playing .source {
+  margin: 0;
+  font-size: 17px;
+}
+
+body.is-playing .translation {
+  margin: 4px 0;
+  font-size: 2.3vw;
+  line-height: 1.35;
+}
+
+body.is-playing .captions {
+  font-size: 2vw;
+  line-height: 1.35;
+}

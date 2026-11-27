@@ -5,7 +5,7 @@ end sub
 sub run()
     cursor = 0
 
-    while m.top.control = "RUN"
+    while m.top.state = "run"
         host = m.top.host
         code = m.top.code
 

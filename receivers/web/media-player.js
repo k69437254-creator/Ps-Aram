@@ -132,7 +132,9 @@
           }
         });
       } catch (error) {
-        emitError(error.message || error);
+        var message = error && error.message ? error.message : error;
+        this.stop();
+        emitError(message);
       }
       return;
     }

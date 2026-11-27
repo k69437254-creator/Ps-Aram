@@ -13,6 +13,28 @@
   var mediaPlayer = new window.PSLinkMediaPlayer();
   var streamUrlReceived = false;
 
+  /* PSLINK_WEBOS_LIFECYCLE_REPAIR_V1 */
+  function setPlaybackMode(active) {
+    if (!document.body || !document.body.classList) return;
+    if (active) document.body.classList.add("is-playing");
+    else document.body.classList.remove("is-playing");
+  }
+
+  function clearCaptions() {
+    if (window.PSLinkSpatialCaptions) {
+      try { window.PSLinkSpatialCaptions.clear(); } catch (ignore) {}
+    }
+    captionsNode.textContent = "";
+  }
+
+  function resetPlayback() {
+    streamUrlReceived = false;
+    try { if (mediaPlayer) mediaPlayer.stop(); } catch (ignore) {}
+    mediaNotice.hidden = true;
+    clearCaptions();
+    setPlaybackMode(false);
+  }
+
   function status(message, state) {
     statusNode.textContent = message;
     statusNode.setAttribute("data-state", state || "info");
@@ -34,25 +56,22 @@
     document.getElementById("empty-subtitle").hidden = true;
   }
 
-  /* PSLINK_SPATIAL_CAPTIONS_INTEGRATION_V2 */
+  /* PSLINK_WEBOS_SPATIAL_CAPTIONS_V3 */
   function showCaptions(message) {
     var target = document.getElementById("game-video") ||
       document.getElementById("video-stage");
     var spatialRendered = false;
 
-    if (window.PSLinkSpatialCaptions) {
+    if (!streamUrlReceived) {
+      if (window.PSLinkSpatialCaptions) {
+        try { window.PSLinkSpatialCaptions.clear(); } catch (ignore) {}
+      }
+    } else if (window.PSLinkSpatialCaptions) {
       try {
-        if (target) {
-          spatialRendered =
-            window.PSLinkSpatialCaptions.render(message, target) === true;
-        } else {
-          window.PSLinkSpatialCaptions.clear();
-        }
+        spatialRendered = target &&
+          window.PSLinkSpatialCaptions.render(message, target) === true;
       } catch (error) {
-        try {
-          window.PSLinkSpatialCaptions.clear();
-        } catch (ignore) {}
-        spatialRendered = false;
+        try { window.PSLinkSpatialCaptions.clear(); } catch (ignore) {}
       }
     }
 
@@ -61,8 +80,8 @@
       return;
     }
 
-    if (window.PSLinkSpatialCaptions) {
-      window.PSLinkSpatialCaptions.clear();
+    if (streamUrlReceived && window.PSLinkSpatialCaptions) {
+      try { window.PSLinkSpatialCaptions.clear(); } catch (ignore) {}
     }
 
     var lines = message && Array.isArray(message.lines)
@@ -76,12 +95,17 @@
   }
 
   function disconnect() {
-    if (receiver) receiver.disconnect();
-    if (mediaPlayer) mediaPlayer.stop();
-    if (window.PSLinkSpatialCaptions) window.PSLinkSpatialCaptions.clear();
-    streamUrlReceived = false;
-    mediaNotice.hidden = true;
+    var activeReceiver = receiver;
     receiver = null;
+
+    if (activeReceiver) {
+      try { activeReceiver.disconnect(); }
+      catch (error) {
+        status(error.message || "تعذر فصل الاتصال", "error");
+      }
+    }
+
+    resetPlayback();
     setConnected(false);
     status("تم فصل الاتصال", "info");
   }
@@ -104,6 +128,7 @@
         },
         onReady: function (ready) {
           setConnected(ready);
+          if (!ready) resetPlayback();
         },
         onSubtitle: showSubtitle,
         onCaptions: showCaptions,
@@ -118,10 +143,11 @@
           try {
             mediaPlayer.start(stream.url);
             streamUrlReceived = true;
+            setPlaybackMode(true);
             mediaNotice.hidden = true;
             status("تم استلام عنوان البث؛ جارٍ تشغيل الفيديو والصوت.", "info");
           } catch (error) {
-            streamUrlReceived = false;
+            resetPlayback();
             status(error.message || "تعذر تشغيل بث الوسائط", "error");
           }
         }
@@ -144,7 +170,23 @@
   });
 
   window.addEventListener("pslink-media-error", function (event) {
+    resetPlayback();
     status(String(event.detail || "حدث خطأ في مشغل الوسائط"), "error");
+  });
+
+  window.addEventListener("pslink-media-ended", function () {
+    if (!streamUrlReceived) return;
+    resetPlayback();
+    status("انتهى بث الوسائط.", "info");
+  });
+
+  window.addEventListener("pslink-media-buffering", function (event) {
+    if (!streamUrlReceived) return;
+    var buffering = !!(event.detail && event.detail.active);
+    status(
+      buffering ? "جارٍ تحميل الفيديو..." : "الفيديو يعمل الآن.",
+      "info"
+    );
   });
 
   setConnected(false);

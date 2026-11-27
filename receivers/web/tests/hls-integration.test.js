@@ -9,7 +9,10 @@ const hlsCode = fs.readFileSync(path.join(root, "vendor/hls.min.js"), "utf8");
 const context = { console, URL, CustomEvent: function (type, options) { this.type = type; this.detail = options && options.detail; } };
 context.window = context;
 context.self = context;
-context.dispatchEvent = function () {};
+const initialErrors = [];
+context.dispatchEvent = function (event) {
+  if (event && event.type === "pslink-media-error") initialErrors.push(event.detail);
+};
 vm.createContext(context);
 vm.runInContext(hlsCode, context, { filename: "hls.min.js" });
 assert.ok(context.Hls, "Bundled Hls.js must export Hls on the browser global");
@@ -27,14 +30,33 @@ function HlsAdapterDouble(options) {
 HlsAdapterDouble.version = bundledHls.version;
 HlsAdapterDouble.isSupported = function () { return true; };
 HlsAdapterDouble.Events = { MANIFEST_PARSED: "manifestParsed", ERROR: "error" };
-HlsAdapterDouble.prototype.loadSource = function (url) { this.loaded = url; };
-HlsAdapterDouble.prototype.attachMedia = function (media) { this.media = media; };
-HlsAdapterDouble.prototype.on = function (name, callback) { this.handlers[name] = callback; };
+let failAt = null;
+HlsAdapterDouble.prototype.loadSource = function (url) {
+  if (failAt === "loadSource") throw new Error("loadSource failure");
+  this.loaded = url;
+};
+HlsAdapterDouble.prototype.attachMedia = function (media) {
+  if (failAt === "attachMedia") throw new Error("attachMedia failure");
+  this.media = media;
+};
+HlsAdapterDouble.prototype.on = function (name, callback) {
+  if (failAt === "on") throw new Error("event registration failure");
+  this.handlers[name] = callback;
+};
 HlsAdapterDouble.prototype.destroy = function () { this.destroyed = true; };
 context.Hls = HlsAdapterDouble;
 const video = {
-  canPlayType: function () { return ""; }, addEventListener: function () {},
-  removeEventListener: function () {}, removeAttribute: function () {},
+  canPlayType: function () { return ""; },
+  errorListeners: [],
+  addEventListener: function (name, callback) {
+    if (name === "error") this.errorListeners.push(callback);
+  },
+  removeEventListener: function (name, callback) {
+    if (name === "error") {
+      this.errorListeners = this.errorListeners.filter(item => item !== callback);
+    }
+  },
+  removeAttribute: function () {},
   pause: function () {}, load: function () {}, play: function () { return Promise.resolve(); }
 };
 context.document = { getElementById: function (id) { return id === "game-video" ? video : null; } };
@@ -59,6 +81,27 @@ assert.ok(secondPlayer.hls);
 assert.notEqual(secondPlayer.hls, previous);
 assert.equal(previous.destroyed, true);
 secondPlayer.stop();
+
+// Partial HLS initialization failures must clean up all allocated resources.
+for (const stage of ["loadSource", "attachMedia", "on"]) {
+  failAt = stage;
+  const failedPlayer = context.PSLinkMediaPlayer();
+  const listenersBefore = video.errorListeners.length;
+  const errorsBefore = initialErrors.length;
+
+  failedPlayer.start(validUrl);
+
+  assert.equal(failedPlayer.hls, null, stage + ": HLS reference cleared");
+  assert.equal(failedPlayer.onError, null, stage + ": error callback cleared");
+  assert.equal(video.errorListeners.length, listenersBefore,
+    stage + ": video error listener removed");
+  assert.equal(instances[instances.length - 1].destroyed, true,
+    stage + ": partial HLS instance destroyed");
+  assert.equal(initialErrors.length, errorsBefore + 1,
+    stage + ": one media error emitted");
+}
+
+failAt = null;
 
 // Verify NotAllowedError triggers muted autoplay fallback with warning event.
 (async function verifyMutedFallback() {

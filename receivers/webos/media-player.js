@@ -104,10 +104,11 @@
     this.active = false;
   };
 
+  /* PSLINK_WEBOS_MEDIA_EVENTS_V1 */
   function WebOsPlayer() {
     this.node = document.getElementById("game-video");
     this.generation = 0;
-    this.onError = null;
+    this.listeners = null;
   }
 
   WebOsPlayer.prototype.start = function (url) {
@@ -115,46 +116,85 @@
     if (!this.node) throw new Error("عنصر تشغيل webOS غير موجود");
 
     this.stop();
+
     var generation = ++this.generation;
     var self = this;
-    this.onError = function () {
-      if (self.generation === generation) {
+
+    function current() {
+      return self.generation === generation;
+    }
+
+    this.listeners = {
+      error: function () {
+        if (!current()) return;
         var mediaError = self.node && self.node.error;
-        emitError(mediaError ? "webOS media error: " + mediaError.code :
-          "تعذر تشغيل بث الوسائط على webOS");
+        emitError(mediaError
+          ? "webOS media error: " + mediaError.code
+          : "تعذر تشغيل بث الوسائط على webOS");
+      },
+      waiting: function () {
+        if (!current()) return;
+        root.dispatchEvent(new CustomEvent("pslink-media-buffering", {
+          detail: { active: true }
+        }));
+      },
+      playing: function () {
+        if (!current()) return;
+        root.dispatchEvent(new CustomEvent("pslink-media-buffering", {
+          detail: { active: false }
+        }));
+      },
+      ended: function () {
+        if (!current()) return;
+        root.dispatchEvent(new CustomEvent("pslink-media-buffering", {
+          detail: { active: false }
+        }));
+        root.dispatchEvent(new CustomEvent("pslink-media-ended", {
+          detail: {}
+        }));
       }
     };
 
-    this.node.addEventListener("error", this.onError);
+    Object.keys(this.listeners).forEach(function (name) {
+      self.node.addEventListener(name, self.listeners[name]);
+    });
+
     this.node.src = url;
     this.node.autoplay = true;
     this.node.playsInline = true;
     this.node.volume = 1;
-    this.node.load();
 
-    var result;
     try {
-      result = this.node.play();
+      this.node.load();
+      var result = this.node.play();
+
+      if (result && typeof result.catch === "function") {
+        result.catch(function (error) {
+          if (current()) emitError(error.message || error);
+        });
+      }
     } catch (error) {
-      emitError(error.message || error);
-      return;
-    }
-    if (result && typeof result.catch === "function") {
-      result.catch(function (error) {
-        if (self.generation === generation) emitError(error.message || error);
-      });
+      if (current()) this.stop();
+      throw error;
     }
   };
 
   WebOsPlayer.prototype.stop = function () {
     this.generation += 1;
     if (!this.node) return;
-    if (this.onError) {
-      this.node.removeEventListener("error", this.onError);
-      this.onError = null;
+
+    var self = this;
+    if (this.listeners) {
+      Object.keys(this.listeners).forEach(function (name) {
+        try {
+          self.node.removeEventListener(name, self.listeners[name]);
+        } catch (ignore) {}
+      });
+      this.listeners = null;
     }
+
     try { this.node.pause(); } catch (ignore) {}
-    this.node.removeAttribute("src");
+    try { this.node.removeAttribute("src"); } catch (ignore) {}
     try { this.node.load(); } catch (ignore) {}
   };
 

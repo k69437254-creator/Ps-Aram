@@ -43,4 +43,43 @@ for source in (pair, poll, scene):
     assert 'Instr(1, authority, "?") > 0' in source
     assert 'Instr(1, authority, "@") > 0' in source
 
+
+# Scene playback lifecycle and fresh pairing-session cleanup.
+assert 'm.player.observeField("state", "onPlayerState")' in scene
+assert 'sub onPlayerState()' in scene
+assert 'state = "error"' in scene
+assert 'state = "finished"' in scene
+assert 'state = "playing"' in scene
+assert 'state = "buffering"' in scene
+assert 'm.subtitleTask.control = "STOP"' in scene
+assert 'm.task.url = ""' in scene
+assert 'm.task.error = ""' in scene
+
+
+# Task.control is write-only; task execution must be inspected through state.
+assert 'if m.task.state = "run" then return' in scene
+assert 'if m.task.control = "RUN" then return' not in scene
+
+assert pair.count('m.top.state = "run"') == 4
+assert 'm.top.control = "RUN" and' not in pair
+assert 'm.top.control = "RUN"' not in pair
+
+assert 'while m.top.state = "run"' in poll
+assert 'while m.top.control = "RUN"' not in poll
+
+# Keep control writes as the actual start/stop commands.
+assert 'm.task.control = "RUN"' in scene
+assert 'm.task.control = "STOP"' in scene
+assert 'm.subtitleTask.control = "RUN"' in scene
+assert 'm.subtitleTask.control = "STOP"' in scene
+
+
+# Back navigation must stop the subtitle timer as well as polling and playback.
+back_start = scene.index("function onKeyEvent")
+back_end = scene.index("end function", back_start)
+back_handler = scene[back_start:back_end]
+assert 'm.subtitleTask.control = "STOP"' in back_handler
+assert 'm.subtitleTimer.control = "stop"' in back_handler
+assert 'm.player.control = "stop"' in back_handler
+
 print("PASS: Roku secure-proxy and legacy-LAN source-contract checks.")

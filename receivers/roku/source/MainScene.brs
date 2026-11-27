@@ -1,6 +1,7 @@
 sub init()
     m.status = m.top.findNode("status")
     m.player = m.top.findNode("player")
+    m.player.observeField("state", "onPlayerState")
 
     m.top.observeField("phoneHost", "startPairing")
     m.top.observeField("pairingCode", "startPairing")
@@ -32,7 +33,17 @@ sub startPairing()
         return
     end if
 
-    if m.task.control = "RUN" then return
+    if m.task.state = "run" then return
+
+    ' Stop any previous playback and subtitle polling before a new session.
+    if m.player <> invalid then m.player.control = "stop"
+    if m.subtitleTask <> invalid then m.subtitleTask.control = "STOP"
+    if m.subtitleTimer <> invalid then m.subtitleTimer.control = "stop"
+    if m.subtitleLabel <> invalid then m.subtitleLabel.text = ""
+
+    ' Reset task outputs so a repeated URL/error can trigger field observers.
+    m.task.url = ""
+    m.task.error = ""
 
     m.status.text = "جارٍ طلب عنوان البث من الهاتف..."
     m.task.host = host
@@ -64,8 +75,26 @@ sub onStreamUrl()
 end sub
 
 sub onPairingError()
-    if m.task.error <> invalid
+    if m.task.error <> invalid and m.task.error <> ""
         m.status.text = m.task.error
+    end if
+end sub
+
+sub onPlayerState()
+    if m.player = invalid then return
+
+    state = m.player.state
+    if state = "error"
+        m.status.text = "حدث خطأ أثناء تشغيل الفيديو"
+    else if state = "finished"
+        m.status.text = "انتهى البث"
+        if m.subtitleTimer <> invalid then m.subtitleTimer.control = "stop"
+        if m.subtitleLabel <> invalid then m.subtitleLabel.text = ""
+        if m.subtitleTask <> invalid then m.subtitleTask.control = "STOP"
+    else if state = "playing"
+        m.status.text = "البث يعمل"
+    else if state = "buffering"
+        m.status.text = "جارٍ تحميل البث..."
     end if
 end sub
 
@@ -109,6 +138,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         end if
         if m.subtitleTask <> invalid then
             m.subtitleTask.control = "STOP"
+        end if
+        if m.subtitleTimer <> invalid then
+            m.subtitleTimer.control = "stop"
         end if
         m.subtitleLabel.text = ""
         m.status.text = "تم إيقاف العرض"

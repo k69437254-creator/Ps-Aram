@@ -18,11 +18,59 @@
     statusNode.setAttribute("data-state", state || "info");
   }
 
-  function setConnected(connected) {
-    connectButton.disabled = connected;
-    disconnectButton.disabled = !connected;
-    document.getElementById("host").disabled = connected;
-    document.getElementById("code").disabled = connected;
+  var sessionActive = false;
+  var sessionGeneration = 0;
+
+  function setSessionActive(active) {
+    sessionActive = active;
+    connectButton.disabled = active;
+    disconnectButton.disabled = !active;
+    document.getElementById("host").disabled = active;
+    document.getElementById("code").disabled = active;
+  }
+
+  function safeRun(callback) {
+    try {
+      callback();
+    } catch (ignore) {}
+  }
+
+  function clearSpatialCaptions() {
+    if (window.PSLinkSpatialCaptions) {
+      safeRun(function () {
+        window.PSLinkSpatialCaptions.clear();
+      });
+    }
+  }
+
+  function clearSessionDisplay() {
+    safeRun(function () {
+      document.getElementById("game").textContent = "PS Link";
+    });
+
+    safeRun(function () {
+      document.getElementById("source").textContent = "";
+    });
+
+    safeRun(function () {
+      document.getElementById("translation").textContent = "";
+    });
+
+    safeRun(function () {
+      subtitleNode.hidden = true;
+    });
+
+    safeRun(function () {
+      document.getElementById("empty-subtitle").hidden = false;
+    });
+
+    safeRun(function () {
+      captionsNode.textContent = "";
+    });
+
+    safeRun(function () {
+      mediaNotice.hidden = true;
+    });
   }
 
   function showSubtitle(item) {
@@ -44,12 +92,10 @@
           spatialRendered =
             window.PSLinkSpatialCaptions.render(message, target) === true;
         } else {
-          window.PSLinkSpatialCaptions.clear();
+          clearSpatialCaptions();
         }
       } catch (error) {
-        try {
-          window.PSLinkSpatialCaptions.clear();
-        } catch (ignore) {}
+        clearSpatialCaptions();
         spatialRendered = false;
       }
     }
@@ -59,9 +105,7 @@
       return;
     }
 
-    if (window.PSLinkSpatialCaptions) {
-      window.PSLinkSpatialCaptions.clear();
-    }
+    clearSpatialCaptions();
 
     var lines = message && Array.isArray(message.lines) ? message.lines : [];
     captionsNode.textContent = lines.slice(0, 3).map(function (line) {
@@ -71,38 +115,105 @@
     }).filter(Boolean).join("\n");
   }
 
-  function disconnect() {
-    if (receiver) receiver.disconnect();
-    if (mediaPlayer) mediaPlayer.stop();
-    if (window.PSLinkSpatialCaptions) window.PSLinkSpatialCaptions.clear();
-    streamUrlReceived = false;
-    mediaNotice.hidden = true;
+  function cleanupSession(message, state) {
+    // Invalidate stale callbacks before invoking external components.
+    sessionGeneration += 1;
+
+    var oldReceiver = receiver;
     receiver = null;
-    setConnected(false);
-    status("تم فصل الاتصال", "info");
+
+    safeRun(function () {
+      setSessionActive(false);
+    });
+
+    if (oldReceiver) {
+      safeRun(function () {
+        oldReceiver.disconnect();
+      });
+    }
+
+    if (mediaPlayer) {
+      safeRun(function () {
+        mediaPlayer.stop();
+      });
+    }
+
+    clearSpatialCaptions();
+
+    streamUrlReceived = false;
+    clearSessionDisplay();
+
+    safeRun(function () {
+      status(message, state || "info");
+    });
+  }
+
+  function disconnect() {
+    cleanupSession("تم فصل الاتصال", "info");
   }
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
+
+    // Prevent overlapping sessions, including synthetic duplicate submits.
+    if (sessionActive) return;
+
     var host = document.getElementById("host").value.trim();
     var code = document.getElementById("code").value.trim();
+
     if (!host || !/^[0-9٠-٩۰-۹\s-]{6,20}$/.test(code)) {
       status("أدخل عنوان IP ورمز اقتران من 6 أرقام", "error");
       return;
     }
+
+    var token = ++sessionGeneration;
+
     try {
       receiver = new window.PSLinkReceiver({
-        onStatus: function (message) { status(message, "info"); },
-        onReady: function (ready) { setConnected(ready); },
-        onSubtitle: showSubtitle,
-        onCaptions: showCaptions,
-        onError: function (error) {
-          status(String(error.message || "تعذر إتمام الاقتران"), "error");
+        onStatus: function (message) {
+          if (token !== sessionGeneration) return;
+          status(message, "info");
         },
+
+        onReady: function (ready) {
+          if (token !== sessionGeneration) return;
+          if (ready) setSessionActive(true);
+        },
+
+        onSubtitle: function (item) {
+          if (token !== sessionGeneration) return;
+          showSubtitle(item);
+        },
+
+        onCaptions: function (message) {
+          if (token !== sessionGeneration) return;
+          showCaptions(message);
+        },
+
+        onError: function (error) {
+          if (token !== sessionGeneration) return;
+
+          var message = String(
+            error && error.message || "تعذر إتمام الاقتران"
+          );
+
+          // Authentication rejection ends this session.
+          if (receiver && receiver.authRejected) {
+            cleanupSession(message, "error");
+            return;
+          }
+
+          status(message, "error");
+        },
+
         onMediaPacket: function () {
+          if (token !== sessionGeneration) return;
           if (!streamUrlReceived) mediaNotice.hidden = false;
         },
+
         onStreamUrl: function (stream) {
+          if (token !== sessionGeneration) return;
+
           try {
             mediaPlayer.start(stream.url);
             streamUrlReceived = true;
@@ -114,18 +225,23 @@
           }
         }
       });
+
+      setSessionActive(true);
       receiver.connect(host, code);
       status("جارٍ الاتصال والتحقق من رمز الاقتران…", "info");
+
     } catch (error) {
-      status(error.message || "تعذر بدء الاتصال", "error");
-      receiver = null;
+      cleanupSession(
+        error && error.message || "تعذر بدء الاتصال",
+        "error"
+      );
     }
   });
 
   disconnectButton.addEventListener("click", disconnect);
 
   window.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" || event.keyCode === 27) disconnect();
+    if ((event.key === "Escape" || event.keyCode === 27) && sessionActive) disconnect();
   });
 
   window.addEventListener("pslink-media-error", function (event) {
@@ -136,5 +252,5 @@
     status(String(event.detail || ""), "info");
   });
 
-  setConnected(false);
+  setSessionActive(false);
 }());

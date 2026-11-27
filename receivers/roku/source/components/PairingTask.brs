@@ -37,7 +37,7 @@ sub run()
     maxRetries = 5
     backoffMs = 3000
 
-    while m.top.control = "RUN" and retryCount < maxRetries
+    while m.top.state = "run" and retryCount < maxRetries
         ws = CreateObject("roWebSocket")
         msgPort = CreateObject("roMessagePort")
         ws.SetMessagePort(msgPort)
@@ -79,7 +79,7 @@ sub run()
         responseStart = roTimespan()
         responseStart.mark()
         gotReady = false
-        while m.top.control = "RUN" and responseStart.TotalSeconds() < 10
+        while m.top.state = "run" and responseStart.TotalSeconds() < 10
             msg = wait(200, msgPort)
             if type(msg) = "roWebSocketEvent"
                 eventType = msg.GetType()
@@ -119,14 +119,14 @@ sub run()
 
         ws.Close()
         retryCount = retryCount + 1
-        if retryCount < maxRetries and m.top.control = "RUN"
+        if retryCount < maxRetries and m.top.state = "run"
             sleep(backoffMs)
             backoffMs = backoffMs * 2
             if backoffMs > 12000 then backoffMs = 12000
         end if
     end while
 
-    if m.top.control = "RUN" and m.top.error = invalid
+    if m.top.state = "run" and m.top.error = invalid
         m.top.error = "تعذر الحصول على رابط بث HLS من الهاتف"
     end if
 end sub
