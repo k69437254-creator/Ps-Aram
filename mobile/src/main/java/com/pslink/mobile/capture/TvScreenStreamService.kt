@@ -65,7 +65,15 @@ class TvScreenStreamService : Service() {
     private var hlsPublisher: HlsTransportStreamPublisher? = null
     private var audioCapture: AacPlaybackCapture? = null
     // PSLINK_REMAINING_REPAIRS_V3_SERVICE
-    private enum class HlsAudioRoute { WAITING, CHIAKI_PCM, PLAYBACK_CAPTURE, STOPPING }
+    // PSLINK_HLS_FAILURE_RECOVERY_V1
+    private enum class HlsAudioRoute { WAITING, CHIAKI_PCM, PLAYBACK_CAPTURE, FAILED, STOPPING }
+    private data class HlsCleanupResources(
+        val registration: Closeable?,
+        val chiakiEncoder: ChiakiPcmAacEncoder?,
+        val playbackCapture: AacPlaybackCapture?,
+        val reorderBuffer: HlsAccessUnitReorderBuffer?,
+        val publisher: HlsTransportStreamPublisher?
+    )
     private val hlsAudioRoute = AtomicReference(HlsAudioRoute.WAITING)
     private val hlsAudioLock = Any()
     private val hlsAudioHandler = Handler(Looper.getMainLooper())
@@ -316,12 +324,10 @@ class TvScreenStreamService : Service() {
                                             keyFrame
                                         )
                                     } catch (hlsError: Exception) {
-                                        report(
-                                            "توقف نشر HLS: " +
+                                        failHlsPublishing(
+                                            "توقف نشر HLS؛ سيستمر اتصال الترجمة النصية: " +
                                                 (hlsError.localizedMessage ?: "خطأ في حزمة H.264")
                                         )
-                                        runCatching { hlsPublisher?.stop() }
-                                        hlsPublisher = null
                                     }
                                 }
                             } finally {
@@ -337,9 +343,15 @@ class TvScreenStreamService : Service() {
             }
         } catch (error: Exception) {
             if (running.get()) {
-                report(
-                    "توقف ترميز بث الشاشة: ${error.localizedMessage ?: "خطأ H.264"}"
-                )
+                // PSLINK_SCREEN_STREAM_FAILURE_RECOVERY_V1
+                val message = "توقف ترميز بث الشاشة: ${error.localizedMessage ?: "خطأ H.264"}"
+                report(message)
+                Handler(Looper.getMainLooper()).post {
+                    if (running.get()) {
+                        stopStream()
+                        report(message)
+                    }
+                }
             }
         }
     }
@@ -417,6 +429,40 @@ class TvScreenStreamService : Service() {
         stopping = false
     }
 
+    // PSLINK_HLS_FAILURE_RECOVERY_V1
+    private fun failHlsPublishing(message: String) {
+        val resources = synchronized(hlsAudioLock) {
+            val route = hlsAudioRoute.get()
+            if (route == HlsAudioRoute.FAILED || route == HlsAudioRoute.STOPPING) return
+            hlsAudioRoute.set(HlsAudioRoute.FAILED)
+            hlsAudioHandler.removeCallbacks(hlsAudioFallback)
+            HlsCleanupResources(
+                registration = chiakiPcmRegistration.also { chiakiPcmRegistration = null },
+                chiakiEncoder = chiakiPcmEncoder.also { chiakiPcmEncoder = null },
+                playbackCapture = audioCapture.also { audioCapture = null },
+                reorderBuffer = hlsReorderBuffer.also { hlsReorderBuffer = null },
+                publisher = hlsPublisher.also { hlsPublisher = null }
+            ).also {
+                hlsProjectionForAudio = null
+            }
+        }
+
+        runCatching { resources.registration?.close() }
+        phoneReceiverServer?.notifyStreamUnavailable()
+        report(message)
+
+        // Stop producer workers before flushing/closing the shared reorder buffer and publisher.
+        Thread({
+            runCatching { resources.chiakiEncoder?.stop() }
+            runCatching { resources.playbackCapture?.stop() }
+            runCatching { resources.reorderBuffer?.close() }
+            runCatching { resources.publisher?.stop() }
+        }, "PSLink-HLS-Failure-Cleanup").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
     private fun handleChiakiPcm(pcm: ByteArray, rate: Int, channelCount: Int, ptsNs: Long) {
         var encoderToUse: ChiakiPcmAacEncoder? = null
         var startFallback = false
@@ -433,10 +479,15 @@ class TvScreenStreamService : Service() {
                             val accepted = runCatching {
                                 hlsReorderBuffer?.offerAudio(frame, ptsUs, outputRate, outputChannels) ?: false
                             }.getOrElse { error ->
-                                report("تعذر إدراج AAC الأصلي في HLS: ${error.localizedMessage ?: "خطأ"}")
+                                failHlsPublishing(
+                                    "تعذر إدراج AAC الأصلي في HLS؛ سيستمر اتصال الترجمة النصية: " +
+                                        (error.localizedMessage ?: "خطأ")
+                                )
                                 false
                             }
-                            if (!accepted) report("تأخر إطار صوت Chiaki أو تعذر إدراجه في طابور HLS.")
+                            if (!accepted && hlsAudioRoute.get() == HlsAudioRoute.CHIAKI_PCM) {
+                                report("تأخر إطار صوت Chiaki أو تعذر إدراجه في طابور HLS.")
+                            }
                         },
                         { message ->
                             report("تعذر ترميز صوت Chiaki إلى HLS: $message")
@@ -455,7 +506,7 @@ class TvScreenStreamService : Service() {
                     }
                 }
                 HlsAudioRoute.CHIAKI_PCM -> encoderToUse = chiakiPcmEncoder
-                HlsAudioRoute.PLAYBACK_CAPTURE, HlsAudioRoute.STOPPING -> return
+                HlsAudioRoute.FAILED, HlsAudioRoute.PLAYBACK_CAPTURE, HlsAudioRoute.STOPPING -> return
             }
         }
         if (startFallback) hlsAudioHandler.post { startPlaybackCaptureFallback() }
@@ -495,7 +546,12 @@ class TvScreenStreamService : Service() {
                     activeProjection,
                     { frame, ptsUs ->
                         runCatching { reorder.offerAudio(frame, ptsUs, 48000, 2) }
-                            .onFailure { report("تعذر إدراج صوت Playback Capture في HLS: ${it.localizedMessage ?: "خطأ"}") }
+                            .onFailure {
+                                failHlsPublishing(
+                                    "تعذر إدراج صوت Playback Capture في HLS؛ سيستمر اتصال الترجمة النصية: " +
+                                        (it.localizedMessage ?: "خطأ")
+                                )
+                            }
                     },
                     { message -> report("تعذر التقاط صوت التطبيقات: $message") }
                 )

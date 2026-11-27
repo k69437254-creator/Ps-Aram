@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="عاين التسجيل وحدد بداية المقطع ونهايته قبل حفظ نسخة معدلة. القص سريع ولا يعيد ضغط الفيديو."
+            android:text="عاين التسجيل وحدد بداية المقطع ونهايته. القص لا يعيد ضغط الفيديو، ويبدأ عند أول إطار مفتاحي بعد نقطة البداية المحددة."
             android:textColor="#9AA9BD" />
         <VideoView
             android:id="@+id/editorVideoView"

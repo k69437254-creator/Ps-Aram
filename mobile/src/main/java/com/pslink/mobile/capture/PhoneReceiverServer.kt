@@ -605,6 +605,12 @@ class PhoneReceiverServer(
         return broadcastBoundJson(payload)
     }
 
+    // PSLINK_HLS_FAILURE_RECOVERY_V1
+    /** Stop advertising a failed HLS publisher; text/subtitle receiver sessions remain active. */
+    fun notifyStreamUnavailable() {
+        streamAvailable.set(false)
+    }
+
     /** Called after the first complete IDR-aligned HLS segment is published. */
     fun notifyStreamAvailable() {
         if (stopping.get()) return

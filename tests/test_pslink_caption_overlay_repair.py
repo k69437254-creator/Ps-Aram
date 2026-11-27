@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY = runpy.run_path(str(ROOT / "scripts/prepare_pslink_live_tv_streaming.py"))
 ENSURE = OVERLAY["ensure_caption_clear_paths"]
+HAS_OCR_FAILURE_CLEAR = OVERLAY["has_current_ocr_failure_clear_path"]
 class CaptionOverlayRepairTests(unittest.TestCase):
     def test_current_translator_is_preserved_and_idempotent(self):
         source = (ROOT / "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt").read_text(encoding="utf-8")
@@ -90,6 +91,64 @@ class CaptionOverlayRepairTests(unittest.TestCase):
         )
         self.assertNotIn("publishCaptionsToReceivers(emptyList(), samplePtsNs)", stop_body)
         self.assertEqual(fixed, ENSURE(fixed))
+
+
+    def test_current_ocr_failure_clear_path_is_recognized(self):
+        source = (
+            ROOT / "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
+        ).read_text(encoding="utf-8")
+
+        self.assertTrue(HAS_OCR_FAILURE_CLEAR(source))
+
+        catch_start = source.find(
+            "catch (error: Exception) {",
+        )
+        if catch_start < 0:
+            self.fail("OCR catch block not found")
+
+        catch_end = source.find("} finally {", catch_start)
+        if catch_end < 0:
+            self.fail("OCR finally boundary not found")
+
+        catch_body = source[catch_start:catch_end]
+        receiver_call = (
+            "PhoneReceiverServer.publishCaptionsToReceivers("
+            "emptyList(), clearPtsNs)"
+        )
+        self.assertEqual(catch_body.count(receiver_call), 1)
+
+        incomplete_body = catch_body.replace(receiver_call, "", 1)
+        incomplete = (
+            source[:catch_start] + incomplete_body + source[catch_end:]
+        )
+        self.assertFalse(HAS_OCR_FAILURE_CLEAR(incomplete))
+
+
+
+    def test_pause_clears_local_caption_overlay(self):
+        source = (
+            ROOT / "mobile/src/main/java/com/pslink/mobile/LiveGameTranslator.kt"
+        ).read_text(encoding="utf-8")
+
+        start = source.find("    fun pause() {")
+        end = source.find("\n    fun resume() {", start)
+
+        if start < 0 or end < 0:
+            self.fail("Could not isolate pause() function")
+
+        pause_body = source[start:end]
+
+        self.assertIn("onCaption(emptyList())", pause_body)
+        self.assertIn(
+            "tvClient?.sendCaptions(emptyList(), clearPtsNs, sessionId)",
+            pause_body,
+        )
+        self.assertIn(
+            "PhoneReceiverServer.publishCaptionsToReceivers(emptyList(), clearPtsNs)",
+            pause_body,
+        )
+        self.assertEqual(pause_body.count("onCaption(emptyList())"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

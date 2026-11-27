@@ -21,6 +21,11 @@ assert 'transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")' in poll
 assert 'requestUrl = "http://" + host + ":8765/receiver/roku/subtitle"' in poll
 assert 'transfer.SetUrl(requestUrl)' in poll
 assert 'secureProxyAuthority(host)' in poll
+assert "latestSequence = parsed.latestSequence" in poll
+assert "oldestSequence = parsed.oldestSequence" in poll
+assert "latestSequence < cursor" in poll
+assert "cursor = oldestSequence - 1" in poll
+assert "cursor = latestSequence" in poll
 
 # HLS authority rewriting must preserve only a validated /hls/.../index.m3u8 path.
 assert 'rewriteSecureHlsUrl(m.task.url, m.top.phoneHost)' in scene

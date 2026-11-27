@@ -25,6 +25,7 @@ import kotlin.concurrent.thread
 
 /** Lightweight pre-save clip editor: preview + trim start/end without re-encoding. */
 class VideoEditorActivity : AppCompatActivity() {
+    // PSLINK_VIDEO_EDITOR_TRIM_FIX_V1
     private lateinit var videoUri: Uri
     private lateinit var videoView: VideoView
     private lateinit var startInput: EditText
@@ -69,9 +70,16 @@ class VideoEditorActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // The export worker may still be reading this file.
+        if (!exportRunning) deleteRawRecordingIfOwned()
         super.onDestroy()
-        val path = if (::videoUri.isInitialized) videoUri.path else null
-        if (videoUri.scheme == "file" && path != null && path.startsWith(cacheDir.absolutePath + File.separator)) {
+    }
+
+    private fun deleteRawRecordingIfOwned() {
+        val uri = if (::videoUri.isInitialized) videoUri else return
+        if (uri.scheme != "file") return
+        val path = uri.path ?: return
+        if (path.startsWith(cacheDir.absolutePath + File.separator)) {
             File(path).delete()
         }
     }
@@ -91,6 +99,11 @@ class VideoEditorActivity : AppCompatActivity() {
         thread(name = "PSLink-VideoTrim") {
             val result = runCatching { trimVideo(startUs, endUs) }
             runOnUiThread {
+                if (isFinishing || isDestroyed) {
+                    exportRunning = false
+                    deleteRawRecordingIfOwned()
+                    return@runOnUiThread
+                }
                 exportRunning = false
                 exportBackCallback.isEnabled = false
                 findViewById<Button>(com.metallic.chiaki.R.id.saveEditedVideoButton).isEnabled = true
@@ -129,7 +142,7 @@ class VideoEditorActivity : AppCompatActivity() {
             }
             activeMuxer.start()
             muxerStarted = true
-            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_NEXT_SYNC)
 
             val requestedSize = sourceTracks.maxOfOrNull { track ->
                 val format = extractor.getTrackFormat(track)
@@ -151,10 +164,22 @@ class VideoEditorActivity : AppCompatActivity() {
                 val pts = extractor.sampleTime
                 if (pts > endUs) break
                 val isVideoTrack = inputTrack in videoTracks
-                if (isVideoTrack && firstVideoPts < 0) firstVideoPts = pts
-                // Audio samples before the first copied video key frame must not
-                // shift the MP4 timeline or create negative/duplicate timestamps.
-                if (firstVideoPts < 0 || (!isVideoTrack && pts < firstVideoPts)) {
+
+                // Start only at a video sync frame at or after the requested time.
+                // This keeps the no-re-encode export decodable without including
+                // video frames from before the user's selected start point.
+                if (firstVideoPts < 0) {
+                    val isSyncVideoFrame = isVideoTrack &&
+                        (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0
+                    if (!isSyncVideoFrame || pts < startUs) {
+                        if (!extractor.advance()) break
+                        continue
+                    }
+                    firstVideoPts = pts
+                }
+
+                // Audio preceding the first exported video sync frame is excluded.
+                if (!isVideoTrack && pts < firstVideoPts) {
                     if (!extractor.advance()) break
                     continue
                 }

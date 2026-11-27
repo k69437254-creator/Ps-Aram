@@ -541,10 +541,24 @@ WORKER = r'''static void *pslink_recording_thread_main(void *user)
         decoder->recording_fd = -1;
     }
     pthread_mutex_lock(&decoder->recording_mutex);
+    /* Stop new callbacks before releasing any queued frame buffers. */
+    decoder->recording_requested = false;
+    /* PSLINK_RECORDER_QUEUE_DRAIN_ON_FAILURE_V1 */
+    for(size_t i = 0; i < PSLINK_RECORD_QUEUE_CAPACITY; ++i)
+    {
+        free(decoder->recording_queue[i].data);
+        decoder->recording_queue[i].data = NULL;
+        decoder->recording_queue[i].size = 0;
+        decoder->recording_queue[i].pts_us = 0;
+        decoder->recording_queue[i].key_frame = false;
+        decoder->recording_queue[i].is_audio = false;
+    }
+    decoder->recording_queue_head = 0;
+    decoder->recording_queue_tail = 0;
+    decoder->recording_queue_count = 0;
     decoder->recording_muxer_started = muxer_finalized;
     if(!muxer_finalized || failed)
         decoder->recording_failed = true;
-    decoder->recording_requested = false;
     pthread_cond_broadcast(&decoder->recording_cond);
     pthread_mutex_unlock(&decoder->recording_mutex);
     if(muxer_finalized && !failed)

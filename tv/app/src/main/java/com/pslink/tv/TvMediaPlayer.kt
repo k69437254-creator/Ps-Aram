@@ -357,9 +357,19 @@ class TvMediaPlayer(
                 if (!audioQueue.isCurrent(queuedBlock)) continue
                 if (activeQueueGeneration != queuedBlock.generation) {
                     track?.let { currentTrack ->
-                        currentTrack.pause()
-                        currentTrack.flush()
-                        currentTrack.play()
+                        val resetError = runCatching {
+                            check(currentTrack.state == AudioTrack.STATE_INITIALIZED)
+                            currentTrack.pause()
+                            currentTrack.flush()
+                            currentTrack.play()
+                        }.exceptionOrNull()
+                        if (resetError != null) {
+                            track = null
+                            activeRate = 0
+                            activeChannels = 0
+                            releaseAudioTrack(currentTrack)
+                            onStatus("تعذر استعادة مسار صوت التلفاز بعد إعادة ضبط البث؛ ستتم إعادة تهيئته.")
+                        }
                     }
                     activeQueueGeneration = queuedBlock.generation
                 }
@@ -375,22 +385,42 @@ class TvMediaPlayer(
                         track = null
                         continue
                     }
-                    track = AudioTrack.Builder()
-                        .setAudioAttributes(AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_GAME)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build())
-                        .setAudioFormat(AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(block.rate)
-                            .setChannelMask(mask)
-                            .build())
-                        .setBufferSizeInBytes(max(minimum, 4096))
-                        .setTransferMode(AudioTrack.MODE_STREAM)
-                        .build()
+                    val createdTrack = try {
+                        AudioTrack.Builder()
+                            .setAudioAttributes(AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_GAME)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .build())
+                            .setAudioFormat(AudioFormat.Builder()
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(block.rate)
+                                .setChannelMask(mask)
+                                .build())
+                            .setBufferSizeInBytes(max(minimum, 4096))
+                            .setTransferMode(AudioTrack.MODE_STREAM)
+                            .build()
+                    } catch (error: Exception) {
+                        onStatus("تعذر إنشاء مسار صوت التلفاز: ${error.localizedMessage ?: "خطأ AudioTrack"}")
+                        Thread.sleep(250)
+                        continue
+                    }
+                    if (createdTrack.state != AudioTrack.STATE_INITIALIZED) {
+                        releaseAudioTrack(createdTrack)
+                        onStatus("لم يتمكن Android من تهيئة مسار صوت التلفاز؛ ستتم إعادة المحاولة.")
+                        Thread.sleep(250)
+                        continue
+                    }
+                    try {
+                        createdTrack.play()
+                    } catch (error: Exception) {
+                        releaseAudioTrack(createdTrack)
+                        onStatus("تعذر تشغيل مسار صوت التلفاز: ${error.localizedMessage ?: "خطأ AudioTrack"}")
+                        Thread.sleep(250)
+                        continue
+                    }
+                    track = createdTrack
                     activeRate = block.rate
                     activeChannels = block.channels
-                    track?.play()
                     onStatus("صوت اللعبة متصل بالتلفاز")
                 }
                 if (!awaitPlayout(block.ptsNs, queuedBlock)) {
@@ -400,12 +430,37 @@ class TvMediaPlayer(
                     }
                     continue
                 }
+                // PSLINK_AUDIO_TRACK_DEAD_OBJECT_RECOVERY_V1
                 var offset = 0
                 while (offset < block.data.size && running.get() &&
                     audioQueue.isCurrent(queuedBlock)) {
+                    val activeTrack = track ?: break
                     val chunkSize = minOf(4_096, block.data.size - offset)
-                    val written = track?.write(block.data, offset, chunkSize) ?: 0
-                    if (written <= 0) break
+                    val written = try {
+                        activeTrack.write(block.data, offset, chunkSize)
+                    } catch (error: Exception) {
+                        track = null
+                        activeRate = 0
+                        activeChannels = 0
+                        releaseAudioTrack(activeTrack)
+                        onStatus("تعذر الكتابة إلى مسار صوت التلفاز: ${error.localizedMessage ?: "خطأ AudioTrack"}؛ ستتم إعادة تهيئته.")
+                        break
+                    }
+                    if (written < 0) {
+                        // ERROR_DEAD_OBJECT and other permanent write failures require a new AudioTrack.
+                        track = null
+                        activeRate = 0
+                        activeChannels = 0
+                        releaseAudioTrack(activeTrack)
+                        val reason = if (written == AudioTrack.ERROR_DEAD_OBJECT) {
+                            "فُقد مسار صوت التلفاز"
+                        } else {
+                            "رفض مسار صوت التلفاز كتابة البيانات (رمز $written)"
+                        }
+                        onStatus("$reason؛ ستتم إعادة تهيئته مع كتلة الصوت التالية.")
+                        break
+                    }
+                    if (written == 0) break
                     offset += written
                 }
             }

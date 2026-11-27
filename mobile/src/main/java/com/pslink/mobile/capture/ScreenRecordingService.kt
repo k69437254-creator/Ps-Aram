@@ -154,6 +154,8 @@ class ScreenRecordingService : Service() {
         virtualDisplay = null
         runCatching { projection?.stop() }
         projection = null
+        runCatching { outputFile?.delete() }
+        outputFile = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

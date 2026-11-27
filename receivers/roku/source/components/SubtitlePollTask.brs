@@ -48,6 +48,18 @@ sub run()
                 parsed = ParseJson(response)
 
                 if parsed <> invalid and parsed.items <> invalid
+                    latestSequence = parsed.latestSequence
+                    oldestSequence = parsed.oldestSequence
+
+                    ' Recover when the phone server restarts and resets its sequence.
+                    if latestSequence <> invalid and latestSequence < cursor
+                        if oldestSequence <> invalid and oldestSequence > 0
+                            cursor = oldestSequence - 1
+                        else
+                            cursor = latestSequence
+                        end if
+                    end if
+
                     items = parsed.items
 
                     for each item in items

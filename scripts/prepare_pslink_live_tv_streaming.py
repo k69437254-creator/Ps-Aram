@@ -249,6 +249,30 @@ def ensure_caption_clear_paths(src: str) -> str:
     if not clear_packets:
         raise SystemExit("Expected a timestamped empty-caption packet after empty OCR")
     return src
+def has_current_ocr_failure_clear_path(src: str) -> bool:
+    """Recognize the current shared-timestamp OCR failure cleanup path."""
+    starts = list(re.finditer(
+        r"catch \(error: Exception\) \{\s*if \(generation == loopGeneration\) \{",
+        src,
+    ))
+    if len(starts) != 1:
+        return False
+
+    start = starts[0]
+    end = src.find("} finally {", start.end())
+    if end < 0:
+        return False
+
+    body = src[start.start():end]
+    required = (
+        r"val clearPtsNs = System\.nanoTime\(\)",
+        r"tvClient\?\.sendCaptions\(emptyList\(\),\s*clearPtsNs,\s*sessionId\)",
+        r"PhoneReceiverServer\.publishCaptionsToReceivers\(emptyList\(\),\s*clearPtsNs\)",
+        r"onCaption\(emptyList\(\)\)",
+    )
+    return all(re.search(pattern, body) for pattern in required)
+
+
 def ensure_caption_geometry_signature(src: str) -> str:
     signature = re.compile(
         r'(?m)^(?P<indent>[ \t]*)val signature = detected\.joinToString\("\|"\) \{\n'
@@ -1158,11 +1182,13 @@ def patch_phone_translation() -> None:
             ),
             "send positioned Arabic captions to TV",
         )
-    catch_clear = re.search(
-        r"(?s)catch \(error: Exception\) \{\s*if \(generation == loopGeneration\) \{"
-        r".*?tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)(?:,\s*sessionId)?\)",
-        src,
-    )
+    catch_clear = has_current_ocr_failure_clear_path(src)
+    if not catch_clear:
+        catch_clear = re.search(
+            r"(?s)catch \(error: Exception\) \{\s*if \(generation == loopGeneration\) \{"
+            r".*?tvClient\?\.sendCaptions\(emptyList\(\), System\.nanoTime\(\)(?:,\s*sessionId)?\)",
+            src,
+        )
     if not catch_clear:
         src = replace_once(
             src,

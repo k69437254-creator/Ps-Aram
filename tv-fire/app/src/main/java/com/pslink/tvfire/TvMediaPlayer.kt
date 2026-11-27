@@ -346,53 +346,86 @@ class TvMediaPlayer(
     }
 
     private fun audioLoop() {
+        // PSLINK_AUDIO_TRACK_RECOVERY_V2
         var track: AudioTrack? = null
         var activeRate = 0
         var activeChannels = 0
         var activeQueueGeneration = audioQueue.generation
+
+        fun discardTrack() {
+            val old = track
+            track = null
+            activeRate = 0
+            activeChannels = 0
+            if (old != null) runCatching { releaseAudioTrack(old) }
+        }
+
         try {
             while (running.get()) {
                 val queuedBlock = audioQueue.poll(100, TimeUnit.MILLISECONDS) ?: continue
                 val block = queuedBlock.value
                 if (!audioQueue.isCurrent(queuedBlock)) continue
+
                 if (activeQueueGeneration != queuedBlock.generation) {
-                    track?.let { currentTrack ->
-                        currentTrack.pause()
-                        currentTrack.flush()
-                        currentTrack.play()
+                    val resetSucceeded = track?.let { currentTrack ->
+                        runCatching {
+                            check(currentTrack.state == AudioTrack.STATE_INITIALIZED)
+                            currentTrack.pause()
+                            currentTrack.flush()
+                            currentTrack.play()
+                        }.isSuccess
+                    } ?: true
+                    if (!resetSucceeded) {
+                        discardTrack()
+                        onStatus("تعذر استعادة مسار الصوت بعد إعادة ضبط طابور الوسائط؛ ستتم تهيئته مجددًا")
                     }
                     activeQueueGeneration = queuedBlock.generation
                 }
+
                 if (track == null || activeRate != block.rate || activeChannels != block.channels) {
-                    track?.let { oldTrack ->
-                        track = null
-                        releaseAudioTrack(oldTrack)
-                    }
+                    discardTrack()
                     val mask = if (block.channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
                     val minimum = AudioTrack.getMinBufferSize(block.rate, mask, AudioFormat.ENCODING_PCM_16BIT)
                     if (minimum <= 0) {
                         onStatus("تنسيق صوت اللعبة غير مدعوم على التلفاز")
-                        track = null
                         continue
                     }
-                    track = AudioTrack.Builder()
-                        .setAudioAttributes(AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_GAME)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build())
-                        .setAudioFormat(AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(block.rate)
-                            .setChannelMask(mask)
-                            .build())
-                        .setBufferSizeInBytes(max(minimum, 4096))
-                        .setTransferMode(AudioTrack.MODE_STREAM)
-                        .build()
+
+                    val created = try {
+                        AudioTrack.Builder()
+                            .setAudioAttributes(AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_GAME)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .build())
+                            .setAudioFormat(AudioFormat.Builder()
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(block.rate)
+                                .setChannelMask(mask)
+                                .build())
+                            .setBufferSizeInBytes(max(minimum, 4096))
+                            .setTransferMode(AudioTrack.MODE_STREAM)
+                            .build()
+                    } catch (error: Exception) {
+                        onStatus("تعذر إنشاء مسار صوت التلفاز: ${error.localizedMessage ?: "AudioTrack غير متاح"}")
+                        continue
+                    }
+
+                    val started = runCatching {
+                        check(created.state == AudioTrack.STATE_INITIALIZED)
+                        created.play()
+                    }
+                    if (started.isFailure) {
+                        runCatching { releaseAudioTrack(created) }
+                        onStatus("تعذر تهيئة أو تشغيل مسار صوت التلفاز: ${started.exceptionOrNull()?.localizedMessage ?: "AudioTrack غير مهيأ"}")
+                        continue
+                    }
+
+                    track = created
                     activeRate = block.rate
                     activeChannels = block.channels
-                    track?.play()
                     onStatus("صوت اللعبة متصل بالتلفاز")
                 }
+
                 if (!awaitPlayout(block.ptsNs, queuedBlock)) {
                     if (!running.get()) break
                     if (audioQueue.isCurrent(queuedBlock)) {
@@ -400,12 +433,29 @@ class TvMediaPlayer(
                     }
                     continue
                 }
+
                 var offset = 0
-                while (offset < block.data.size && running.get() &&
-                    audioQueue.isCurrent(queuedBlock)) {
+                while (offset < block.data.size && running.get() && audioQueue.isCurrent(queuedBlock)) {
+                    val currentTrack = track ?: break
                     val chunkSize = minOf(4_096, block.data.size - offset)
-                    val written = track?.write(block.data, offset, chunkSize) ?: 0
-                    if (written <= 0) break
+                    val written = try {
+                        currentTrack.write(block.data, offset, chunkSize, AudioTrack.WRITE_BLOCKING)
+                    } catch (error: Exception) {
+                        onStatus("تعذر كتابة صوت التلفاز: ${error.localizedMessage ?: "AudioTrack error"}؛ ستتم إعادة تهيئته")
+                        discardTrack()
+                        break
+                    }
+                    if (written < 0) {
+                        val detail = if (written == AudioTrack.ERROR_DEAD_OBJECT) {
+                            "انقطع AudioTrack عن جهاز الصوت"
+                        } else {
+                            "أعاد AudioTrack رمز خطأ $written"
+                        }
+                        onStatus("$detail؛ ستتم إعادة تهيئة مسار الصوت")
+                        discardTrack()
+                        break
+                    }
+                    if (written == 0) break
                     offset += written
                 }
             }
@@ -414,7 +464,7 @@ class TvMediaPlayer(
         } catch (error: Exception) {
             onStatus("توقف صوت التلفاز: ${error.localizedMessage ?: "خطأ في تشغيل الصوت"}")
         } finally {
-            track?.let(::releaseAudioTrack)
+            discardTrack()
         }
     }
 

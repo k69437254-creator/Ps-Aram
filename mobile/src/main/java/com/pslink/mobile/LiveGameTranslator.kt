@@ -138,6 +138,7 @@ class LiveGameTranslator(
         lastTranslation = ""
         emptyFrameCount = 0
         stableTextGate.reset()
+        onCaption(emptyList())
     }
 
     fun resume() {

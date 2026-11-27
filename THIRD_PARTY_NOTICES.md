@@ -33,3 +33,27 @@ Review Google's applicable SDK terms and attribution guidance before commercial 
 AndroidX, Material Components, Kotlin, Ktor, OkHttp, Room, Moshi and Oboe are consumed
 through their published Maven artifacts. Their licenses and notices are delivered by the
 respective artifacts; the final distribution process must include their required notices.
+
+## Arabic OCR model data — Tesseract tessdata
+
+The bundled Arabic OCR data file `ara.traineddata` is sourced from
+[tesseract-ocr/tessdata](https://github.com/tesseract-ocr/tessdata),
+at commit `cdd8a9ec438fc0b9f21635466196fe1c05efca16`.
+
+The upstream tessdata README states that the repository's traineddata files
+are distributed under the Apache License, Version 2.0. The corresponding
+Apache-2.0 license text is included at `LICENSES/Apache-2.0.txt`.
+
+Bundled file:
+- Path: `mobile/src/main/assets/tessdata/ara.traineddata`
+- Size: 2,494,806 bytes
+- SHA-256: `2005976778bbc14fc56a4ea8d43c6080847aeee72fcc2201488f240daca15c5b`
+
+The model is distinct from the Tesseract Android wrapper library listed below.
+
+## Tesseract Android wrapper — tess-two
+
+The Android app depends on `com.rmtheis:tess-two:9.1.0`.
+Its published Maven Central metadata declares Apache License 2.0, and
+the upstream project README includes the Apache-2.0 license notice.
+The dependency is separate from the Arabic traineddata model.

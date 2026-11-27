@@ -44,7 +44,8 @@
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name="com.pslink.mobile.capture.VideoEditorActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
         <service
             android:name="com.pslink.mobile.capture.TvScreenStreamService"
             android:exported="false"
