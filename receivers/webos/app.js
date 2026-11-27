@@ -3,6 +3,7 @@
   "use strict";
 
   var receiver = null;
+  var connectionGeneration = 0;
   var statusNode = document.getElementById("status");
   var form = document.getElementById("pairing-form");
   var connectButton = document.getElementById("connect");
@@ -12,6 +13,9 @@
   var mediaNotice = document.getElementById("media-notice");
   var mediaPlayer = new window.PSLinkMediaPlayer();
   var streamUrlReceived = false;
+  var backHistoryArmed = false;
+  var previousHistoryState = null;
+  var previousHistoryUrl = null;
 
   /* PSLINK_WEBOS_LIFECYCLE_REPAIR_V1 */
   function setPlaybackMode(active) {
@@ -33,6 +37,50 @@
     mediaNotice.hidden = true;
     clearCaptions();
     setPlaybackMode(false);
+  }
+
+  function armBackHistory() {
+    if (backHistoryArmed || !window.history ||
+        typeof window.history.pushState !== "function") return;
+
+    var oldState = window.history.state;
+    var oldUrl = window.location.href;
+
+    try {
+      window.history.pushState(
+        { psLinkBackGuard: true },
+        "",
+        oldUrl
+      );
+      previousHistoryState = oldState;
+      previousHistoryUrl = oldUrl;
+      backHistoryArmed = true;
+    } catch (ignore) {
+      previousHistoryState = null;
+      previousHistoryUrl = null;
+    }
+  }
+
+  function releaseBackHistory() {
+    if (!backHistoryArmed) return;
+
+    var oldState = previousHistoryState;
+    var oldUrl = previousHistoryUrl;
+
+    backHistoryArmed = false;
+    previousHistoryState = null;
+    previousHistoryUrl = null;
+
+    try {
+      if (window.history &&
+          typeof window.history.replaceState === "function") {
+        window.history.replaceState(
+          oldState,
+          "",
+          oldUrl || window.location.href
+        );
+      }
+    } catch (ignore) {}
   }
 
   function status(message, state) {
@@ -96,7 +144,9 @@
 
   function disconnect() {
     var activeReceiver = receiver;
+    connectionGeneration += 1;
     receiver = null;
+    releaseBackHistory();
 
     if (activeReceiver) {
       try { activeReceiver.disconnect(); }
@@ -122,13 +172,26 @@
     }
 
     try {
+      var thisConnection = ++connectionGeneration;
+
       receiver = new window.PSLinkReceiver({
         onStatus: function (message) {
           status(message, "info");
         },
         onReady: function (ready) {
+          if (!receiver ||
+              thisConnection !== connectionGeneration) return;
+
           setConnected(ready);
           if (!ready) resetPlayback();
+
+          if (ready) {
+            armBackHistory();
+          } else {
+            releaseBackHistory();
+            // Keep this receiver alive: its transport owns automatic
+            // reconnection and may emit onReady(true) again.
+          }
         },
         onSubtitle: showSubtitle,
         onCaptions: showCaptions,
@@ -165,8 +228,23 @@
 
   window.addEventListener("keydown", function (event) {
     if (event.key === "Escape" || event.keyCode === 27) {
+      if (!receiver) return;
+      if (typeof event.preventDefault === "function") {
+        event.preventDefault();
+      }
       disconnect();
     }
+  });
+
+  window.addEventListener("popstate", function () {
+    if (!backHistoryArmed) return;
+
+    // The browser has already consumed our history entry.
+    backHistoryArmed = false;
+    previousHistoryState = null;
+    previousHistoryUrl = null;
+
+    disconnect();
   });
 
   window.addEventListener("pslink-media-error", function (event) {

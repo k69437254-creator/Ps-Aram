@@ -1,0 +1,116 @@
+name: PS Link webOS IPK
+
+on:
+  push:
+    branches:
+      - feature/platform-completion-pack
+    paths:
+      - "receivers/webos/**"
+      - "scripts/validate_webos_app.py"
+      - ".github/workflows/webos.yml"
+  pull_request:
+    paths:
+      - "receivers/webos/**"
+      - "scripts/validate_webos_app.py"
+      - ".github/workflows/webos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-webos:
+    name: Validate and package LG webOS
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install official webOS CLI
+        run: |
+          npm install --global @webos-tools/cli@3.2.6
+          ares -V
+          ares-package -V
+
+      - name: Validate application metadata and resources
+        run: python3 scripts/validate_webos_app.py
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          while IFS= read -r -d '' file; do
+            echo "Checking $file"
+            node --check "$file"
+          done < <(find receivers/webos -type f -name '*.js' -print0)
+
+      - name: Run webOS receiver tests
+        run: |
+          node receivers/webos/tests/receiver.test.js
+          node receivers/webos/tests/back-button.test.js
+
+      - name: Package production IPK
+        shell: bash
+        run: |
+          OUT="$RUNNER_TEMP/webos-ipk"
+          mkdir -p "$OUT"
+
+          ares-package \
+            --outdir "$OUT" \
+            --app-exclude tests \
+            --app-exclude README.md \
+            --app-exclude webrtc-diagnostic.html \
+            --app-exclude webrtc-diagnostic.js \
+            receivers/webos
+
+          mapfile -t PACKAGES < <(
+            find "$OUT" -maxdepth 1 -type f -name '*.ipk' -print
+          )
+
+          if [[ "${#PACKAGES[@]}" -ne 1 ]]; then
+            echo "Expected exactly one IPK; found ${#PACKAGES[@]}" >&2
+            exit 1
+          fi
+
+          IPK="${PACKAGES[0]}"
+          test -s "$IPK"
+
+          echo "Created: $IPK"
+          ares-package -i "$IPK"
+
+          ar t "$IPK" | grep -Fx "data.tar.gz"
+
+          ar p "$IPK" data.tar.gz |
+            tar -tzf - > "$OUT/package-contents.txt"
+
+          CONTENTS="$OUT/package-contents.txt"
+
+          grep -Eq '(^|/)appinfo.json$' "$CONTENTS"
+          grep -Eq '(^|/)index.html$' "$CONTENTS"
+          grep -Eq '(^|/)icon.png$' "$CONTENTS"
+          grep -Eq '(^|/)largeicon.png$' "$CONTENTS"
+          grep -Eq '(^|/)app.js$' "$CONTENTS"
+          grep -Eq '(^|/)media-player.js$' "$CONTENTS"
+          grep -Eq '(^|/)pslink-client.js$' "$CONTENTS"
+
+          if grep -Eq '(^|/)tests(/|$)|(^|/)README\.md$|webrtc-diagnostic' "$CONTENTS"; then
+            echo "Development-only files leaked into production IPK." >&2
+            exit 1
+          fi
+
+          echo "WEBOS_IPK_VALIDATION=PASSED"
+          echo "WEBOS_IPK_PATH=$IPK"
+
+      - name: Upload installable webOS IPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS-Link-webOS-IPK
+          path: ${{ runner.temp }}/webos-ipk/*.ipk
+          if-no-files-found: error
+          retention-days: 14

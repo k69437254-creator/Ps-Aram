@@ -1,10 +1,13 @@
 {
   "id": "com.pslink.tvreceiver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "vendor": "PS Link",
   "type": "web",
   "main": "index.html",
   "title": "PS Link TV",
   "resolution": "1920x1080",
-  "transparent": false
+  "transparent": false,
+  "icon": "icon.png",
+  "largeIcon": "largeicon.png",
+  "iconColor": "#090D16"
 }
